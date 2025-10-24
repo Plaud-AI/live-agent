@@ -6,29 +6,34 @@ from core.handle.abortHandle import handleAbortMessage
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
 from core.handle.sendAudioHandle import send_stt_message, SentenceType
-
+from core.utils.audio import AudioFrame
+from core.utils.audio import combine_audio_frames
+from core.providers.vad.base import VADEventType
 TAG = __name__
 
 
-async def handleAudioMessage(conn, audio):
-    # 当前片段是否有人说话
-    have_voice = conn.vad.is_vad(conn, audio)
+async def handleAudioMessage(conn, frame: AudioFrame):
+    # todo: integrate with stt (both streaming and non-streaming)
+    await conn.vad_stream.push_frame(frame)
+    async for event in conn.vad_stream:
+        if event.type == VADEventType.END_OF_SPEECH:
+            merged_frame = combine_audio_frames(event.frames)
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
-    if hasattr(conn, "just_woken_up") and conn.just_woken_up:
-        have_voice = False
-        # 设置一个短暂延迟后恢复VAD检测
-        conn.asr_audio.clear()
-        if not hasattr(conn, "vad_resume_task") or conn.vad_resume_task.done():
-            conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
-        return
+    # if hasattr(conn, "just_woken_up") and conn.just_woken_up:
+    #     have_voice = False
+    #     # 设置一个短暂延迟后恢复VAD检测
+    #     conn.asr_audio.clear()
+    #     if not hasattr(conn, "vad_resume_task") or conn.vad_resume_task.done():
+    #         conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
+    #     return
     # manual 模式下不打断正在播放的内容
-    if have_voice:
-        if conn.client_is_speaking and conn.client_listen_mode != "manual":
-            await handleAbortMessage(conn)
+    # if have_voice:
+    #     if conn.client_is_speaking and conn.client_listen_mode != "manual":
+    #         await handleAbortMessage(conn)
     # 设备长时间空闲检测，用于say goodbye
-    await no_voice_close_connect(conn, have_voice)
+    # await no_voice_close_connect(conn, have_voice)
     # 接收音频
-    await conn.asr.receive_audio(conn, audio, have_voice)
+    # await conn.asr.receive_audio(conn, audio, have_voice)
 
 
 async def resume_vad_detection(conn):

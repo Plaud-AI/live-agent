@@ -8,7 +8,7 @@ from config.config_loader import get_config_from_api
 from core.auth import AuthManager, AuthenticationError
 from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
-
+from core.providers.vad.silero import SileroVAD
 TAG = __name__
 
 
@@ -27,7 +27,7 @@ class WebSocketServer:
             "Memory" in self.config["selected_module"],
             "Intent" in self.config["selected_module"],
         )
-        self._vad = modules["vad"] if "vad" in modules else None
+        self._vad = SileroVAD.load()
         self._asr = modules["asr"] if "asr" in modules else None
         self._llm = modules["llm"] if "llm" in modules else None
         self._intent = modules["intent"] if "intent" in modules else None

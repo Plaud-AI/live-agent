@@ -11,6 +11,7 @@ import traceback
 import subprocess
 import websockets
 
+from core.providers.vad.silero import SileroVAD
 from core.utils.util import (
     extract_json_from_string,
     check_vad_update,
@@ -41,7 +42,9 @@ from config.manage_api_client import DeviceNotFoundException, DeviceBindExceptio
 from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils import textUtils
-
+from core.utils.channel import Chan
+from core.utils.audio import AudioFrame
+from core.providers.vad.silero import SileroVADStream
 TAG = __name__
 
 auto_import_modules("plugins_func.functions")
@@ -100,11 +103,13 @@ class ConnectionHandler:
         self.report_tts_enable = self.read_config_from_api
 
         # 依赖的组件
-        self.vad = None
+        # todo: vad prewarm
+        self.vad: SileroVAD = _vad
+        self.vad_stream: SileroVADStream = self.vad.stream()
+        #
         self.asr = None
         self.tts = None
         self._asr = _asr
-        self._vad = _vad
         self.llm = _llm
         self.memory = _memory
         self.intent = _intent
@@ -112,19 +117,13 @@ class ConnectionHandler:
         # 为每个连接单独管理声纹识别
         self.voiceprint_provider = None
 
-        # vad相关变量
-        self.client_audio_buffer = bytearray()
-        self.client_have_voice = False
-        self.client_voice_window = deque(maxlen=5)
-        self.last_activity_time = 0.0  # 统一的活动时间戳（毫秒）
-        self.client_voice_stop = False
-        self.last_is_voice = False
-
         # asr相关变量
         # 因为实际部署时可能会用到公共的本地ASR，不能把变量暴露给公共ASR
         # 所以涉及到ASR的变量，需要在这里定义，属于connection的私有变量
         self.asr_audio = []
-        self.asr_audio_queue = queue.Queue()
+
+        # input audio channel from client
+        self.input_audio_channel: Chan[AudioFrame] = Chan[AudioFrame]()
 
         # llm相关变量
         self.llm_finish_task = True
@@ -275,7 +274,7 @@ class ConnectionHandler:
                     return
 
             # 不需要头部处理或没有头部时，直接处理原始消息
-            self.asr_audio_queue.put(message)
+            self.input_audio_channel.send_nowait(message)
 
     async def _process_mqtt_audio_message(self, message):
         """
@@ -302,7 +301,7 @@ class ConnectionHandler:
             elif len(message) > 16:
                 # 没有指定长度或长度无效，去掉头部后处理剩余数据
                 audio_data = message[16:]
-                self.asr_audio_queue.put(audio_data)
+                self.input_audio_channel.send_nowait(audio_data)
                 return True
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"解析WebSocket音频包失败: {e}")
@@ -320,7 +319,7 @@ class ConnectionHandler:
 
         # 如果时间戳是递增的，直接处理
         if timestamp >= self.last_processed_timestamp:
-            self.asr_audio_queue.put(audio_data)
+            self.input_audio_channel.send_nowait(audio_data)
             self.last_processed_timestamp = timestamp
 
             # 处理缓冲区中的后续包
@@ -330,7 +329,7 @@ class ConnectionHandler:
                 for ts in sorted(self.audio_timestamp_buffer.keys()):
                     if ts > self.last_processed_timestamp:
                         buffered_audio = self.audio_timestamp_buffer.pop(ts)
-                        self.asr_audio_queue.put(buffered_audio)
+                        self.input_audio_channel.send_nowait(buffered_audio)
                         self.last_processed_timestamp = ts
                         processed_any = True
                         break
@@ -339,7 +338,7 @@ class ConnectionHandler:
             if len(self.audio_timestamp_buffer) < self.max_timestamp_buffer_size:
                 self.audio_timestamp_buffer[timestamp] = audio_data
             else:
-                self.asr_audio_queue.put(audio_data)
+                self.input_audio_channel.send_nowait(audio_data)
 
     async def handle_restart(self, message):
         """处理服务器重启请求"""
@@ -389,6 +388,33 @@ class ConnectionHandler:
                 )
             )
 
+    async def _start_audio_consumer_task(self):
+        """启动音频消费任务"""
+        self.asr_consumer_task = asyncio.create_task(
+            self._audio_consumer()
+        )
+        self.logger.bind(tag=TAG).info("audio consumer task started")
+
+    async def _audio_consumer(self):
+        """
+        consume audio from input channel and process
+        """
+        try:
+            async for frame in self.input_audio_channel:
+                try:
+                    from core.handle.receiveAudioHandle import handleAudioMessage
+                    await handleAudioMessage(self, frame)
+                except Exception as e:
+                    self.logger.bind(tag=TAG).error(
+                        f"audio process failed: {str(e)}, type: {type(e).__name__}"
+                    )
+        except asyncio.CancelledError:
+            self.logger.bind(tag=TAG).info("audio consumer task cancelled")
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"audio consumer task exception: {e}")
+        finally:
+            self.logger.bind(tag=TAG).info("audio consumer task exited")
+
     def _initialize_components(self):
         try:
             self.selected_module_str = build_module_string(
@@ -414,11 +440,12 @@ class ConnectionHandler:
 
             # 初始化声纹识别
             self._initialize_voiceprint()
-
-            # 打开语音识别通道
+            
+            # start to process audio from client
             asyncio.run_coroutine_threadsafe(
-                self.asr.open_audio_channels(self), self.loop
+                self._start_audio_consumer_task(), self.loop
             )
+            
             if self.tts is None:
                 self.tts = self._initialize_tts()
             # 打开语音合成通道
@@ -1013,6 +1040,17 @@ class ConnectionHandler:
             if self.stop_event:
                 self.stop_event.set()
 
+            # 关闭ASR音频队列并取消消费任务
+            if hasattr(self, "input_audio_channel"):
+                self.input_audio_channel.close()
+            
+            if hasattr(self, "asr_consumer_task") and not self.asr_consumer_task.done():
+                self.asr_consumer_task.cancel()
+                try:
+                    await self.asr_consumer_task
+                except asyncio.CancelledError:
+                    pass
+               
             # 清空任务队列
             self.clear_queues()
 

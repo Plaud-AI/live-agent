@@ -4,7 +4,6 @@ import wave
 import uuid
 import json
 import time
-import queue
 import asyncio
 import traceback
 import threading
@@ -25,31 +24,10 @@ logger = setup_logging()
 class ASRProviderBase(ABC):
     def __init__(self):
         pass
-
     # 打开音频通道
     async def open_audio_channels(self, conn):
-        conn.asr_priority_thread = threading.Thread(
-            target=self.asr_text_priority_thread, args=(conn,), daemon=True
-        )
-        conn.asr_priority_thread.start()
-
-    # 有序处理ASR音频
-    def asr_text_priority_thread(self, conn):
-        while not conn.stop_event.is_set():
-            try:
-                message = conn.asr_audio_queue.get(timeout=1)
-                future = asyncio.run_coroutine_threadsafe(
-                    handleAudioMessage(conn, message),
-                    conn.loop,
-                )
-                future.result()
-            except queue.Empty:
-                continue
-            except Exception as e:
-                logger.bind(tag=TAG).error(
-                    f"处理ASR文本失败: {str(e)}, 类型: {type(e).__name__}, 堆栈: {traceback.format_exc()}"
-                )
-                continue
+        # ASR 只负责初始化音频处理能力
+        logger.bind(tag=TAG).info("ASR audio channels opened")
 
     # 接收音频
     async def receive_audio(self, conn, audio, audio_have_voice):
