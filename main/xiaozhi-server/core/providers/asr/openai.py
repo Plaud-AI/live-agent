@@ -6,7 +6,6 @@ from core.providers.asr.dto.dto import InterfaceType
 from core.providers.asr.base import ASRProviderBase
 
 import requests
-
 TAG = __name__
 logger = setup_logging()
 
@@ -32,7 +31,7 @@ class ASRProvider(ASRProviderBase):
             file_path = self.save_audio_to_file(pcm_data, session_id)
 
             logger.bind(tag=TAG).debug(
-                f"音频文件保存耗时: {time.time() - start_time:.3f}s | 路径: {file_path}"
+                f"the latency of saving audio file: {time.time() - start_time:.3f}s | path: {file_path}"
             )
 
             logger.bind(tag=TAG).info(f"file path: {file_path}")

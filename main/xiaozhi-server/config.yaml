@@ -394,15 +394,16 @@ ASR:
     model_name: gpt-4o-mini-transcribe
     output_dir: tmp/
   GroqASR:
+    # TODO: migrate to groq implementation
     # Groq语音识别服务，需要先在Groq Console创建API密钥
     # 申请步骤：
     # 1.登录groq Console。https://console.groq.com/home
     # 2.创建api-key  https://console.groq.com/keys
     # 3.模型可以选择whisper-large-v3-turbo或whisper-large-v3（distil-whisper-large-v3-en仅支持英语转录）
     type: openai
-    api_key: 你的Groq API密钥
+    api_key: your-groq-api-key
     base_url: https://api.groq.com/openai/v1/audio/transcriptions
-    model_name: whisper-large-v3-turbo
+    model_name: whisper-large-v3
     output_dir: tmp/
   VoskASR:
     # 官方网站：https://alphacephei.com/vosk/
@@ -598,6 +599,12 @@ LLM:
     # Xinference服务地址和模型名称
     model_name: qwen2.5:3b-AWQ  # 使用的小模型名称，用于意图识别
     base_url: http://localhost:9997  # Xinference服务地址
+  GroqLLM:
+    api_key: your-groq-api-key
+    base_url: https://api.groq.com/openai/v1
+    model_name: openai/gpt-oss-120b
+    temperature: 0.7
+    max_tokens: 500
 # VLLM配置（视觉语言大模型）
 VLLM:
   ChatGLMVLLM:
