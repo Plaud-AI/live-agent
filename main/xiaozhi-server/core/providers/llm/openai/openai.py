@@ -1,12 +1,20 @@
 import httpx
 import openai
-from typing import Literal
+from typing import Any, AsyncGenerator, Literal
 from openai import AsyncStream
 from openai.types import CompletionUsage
 from openai.types.responses.response_stream_event import ResponseStreamEvent
+from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+from openai.types.responses.response_completed_event import ResponseCompletedEvent
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_output_text import ResponseOutputText
+from openai.types.responses.response_output_refusal import ResponseOutputRefusal
+from openai.types.responses.response_function_tool_call import ResponseFunctionToolCall
 from config.logger import setup_logging
 from core.utils.util import check_model_key
-from core.providers.llm.base import LLMProviderBase
+from core.providers.llm.base import LLMProviderBase, ChatChunk, ChatDelta, CompletionUsage as StandardCompletionUsage
+from core.dialogue.context import ChatContext
+from core.dialogue.items import FunctionCall
 
 TAG = __name__
 logger = setup_logging()
@@ -221,3 +229,185 @@ class LLMProvider(LLMProviderBase):
             error_msg = f"Unexpected error in function calling: {type(e).__name__}: {str(e)}"
             logger.bind(tag=TAG).error(error_msg)
             yield f"【服务异常: {str(e)}】", None
+
+    async def response_stream(
+        self,
+        chat_ctx: ChatContext,
+        **kwargs: Any
+    ) -> AsyncGenerator[ChatChunk, None]:
+        """
+        New streaming interface using standard protocol
+        
+        This method implements the new standard interface defined in LLMProviderBase.
+        It uses:
+        - ChatContext as input (standard dialogue protocol)
+        - ChatChunk as output (standard streaming protocol)
+        - OpenAI Responses API (modern response.create)
+        
+        Args:
+            chat_ctx: Standard ChatContext with dialogue history
+            **kwargs: Additional options:
+                - max_output_tokens: Override max tokens
+                - temperature: Override temperature
+                - top_p: Override top_p
+                - frequency_penalty: Override frequency penalty
+        
+        Yields:
+            ChatChunk: Standardized streaming chunks with deltas and usage
+        
+        Example:
+            async for chunk in provider.response_stream(chat_ctx):
+                if chunk.delta and chunk.delta.content:
+                    print(chunk.delta.content)
+                if chunk.usage:
+                    print(f"Tokens: {chunk.usage.total_tokens}")
+        """
+        try:
+            # 1. Convert ChatContext to OpenAI format
+            messages, _ = chat_ctx.to_provider_format(format="openai")
+            
+            logger.bind(tag=TAG).debug(
+                f"Starting streaming with model={self.model_name}, "
+                f"messages_count={len(messages)}"
+            )
+            
+            # 2. Prepare request parameters
+            max_output_tokens = kwargs.get("max_output_tokens", self.max_output_tokens)
+            temperature = kwargs.get("temperature", self.temperature)
+            top_p = kwargs.get("top_p", self.top_p)
+            frequency_penalty = kwargs.get("frequency_penalty", self.frequency_penalty)
+            
+            # 3. Call OpenAI Responses API
+            # TODO: system instruction needs to be added
+            stream: AsyncStream[ResponseStreamEvent] = await self.client.responses.create(
+                input=messages,
+                model=self.model_name,
+                stream=True,
+                max_output_tokens=max_output_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+            )
+            
+            # 4. Parse stream and yield ChatChunk (focus on output_item.done + completed)
+            async for event in stream:
+                try:
+                    chunk = self._parse_response_event(event)
+                    if chunk:
+                        yield chunk
+                except (IndexError, AttributeError) as e:
+                    logger.bind(tag=TAG).debug(f"Skipping malformed event: {e}")
+                    continue
+            
+            logger.bind(tag=TAG).debug("Stream completed successfully")
+            
+        except openai.APIError as e:
+            error_msg = f"OpenAI API error: {e.message if hasattr(e, 'message') else str(e)}"
+            logger.bind(tag=TAG).error(error_msg)
+            # Yield error chunk
+            yield ChatChunk(
+                delta=ChatDelta(
+                    role="assistant",
+                    content=f"【API错误: {error_msg}】"
+                )
+            )
+            
+        except openai.APIConnectionError as e:
+            error_msg = f"Connection error: {str(e)}"
+            logger.bind(tag=TAG).error(error_msg)
+            yield ChatChunk(
+                delta=ChatDelta(
+                    role="assistant",
+                    content="【连接错误: 无法连接到服务】"
+                )
+            )
+            
+        except openai.RateLimitError as e:
+            error_msg = f"Rate limit exceeded: {str(e)}"
+            logger.bind(tag=TAG).error(error_msg)
+            yield ChatChunk(
+                delta=ChatDelta(
+                    role="assistant",
+                    content="【请求过于频繁，请稍后再试】"
+                )
+            )
+            
+        except Exception as e:
+            error_msg = f"Unexpected error: {type(e).__name__}: {str(e)}"
+            logger.bind(tag=TAG).error(error_msg)
+            yield ChatChunk(
+                delta=ChatDelta(
+                    role="assistant",
+                    content=f"【服务异常: {str(e)}】"
+                )
+            )
+
+    def _parse_response_event(
+        self,
+        event: ResponseStreamEvent,
+    ) -> ChatChunk | None:
+        """
+        Parse OpenAI ResponseStreamEvent to standard ChatChunk
+        
+        Focus on finalized events per Responses API:
+        - response.output_item.done → emits assistant message text or function_call
+        - response.completed → emits usage
+        Reasoning events are ignored.
+        """
+        # Finalized output item (message | function_call)
+        if event.type == "response.output_item.done":
+            item = event.item
+
+            if item.type == "message":
+                parts: list[str] = []
+                for c in item.content:
+                    if c.type == "output_text":
+                        parts.append(c.text)
+                    # Intentionally ignore refusal blocks here; they are not user-facing text
+                if parts:
+                    return ChatChunk(delta=ChatDelta(role="assistant", content=" ".join(parts)))
+                return None
+
+            if item.type == "function_call":
+                call_id = item.call_id or (item.id or "")
+                return ChatChunk(
+                    delta=ChatDelta(
+                        role="assistant",
+                        tool_calls=[
+                            FunctionCall(
+                                id=call_id or item.name,
+                                call_id=call_id or item.name,
+                                name=item.name,
+                                arguments=item.arguments,
+                            )
+                        ],
+                    )
+                )
+
+            # Ignore other item types here
+            return None
+
+        # Completed with possible usage stats
+        elif event.type == "response.completed":
+            if event.response and event.response.usage:
+                usage = event.response.usage
+                return ChatChunk(
+                    usage=StandardCompletionUsage(
+                        completion_tokens=usage.completion_tokens or 0,
+                        prompt_tokens=usage.prompt_tokens or 0,
+                        total_tokens=usage.total_tokens or 0,
+                    )
+                )
+
+        # Ignore reasoning-related events
+        elif event.type in (
+            "response.reasoning_text.delta",
+            "response.reasoning_text.done",
+            "response.reasoning_summary_text.delta",
+            "response.reasoning_summary_text.done",
+            "response.reasoning_summary_part.added",
+            "response.reasoning_summary_part.done",
+        ):
+            return None
+
+        return None

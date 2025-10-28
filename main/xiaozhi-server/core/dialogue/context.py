@@ -4,7 +4,7 @@ Chat context management
 Manages dialogue history as a list of ChatItems.
 """
 
-from typing import Any
+from typing import Any, Literal, overload
 
 from .content import ChatContent
 from .items import ChatItem, ChatMessage, FunctionCall, FunctionCallOutput
@@ -119,6 +119,52 @@ class ChatContext:
     def copy(self) -> "ChatContext":
         """Create a shallow copy of the context"""
         return ChatContext(self._items.copy())
+    
+    # ===== Provider format conversion =====
+    
+    @overload
+    def to_provider_format(
+        self,
+        format: Literal["openai"],
+        **kwargs: Any
+    ) -> tuple[list[dict[str, Any]], None]: ...
+    
+    def to_provider_format(
+        self,
+        format: Literal["openai"] | str,
+        **kwargs: Any
+    ) -> tuple[list[dict[str, Any]], Any]:
+        """
+        Convert ChatContext to provider-specific format
+        
+        This method provides a unified interface for converting the standard
+        ChatContext to different provider formats (OpenAI, Anthropic, Google, etc.)
+        
+        Args:
+            format: Provider format name ("openai", "anthropic", etc.)
+            **kwargs: Provider-specific conversion options
+        
+        Returns:
+            tuple: (messages, extra_data)
+                - messages: Provider-specific message format
+                - extra_data: Additional data (e.g., system messages for Anthropic)
+                             Returns None for providers that don't need extra data
+        
+        Example:
+            # Convert to OpenAI format
+            messages, _ = chat_ctx.to_provider_format(format="openai")
+            
+            # Use in OpenAI API call
+            response = await client.chat.completions.create(
+                model="gpt-4",
+                messages=messages
+            )
+        """
+        if format == "openai":
+            from ._provider_format import openai
+            return openai.to_chat_ctx(self._items, **kwargs)
+        else:
+            raise ValueError(f"Unsupported provider format: {format}")
 
     def clear(self) -> None:
         """Clear all items"""
