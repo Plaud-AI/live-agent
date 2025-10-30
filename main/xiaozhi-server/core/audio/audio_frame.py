@@ -68,6 +68,16 @@ class AudioFrame:
         return self._sample_rate
     
     @property
+    def num_channels(self) -> int:
+        """
+        Returns the number of audio channels.
+
+        Returns:
+            int: The number of audio channels (e.g., 1 for mono, 2 for stereo).
+        """
+        return self._num_channels
+    
+    @property
     def samples_per_channel(self) -> int:
         """
         Returns the number of samples per channel.

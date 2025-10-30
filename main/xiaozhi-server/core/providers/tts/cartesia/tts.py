@@ -22,12 +22,12 @@ from core.utils.aio import cancel_and_wait
 from core.utils.short_uuid import shortuuid
 from core.utils.connection_pool import ConnectionPool
 from core.utils.http_context import http_session
-from core.utils.api_errors import (
+from core.utils.errors import (
     APIConnectionError,
     APITimeoutError,
     APIStatusError,
 )
-from core.utils.api_types import (
+from core.utils.types import (
     APIConnectOptions,
     DEFAULT_API_CONNECT_OPTIONS,
 )

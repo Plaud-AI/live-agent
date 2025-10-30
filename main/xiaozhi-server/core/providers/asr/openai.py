@@ -1,16 +1,28 @@
-import time
+"""
+OpenAI STT Legacy Implementation
+
+Legacy OpenAI STT implementation using ASRProviderBase interface.
+For modern streaming interface, see core.providers.asr.openai
+"""
+
 import os
-from config.logger import setup_logging
+import time
 from typing import Optional, Tuple, List
-from core.providers.asr.dto.dto import InterfaceType
-from core.providers.asr.base import ASRProviderBase
 
 import requests
+from config.logger import setup_logging
+from core.providers.asr.base import ASRProviderBase
+from core.providers.asr.dto.dto import InterfaceType
+
 TAG = __name__
 logger = setup_logging()
 
+
 class ASRProvider(ASRProviderBase):
+    """Legacy OpenAI STT implementation using ASRProviderBase interface"""
+    
     def __init__(self, config: dict, delete_audio_file: bool):
+        super().__init__()
         self.interface_type = InterfaceType.NON_STREAM
         self.api_key = config.get("api_key")
         self.api_url = config.get("base_url")
@@ -44,8 +56,7 @@ class ASRProvider(ASRProviderBase):
                 "model": self.model
             }
 
-
-            with open(file_path, "rb") as audio_file:  # 使用with语句确保文件关闭
+            with open(file_path, "rb") as audio_file:
                 files = {
                     "file": audio_file
                 }
@@ -78,4 +89,3 @@ class ASRProvider(ASRProviderBase):
                     logger.bind(tag=TAG).debug(f"已删除临时音频文件: {file_path}")
                 except Exception as e:
                     logger.bind(tag=TAG).error(f"文件删除失败: {file_path} | 错误: {e}")
-        
