@@ -1,37 +1,30 @@
+"""
+WebSocket server implementation.
+
+This module handles WebSocket connections and manages the server lifecycle.
+"""
 import asyncio
 import json
-
+import logging
 import websockets
-from config.logger import setup_logging
 from core.connection import ConnectionHandler
 from config.config_loader import get_config_from_api
 from core.auth import AuthManager, AuthenticationError
-from core.utils.modules_initialize import initialize_modules
+from core.components import Components
 from core.utils.util import check_vad_update, check_asr_update
+from config.models import Config
 
-TAG = __name__
 
 
 class WebSocketServer:
-    def __init__(self, config: dict):
+    def __init__(self, config: Config):
         self.config = config
-        self.logger = setup_logging()
         self.config_lock = asyncio.Lock()
-        modules = initialize_modules(
-            self.logger,
-            self.config,
-            "VAD" in self.config["selected_module"],
-            "ASR" in self.config["selected_module"],
-            "LLM" in self.config["selected_module"],
-            False,
-            "Memory" in self.config["selected_module"],
-            "Intent" in self.config["selected_module"],
-        )
-        self._vad = modules["vad"] if "vad" in modules else None
-        self._asr = modules["asr"] if "asr" in modules else None
-        self._llm = modules["llm"] if "llm" in modules else None
-        self._intent = modules["intent"] if "intent" in modules else None
-        self._memory = modules["memory"] if "memory" in modules else None
+        components = Components.initialize(config)
+        self._vad = components.vad
+        self._asr = components.stt
+        self._llm = components.llm
+        self._tts = components.tts
 
         self.active_connections = set()
 
@@ -62,7 +55,7 @@ class WebSocketServer:
             # 从 WebSocket 请求中获取路径
             request_path = websocket.request.path
             if not request_path:
-                self.logger.bind(tag=TAG).error("无法获取请求路径")
+                logging.bind(tag=TAG).error("无法获取请求路径")
                 await websocket.close()
                 return
             parsed_url = urlparse(request_path)
@@ -102,7 +95,7 @@ class WebSocketServer:
         try:
             await handler.handle_connection(websocket)
         except Exception as e:
-            self.logger.bind(tag=TAG).error(f"处理连接时出错: {e}")
+            logging.bind(tag=TAG).error(f"处理连接时出错: {e}")
         finally:
             # 确保从活动连接集合中移除
             self.active_connections.discard(handler)
@@ -117,7 +110,7 @@ class WebSocketServer:
                     # 如果没有closed属性，直接尝试关闭
                     await websocket.close()
             except Exception as close_error:
-                self.logger.bind(tag=TAG).error(
+                logging.bind(tag=TAG).error(
                     f"服务器端强制关闭连接时出错: {close_error}"
                 )
 
@@ -141,20 +134,20 @@ class WebSocketServer:
                 # 重新获取配置
                 new_config = get_config_from_api(self.config)
                 if new_config is None:
-                    self.logger.bind(tag=TAG).error("获取新配置失败")
+                    logging.bind(tag=TAG).error("获取新配置失败")
                     return False
-                self.logger.bind(tag=TAG).info(f"获取新配置成功")
+                logging.bind(tag=TAG).info(f"获取新配置成功")
                 # 检查 VAD 和 ASR 类型是否需要更新
                 update_vad = check_vad_update(self.config, new_config)
                 update_asr = check_asr_update(self.config, new_config)
-                self.logger.bind(tag=TAG).info(
+                logging.bind(tag=TAG).info(
                     f"检查VAD和ASR类型是否需要更新: {update_vad} {update_asr}"
                 )
                 # 更新配置
                 self.config = new_config
                 # 重新初始化组件
                 modules = initialize_modules(
-                    self.logger,
+                    logger,
                     new_config,
                     update_vad,
                     update_asr,
@@ -175,10 +168,10 @@ class WebSocketServer:
                     self._intent = modules["intent"]
                 if "memory" in modules:
                     self._memory = modules["memory"]
-                self.logger.bind(tag=TAG).info(f"更新配置任务执行完毕")
+                logging.bind(tag=TAG).info(f"更新配置任务执行完毕")
                 return True
         except Exception as e:
-            self.logger.bind(tag=TAG).error(f"更新服务器配置失败: {str(e)}")
+            logging.bind(tag=TAG).error(f"更新服务器配置失败: {str(e)}")
             return False
 
     async def _handle_auth(self, websocket):
