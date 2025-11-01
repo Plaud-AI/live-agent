@@ -12,8 +12,8 @@ from typing import Literal, Union
 class ImageContent:
     """Image content (URL or data URL)"""
 
-    type: Literal["image"] = "image"
     image: str  # URL or data:image/...;base64,...
+    type: Literal["image"] = "image"
     detail: Literal["auto", "high", "low"] = "auto"  # For vision models
     mime_type: str | None = None
 
@@ -22,8 +22,8 @@ class ImageContent:
 class AudioContent:
     """Audio content"""
 
-    type: Literal["audio"] = "audio"
     audio_data: bytes | str  # Raw bytes or base64 string
+    type: Literal["audio"] = "audio"
     transcript: str | None = None
     format: str = "pcm"  # pcm, mp3, wav, etc.
 

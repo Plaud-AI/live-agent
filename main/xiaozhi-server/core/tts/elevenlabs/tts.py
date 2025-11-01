@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 ElevenLabs TTS Implementation
 
@@ -8,8 +9,6 @@ Supports multiple concurrent synthesis streams over a single WebSocket connectio
 """
 TODO: change api to elevenlabs SDK using streaming API
 """
-
-from __future__ import annotations
 
 import asyncio
 import base64
@@ -248,7 +247,7 @@ class TTS(base.TTS):
             base_url=config.model.base_url if config.model.base_url else API_BASE_URL,
         )
         
-        logger.info(
+        logging.info(
             f"✓ ElevenLabs TTS loaded: model={config.model.name}, "
             f"voice={instance._opts.voice_id}, "
             f"encoding={encoding}, "

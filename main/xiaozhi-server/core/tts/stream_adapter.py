@@ -16,20 +16,16 @@ This allows any non-streaming TTS to be used in streaming contexts.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
-
-from config.logger import setup_logging
+import logging
 from core.tokenize import SentenceTokenizer, blingfire
 from core.utils.aio import Chan, cancel_and_wait
 from core.utils.short_uuid import shortuuid
 
-from .base import SynthesizedAudio, TTS, SynthesizeStream, TTSCapabilities
+from .base import TTS, SynthesizeStream, TTSCapabilities, ChunkedStream
 
-if TYPE_CHECKING:
-    from .emitter import AudioEmitter
-    from .pacer import SentenceStreamPacer
+from core.tts.emitter import AudioEmitter
+from core.tts.pacer import SentenceStreamPacer
 
-logger = setup_logging()
 
 
 class StreamAdapter(TTS):
@@ -109,7 +105,7 @@ class StreamAdapter(TTS):
         """Get the provider from wrapped TTS"""
         return self._wrapped_tts.provider
     
-    def synthesize(self, text: str) -> 'ChunkedStream':
+    def synthesize(self, text: str) -> ChunkedStream:
         """
         Synthesize using the wrapped TTS.
         
@@ -239,7 +235,7 @@ class StreamAdapterWrapper(SynthesizeStream):
                         # Flush after each sentence
                         output_emitter.flush()
             except Exception as e:
-                logger.bind(tag=__name__).error(f"Synthesis error: {e}")
+                logging.error(f"Synthesis error: {e}")
                 raise
         
         # 6. Run both tasks in parallel

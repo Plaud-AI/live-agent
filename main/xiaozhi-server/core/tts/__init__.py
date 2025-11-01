@@ -31,8 +31,6 @@ from .base import (
     # Data structures
     SynthesizedAudio,
     TTSCapabilities,
-    # Legacy
-    TTSProviderBase,
 )
 
 from .stream_adapter import StreamAdapter
@@ -63,7 +61,5 @@ __all__ = [
     # Modern providers
     "CartesiaTTS",
     "ElevenlabsTTS",
-    # Legacy (backward compatibility)
-    "TTSProviderBase",
 ]
 

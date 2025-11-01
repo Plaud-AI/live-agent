@@ -8,7 +8,7 @@ from core.providers.tts.dto.dto import SentenceType
 from core.utils.wakeup_word import WakeupWordsConfig
 from core.handle.sendAudioHandle import sendAudioMessage, send_tts_message
 from core.utils.util import remove_punctuation_and_length, opus_datas_to_wav_bytes
-from core.providers.tools.device_mcp import (
+from core.tools.device_mcp import (
     MCPClient,
     send_mcp_initialize_message,
     send_mcp_tools_list_request,
@@ -106,8 +106,8 @@ async def checkWakeupWords(conn, text):
     conn.client_abort = False
 
     conn.logger.bind(tag=TAG).info(f"播放唤醒词回复: {response.get('text')}")
-    await sendAudioMessage(conn, SentenceType.FIRST, opus_packets, response.get("text"))
-    await sendAudioMessage(conn, SentenceType.LAST, [], None)
+    # await sendAudioMessage(conn, SentenceType.FIRST, opus_packets, response.get("text"))
+    # await sendAudioMessage(conn, SentenceType.LAST, [], None)
 
     # 补充对话
     conn.dialogue.put(Message(role="assistant", content=response.get("text")))

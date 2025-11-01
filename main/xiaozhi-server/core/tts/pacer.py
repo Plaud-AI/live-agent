@@ -9,18 +9,14 @@ speech quality by sending larger chunks of text with more context.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from config.logger import setup_logging
 from core.tokenize import SentenceStream, TokenData
 from core.utils.aio import cancel_and_wait
+from core.tts.emitter import AudioEmitter
 
-if TYPE_CHECKING:
-    from .emitter import AudioEmitter
-
-logger = setup_logging()
 
 
 @dataclass
@@ -232,7 +228,7 @@ class StreamPacerWrapper(SentenceStream):
                 if batch:
                     text = " ".join(batch)
                     self._event_ch.send_nowait(TokenData(token=text))
-                    logger.bind(tag=__name__).debug(
+                    logging.debug(
                         f"Sent text to TTS: '{text[:50]}...' (remaining_audio={remaining_audio:.2f}s)"
                     )
                     generation_started = False

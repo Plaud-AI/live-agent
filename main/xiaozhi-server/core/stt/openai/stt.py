@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import httpx
 import openai
 from openai.types.audio import TranscriptionVerbose
+import logging
 
 from core.audio.audio_frame import AudioFrame
 from ..base import (
@@ -251,7 +252,7 @@ class STT(base.STT):
             ) from None
         
         except Exception as e:
-            logger.bind(tag=TAG).error(
+            logging.error(
                 f"OpenAI STT recognition failed: {e}",
                 exc_info=e,
             )

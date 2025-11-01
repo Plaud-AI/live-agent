@@ -7,9 +7,10 @@ from config.config_loader import load_config
 from core.websocket_server import WebSocketServer
 from core.utils.util import check_ffmpeg_installed
 
-log_config = load_config()
+config = load_config()
+log_config = config.log
 logging.basicConfig(
-    filename=log_config.log_file, 
+    # filename=log_config.log_file, 
     level=log_config.log_level,
     format=log_config.log_format,
     datefmt='%Y-%m-%d %H:%M:%S'
@@ -47,30 +48,44 @@ async def monitor_stdin():
 async def main():
     check_ffmpeg_installed()
 
-    config = load_config()
+    global config
 
     # add stdin monitor task
     stdin_task = asyncio.create_task(monitor_stdin())
 
-    # start WebSocket server
-    ws_server = WebSocketServer(config)
+    # Create WebSocket server with async component initialization
+    # This initializes VAD, STT, LLM, TTS in parallel for faster startup
+    logging.info("Initializing WebSocket server with AI components...")
+    ws_server = await WebSocketServer.create(config)
+    
+    # Start WebSocket server
     ws_task = asyncio.create_task(ws_server.start())
 
     try:
-        await wait_for_exit()  # 阻塞直到收到退出信号
+        await wait_for_exit()  # Block until exit signal received
     except asyncio.CancelledError:
         logging.error("Task cancelled, cleaning up resources...")
     finally:
-        # cancel all tasks (critical fix point)
+        # Cancel all tasks (critical fix point)
         stdin_task.cancel()
         ws_task.cancel()
 
-        # wait for tasks to terminate (must add timeout)
+        # Wait for tasks to terminate (must add timeout)
         await asyncio.wait(
             [stdin_task, ws_task],
             timeout=3.0,
             return_when=asyncio.ALL_COMPLETED,
         )
+        
+        # Cleanup components
+        if hasattr(ws_server, 'components'):
+            logging.info("Shutting down AI components...")
+            try:
+                components = ws_server.components
+                await components.aclose()
+            except Exception as e:
+                logging.error(f"Error shutting down components: {e}")
+        
         logging.info("Server closed, program exited.")
 
 

@@ -103,6 +103,10 @@ class VADConfig(BaseModel):
     provider: str = Field(description="VAD provider name (e.g., 'silero')")
     model: ModelConfig = Field(description="VAD model configuration")
     output_dir: str = Field(default="tmp/", description="Output directory for VAD results")
+    options: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Provider-specific options (e.g., thresholds, durations for Silero VAD)"
+    )
 
 
 class STTConfig(BaseModel):
@@ -110,6 +114,10 @@ class STTConfig(BaseModel):
     
     provider: str = Field(description="STT provider name (e.g., 'groq', 'funasr')")
     model: ModelConfig = Field(description="STT model configuration")
+    options: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Provider-specific options (e.g., language, prompt for STT)"
+    )
 
 
 class LLMConfig(BaseModel):
@@ -117,6 +125,10 @@ class LLMConfig(BaseModel):
     
     provider: str = Field(description="LLM provider name (e.g., 'groq', 'openai', 'chatglm')")
     model: ModelConfig = Field(description="LLM model configuration")
+    options: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Provider-specific options (e.g., temperature, max_tokens for LLM)"
+    )
 
 
 class TTSConfig(BaseModel):
@@ -126,6 +138,10 @@ class TTSConfig(BaseModel):
     model: Optional[ModelConfig] = Field(
         default=None,
         description="TTS model configuration (optional)"
+    )
+    options: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Provider-specific options (e.g., voice_id, encoding for TTS)"
     )
 
 

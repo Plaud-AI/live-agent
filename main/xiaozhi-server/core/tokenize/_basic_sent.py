@@ -40,8 +40,8 @@ def split_sentences(
     text = re.sub(r" " + alphabets + "[.]"," \\1<prd>",text)
 
     # Mark end of sentence punctuations with <stop>
-    text = re.sub(r"([.!?。！？])([\""])", "\\1\\2<stop>", text)
-    text = re.sub(r"([.!?。！？])(?![\""])", "\\1<stop>", text)
+    text = re.sub(r"([.!?。！？])([\"])", "\\1\\2<stop>", text)
+    text = re.sub(r"([.!?。！？])(?![\"])", "\\1<stop>", text)
 
     text = text.replace("<prd>",".")
     # fmt: on

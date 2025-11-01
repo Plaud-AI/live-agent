@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import re
 from dataclasses import dataclass
-import blingfire
+from livekit import blingfire
 
 from . import token_stream, tokenizer
 

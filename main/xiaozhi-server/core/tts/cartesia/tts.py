@@ -147,6 +147,20 @@ class TTS(base.TTS):
             max_session_duration=300,  # 5 minutes
             mark_refreshed_on_get=True,
         )
+
+        # Track active streams for cleanup
+        self._streams: weakref.WeakSet[SynthesizeStream] = weakref.WeakSet()
+        
+        # Tokenizer and pacer
+        self._sentence_tokenizer = (
+            sentence_tokenizer if sentence_tokenizer else blingfire.SentenceTokenizer()
+        )
+        
+        self._stream_pacer: SentenceStreamPacer | None = None
+        if text_pacing is True:
+            self._stream_pacer = SentenceStreamPacer()
+        elif isinstance(text_pacing, SentenceStreamPacer):
+            self._stream_pacer = text_pacing
     
     @classmethod
     async def from_config(cls, config, audio_params) -> TTS:
@@ -207,20 +221,6 @@ class TTS(base.TTS):
         )
         
         return instance
-        
-        # Track active streams for cleanup
-        self._streams: weakref.WeakSet[SynthesizeStream] = weakref.WeakSet()
-        
-        # Tokenizer and pacer
-        self._sentence_tokenizer = (
-            sentence_tokenizer if sentence_tokenizer else blingfire.SentenceTokenizer()
-        )
-        
-        self._stream_pacer: SentenceStreamPacer | None = None
-        if text_pacing is True:
-            self._stream_pacer = SentenceStreamPacer()
-        elif isinstance(text_pacing, SentenceStreamPacer):
-            self._stream_pacer = text_pacing
     
     @property
     def model(self) -> str:
@@ -261,6 +261,20 @@ class TTS(base.TTS):
     def prewarm(self) -> None:
         """Prewarm WebSocket connection pool"""
         self._pool.prewarm()
+    
+    def synthesize(self, text: str) -> base.ChunkedStream:
+        """
+        Synthesize speech from text (non-streaming).
+        
+        This creates a stream, pushes the entire text at once, and returns it.
+        
+        Args:
+            text: The text to synthesize
+        
+        Returns:
+            ChunkedStream that yields synthesized audio
+        """
+        return ChunkedStream(tts=self, input_text=text)
     
     def stream(self, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS) -> SynthesizeStream:
         """
@@ -427,6 +441,38 @@ class SynthesizeStream(base.SynthesizeStream):
         except Exception as e:
             logging.error(f"Cartesia WebSocket error: {e}")
             raise
+
+class ChunkedStream(base.ChunkedStream):
+    """
+    Cartesia ChunkedStream implementation.
+    
+    Uses Cartesia's streaming API to synthesize text all at once.
+    """
+    
+    def __init__(self, *, tts: TTS, input_text: str) -> None:
+        """Initialize ChunkedStream with Cartesia TTS"""
+        self._cartesia_tts = tts
+        super().__init__(tts=tts, input_text=input_text)
+    
+    async def _run(self, output_emitter: Any) -> None:
+        """
+        Run synthesis using Cartesia's streaming API.
+        
+        Args:
+            output_emitter: AudioEmitter to push synthesized audio to
+        """
+        # Create a stream and push all text at once
+        stream = self._cartesia_tts.stream()
+        stream.push_text(self._input_text)
+        stream.end_input()
+        
+        # Forward all audio frames to the output emitter
+        async for audio_event in stream:
+            output_emitter.push(audio_event.frame)
+        
+        # Flush when done
+        output_emitter.flush()
+
 
 def _to_cartesia_options(opts: _TTSOptions) -> dict[str, Any]:
     """Convert options to Cartesia API format"""

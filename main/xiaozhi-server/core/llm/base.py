@@ -136,10 +136,10 @@ async def create_from_config(config) -> LLM:
     logging.info(f"Creating LLM: provider={provider}, model={config.model.name}")
     
     if provider == "groq":
-        import core.llm.groq as Groq
-        return await Groq.from_config(config)
+        from core.llm.groq import LLM as GroqLLM
+        return await GroqLLM.from_config(config)
     elif provider == "openai":
-        import core.llm.openai as OpenAI
-        return await OpenAI.from_config(config)
+        from core.llm.openai import LLM as OpenAILLM
+        return await OpenAILLM.from_config(config)
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")

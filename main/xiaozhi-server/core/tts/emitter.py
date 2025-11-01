@@ -20,17 +20,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Union
+import logging
+from typing import Union
 
-from config.logger import setup_logging
 from core.audio.audio_frame import AudioFrame
-from core.providers.tts.base import SynthesizedAudio
+from core.tts.base import SynthesizedAudio
 from core.utils.aio import Chan, cancel_and_wait
 
-if TYPE_CHECKING:
-    pass
-
-logger = setup_logging()
 
 
 class AudioEmitter:
@@ -130,7 +126,7 @@ class AudioEmitter:
             raise RuntimeError("AudioEmitter already started")
 
         if not request_id:
-            logger.bind(tag=__name__).warning(f"No request_id provided for TTS {self._label}")
+            logging.warning(f"No request_id provided for TTS {self._label}")
             request_id = "unknown"
 
         self._started = True
@@ -407,7 +403,7 @@ class AudioEmitter:
                     segment_ctx = last_frame = None
 
         except Exception as e:
-            logger.bind(tag=__name__).error(f"AudioEmitter error: {e}")
+            logging.error(f"AudioEmitter error: {e}")
             raise
         finally:
             # Cleanup

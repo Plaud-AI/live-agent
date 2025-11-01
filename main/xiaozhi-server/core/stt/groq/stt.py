@@ -98,7 +98,7 @@ class STT(OpenAISTT):
             language=options.get("language", "en"),
             prompt=options.get("prompt", NOT_GIVEN),
             base_url=config.model.base_url if config.model.base_url else None,
-            api_key=NOT_GIVEN,  # Will read from env
+            api_key=options.get("api_key", NOT_GIVEN),  # Will read from env
         )
         
         return instance

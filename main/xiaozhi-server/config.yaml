@@ -10,7 +10,7 @@ server:
       - "11:22:33:44:55:66"
 log:
   # log format: time - name - level - tag - message
-  log_format: "%(asctime)s - %(levelname)s - [%(pathname)s: %(lineno)d] %(message)s
+  log_format: "%(asctime)s - %(levelname)s - [%(pathname)s: %(lineno)d] %(message)s"
   # log level: INFO, DEBUG, WARNING, ERROR, CRITICAL
   log_level: INFO
   # log path
@@ -45,24 +45,50 @@ components:
       name: silero-vad
       dir: models/silero-vad
     output_dir: tmp/
+    options:
+      min_speech_duration: 0.05
+      min_silence_duration: 0.55
+      prefix_padding_duration: 0.5
+      max_buffered_speech: 60.0
+      activation_threshold: 0.5
+      sample_rate: 16000
+      force_cpu: true
   stt:
     provider: groq
     model: 
       type: remote
       name: whisper-large-v3
       base_url: https://api.groq.com/v1
+    options:
+      api_key: "your api key here"  # Or set GROQ_API_KEY env var
+      language: en
+      # prompt: "Optional transcription prompt"
   llm: 
     provider: groq
     model: 
       type: remote
       name: openai/gpt-oss-120b
       base_url: https://api.groq.com/v1
+    options:
+      api_key: "your api key here"  # Or set GROQ_API_KEY env var
+      temperature: 0.7
+      max_output_tokens: 500
+      top_p: 1.0
+      frequency_penalty: 0
+      timeout: 60
+      max_retries: 0
   tts: 
     provider: cartesia
     model: 
       type: remote
       name: sonic-3
       base_url: https://api.cartesia.com/v1
+    options:
+      api_key: "your api key here"  # Or set CARTESIA_API_KEY env var
+      voice: "79a125e8-cd45-4c13-8a67-188112f4dd22"  # Default Cartesia voice
+      language: en
+      text_pacing: false
+      api_version: "2025-04-16"
   Memory: 
     provider: mem0
 

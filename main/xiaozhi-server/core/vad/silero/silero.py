@@ -19,9 +19,9 @@ import numpy as np
 import onnxruntime 
 
 from core.audio.audio_frame import AudioFrame
-from .base import VAD, VADCapabilities, VADEvent, VADEventType, VADStream
+from ..base import VAD, VADCapabilities, VADEvent, VADEventType, VADStream
 from core.vad import base
-from .onnx_model import OnnxModel, new_inference_session
+from ..onnx_model import OnnxModel, new_inference_session
 from core.utils.exp_filter import ExpFilter
 
 SLOW_INFERENCE_THRESHOLD = 0.2  # late by 200ms
