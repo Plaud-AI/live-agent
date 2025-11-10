@@ -1,5 +1,6 @@
 package xiaozhi.common.utils;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import xiaozhi.common.constant.Constant;
 import xiaozhi.common.exception.ErrorCode;
@@ -11,6 +12,7 @@ import xiaozhi.modules.sys.service.SysParamsService;
  * SM2解密和验证码验证工具类
  * 封装了重复的SM2解密、验证码提取和验证逻辑
  */
+@Slf4j
 public class Sm2DecryptUtil {
     
     /**
@@ -37,10 +39,23 @@ public class Sm2DecryptUtil {
             Boolean.class
         );
         
+        // ⭐ 调试日志：查看SM2加密状态
+        log.info("============================================================");
+        log.info("🔐 SM2加密状态检查");
+        log.info("  - 参数名: {}", Constant.SERVER_ENABLE_SM2_ENCRYPT);
+        log.info("  - 读取到的值: {}", enableSm2Encrypt);
+        log.info("  - 密码长度: {}", passwordOrEncrypted != null ? passwordOrEncrypted.length() : "null");
+        log.info("  - 验证码ID: {}", captchaId);
+        log.info("  - 验证码: {}", captcha);
+        
         // 默认启用SM2（向后兼容）
         if (enableSm2Encrypt == null) {
+            log.warn("  ⚠️  SM2参数未配置，默认启用SM2加密（向后兼容）");
             enableSm2Encrypt = true;
         }
+        
+        log.info("  - 最终决定: {}", enableSm2Encrypt ? "启用SM2加密" : "禁用SM2（明文模式）");
+        log.info("============================================================");
         
         String actualPassword;
         String actualCaptcha;
