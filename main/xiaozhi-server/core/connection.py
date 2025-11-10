@@ -176,6 +176,12 @@ class ConnectionHandler:
             )
 
             self.device_id = self.headers.get("device-id", None)
+            self.client_id = self.headers.get("client-id", self.device_id)
+            
+            # ⭐ 打印device-id和client-id（关键信息）
+            self.logger.bind(tag=TAG).info(f"🔍 WebSocket连接参数:")
+            self.logger.bind(tag=TAG).info(f"  - Device ID: {self.device_id}")
+            self.logger.bind(tag=TAG).info(f"  - Client ID: {self.client_id}")
 
             # 认证通过,继续处理
             self.websocket = ws
@@ -612,19 +618,32 @@ class ConnectionHandler:
     def _initialize_private_config(self):
         """如果是从配置文件获取，则进行二次实例化"""
         if not self.read_config_from_api:
+            self.logger.bind(tag=TAG).info("❌ read_config_from_api=False，跳过差异化配置")
             return
+        
+        self.logger.bind(tag=TAG).info("=" * 60)
+        self.logger.bind(tag=TAG).info("🔄 开始加载差异化配置（Agent专属配置）")
+        self.logger.bind(tag=TAG).info("=" * 60)
+        
         """从接口获取差异化的配置进行二次实例化，非全量重新实例化"""
         try:
             begin_time = time.time()
+            device_id = self.headers.get("device-id")
+            client_id = self.headers.get("client-id", device_id)
+            
+            self.logger.bind(tag=TAG).info(f"📡 调用API获取Agent配置...")
+            self.logger.bind(tag=TAG).info(f"  - 请求参数: device_id={device_id}, client_id={client_id}")
+            
             private_config = get_private_config_from_api(
                 self.config,
-                self.headers.get("device-id"),
-                self.headers.get("client-id", self.headers.get("device-id")),
+                device_id,
+                client_id,
             )
             private_config["delete_audio"] = bool(self.config.get("delete_audio", True))
-            self.logger.bind(tag=TAG).info(
-                f"{time.time() - begin_time} 秒，获取差异化配置成功: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}"
-            )
+            
+            elapsed_time = time.time() - begin_time
+            self.logger.bind(tag=TAG).info(f"✅ 获取差异化配置成功！耗时: {elapsed_time:.3f}秒")
+            self.logger.bind(tag=TAG).info(f"📋 配置详情: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}")
         except DeviceNotFoundException as e:
             self.need_bind = True
             private_config = {}
@@ -659,18 +678,30 @@ class ConnectionHandler:
             ]
         if private_config.get("TTS", None) is not None:
             init_tts = True
+            old_tts = self.config["selected_module"].get("TTS", "未设置")
+            new_tts = private_config["selected_module"]["TTS"]
             self.config["TTS"] = private_config["TTS"]
-            self.config["selected_module"]["TTS"] = private_config["selected_module"][
-                "TTS"
-            ]
+            self.config["selected_module"]["TTS"] = new_tts
+            self.logger.bind(tag=TAG).info(f"🎤 TTS模型切换: {old_tts} → {new_tts}")
+            # 打印TTS配置详情
+            tts_config = private_config["TTS"].get(new_tts, {})
+            if tts_config:
+                self.logger.bind(tag=TAG).info(f"  - Voice: {tts_config.get('voice', '未设置')}")
             # 标记 API 已设置 TTS 配置（优先级1）
             self.config["_api_tts_applied"] = True
         if private_config.get("LLM", None) is not None:
             init_llm = True
+            old_llm = self.config["selected_module"].get("LLM", "未设置")
+            new_llm = private_config["selected_module"]["LLM"]
             self.config["LLM"] = private_config["LLM"]
-            self.config["selected_module"]["LLM"] = private_config["selected_module"][
-                "LLM"
-            ]
+            self.config["selected_module"]["LLM"] = new_llm
+            self.logger.bind(tag=TAG).info(f"🤖 LLM模型切换: {old_llm} → {new_llm}")
+            # 打印LLM配置详情
+            llm_config = private_config["LLM"].get(new_llm, {})
+            if llm_config:
+                self.logger.bind(tag=TAG).info(f"  - API Key: {llm_config.get('api_key', '未设置')[:10]}...")
+                self.logger.bind(tag=TAG).info(f"  - Model: {llm_config.get('model_name', '未设置')}")
+                self.logger.bind(tag=TAG).info(f"  - Base URL: {llm_config.get('base_url', '未设置')}")
         if private_config.get("VLLM", None) is not None:
             self.config["VLLM"] = private_config["VLLM"]
             self.config["selected_module"]["VLLM"] = private_config["selected_module"][
@@ -697,7 +728,9 @@ class ConnectionHandler:
                     "functions"
                 ] = plugin_from_server.keys()
         if private_config.get("prompt", None) is not None:
+            prompt_preview = private_config["prompt"][:100] + "..." if len(private_config["prompt"]) > 100 else private_config["prompt"]
             self.config["prompt"] = private_config["prompt"]
+            self.logger.bind(tag=TAG).info(f"📝 Prompt已更新: {prompt_preview}")
         # 获取声纹信息
         if private_config.get("voiceprint", None) is not None:
             self.config["voiceprint"] = private_config["voiceprint"]
@@ -709,6 +742,22 @@ class ConnectionHandler:
             self.chat_history_conf = int(private_config["chat_history_conf"])
         if private_config.get("mcp_endpoint", None) is not None:
             self.config["mcp_endpoint"] = private_config["mcp_endpoint"]
+        
+        # 打印差异化配置总结
+        self.logger.bind(tag=TAG).info("=" * 60)
+        self.logger.bind(tag=TAG).info("📊 差异化配置应用总结:")
+        if init_llm:
+            self.logger.bind(tag=TAG).info(f"  ✅ LLM: {self.config['selected_module']['LLM']}")
+        if init_tts:
+            self.logger.bind(tag=TAG).info(f"  ✅ TTS: {self.config['selected_module']['TTS']}")
+        if init_memory:
+            self.logger.bind(tag=TAG).info(f"  ✅ Memory: {self.config['selected_module']['Memory']}")
+        if init_intent:
+            self.logger.bind(tag=TAG).info(f"  ✅ Intent: {self.config['selected_module']['Intent']}")
+        if not any([init_llm, init_tts, init_memory, init_intent]):
+            self.logger.bind(tag=TAG).info("  ℹ️  未应用任何差异化配置（使用默认配置）")
+        self.logger.bind(tag=TAG).info("=" * 60)
+        
         try:
             modules = initialize_modules(
                 self.logger,

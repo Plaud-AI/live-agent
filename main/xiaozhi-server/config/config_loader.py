@@ -33,9 +33,9 @@ def load_config():
 
     if custom_config.get("manager-api", {}).get("url"):
         config = get_config_from_api(custom_config)
-    # else:
-    #     # 合并配置
-    #     config = merge_configs(default_config, custom_config)
+    else:
+        # 使用本地配置文件
+        config = custom_config
     # 初始化目录
     ensure_directories(config)
 

@@ -174,8 +174,8 @@ public class CaptchaServiceImpl implements CaptchaService {
         }
 
         String captcha = localCache.getIfPresent(key);
-        // 删除验证码
-        if (captcha != null) {
+        // 删除验证码（仅当 delete=true 时删除，与 Redis 模式保持一致）
+        if (captcha != null && delete) {
             localCache.invalidate(key);
         }
         return captcha;

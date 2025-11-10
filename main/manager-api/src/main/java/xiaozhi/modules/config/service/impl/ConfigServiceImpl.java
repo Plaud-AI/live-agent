@@ -102,22 +102,39 @@ public class ConfigServiceImpl implements ConfigService {
 
     @Override
     public Map<String, Object> getAgentModels(String macAddress, Map<String, String> selectedModule) {
+        log.info("============================================================");
+        log.info("📡 收到Agent配置请求");
+        log.info("  - MAC Address: {}", macAddress);
+        log.info("  - Selected Module: {}", selectedModule);
+        
         // 根据MAC地址查找设备
         DeviceEntity device = deviceService.getDeviceByMacAddress(macAddress);
         if (device == null) {
+            log.warn("❌ 设备未找到: {}", macAddress);
             // 如果设备，去redis里看看有没有需要连接的设备
             String cachedCode = deviceService.geCodeByDeviceId(macAddress);
             if (StringUtils.isNotBlank(cachedCode)) {
+                log.info("  - 找到绑定码: {}", cachedCode);
                 throw new RenException(ErrorCode.OTA_DEVICE_NEED_BIND, cachedCode);
             }
             throw new RenException(ErrorCode.OTA_DEVICE_NOT_FOUND, "not found device");
         }
+        
+        log.info("✅ 找到设备: {}", device.getId());
+        log.info("  - User ID: {}", device.getUserId());
+        log.info("  - Agent ID: {}", device.getAgentId());
 
         // 获取智能体信息
         AgentEntity agent = agentService.getAgentById(device.getAgentId());
         if (agent == null) {
+            log.error("❌ Agent未找到: {}", device.getAgentId());
             throw new RenException("智能体未找到");
         }
+        
+        log.info("✅ 找到Agent: {}", agent.getAgentName());
+        log.info("  - LLM Model ID: {}", agent.getLlmModelId());
+        log.info("  - TTS Model ID: {}", agent.getTtsModelId());
+        log.info("  - Voice ID: {}", agent.getTtsVoiceId());
         // 获取音色信息
         String voice = null;
         String referenceAudio = null;
@@ -198,6 +215,10 @@ public class ConfigServiceImpl implements ConfigService {
                 result,
                 true);
 
+        log.info("✅ Agent配置已构建完成");
+        log.info("  - Prompt: {}...", agent.getSystemPrompt() != null ? agent.getSystemPrompt().substring(0, Math.min(50, agent.getSystemPrompt().length())) : "未设置");
+        log.info("============================================================");
+        
         return result;
     }
 

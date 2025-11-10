@@ -141,6 +141,7 @@ export default {
       enableMobileRegister: state => state.pubConfig.enableMobileRegister,
       mobileAreaList: state => state.pubConfig.mobileAreaList,
       sm2PublicKey: state => state.pubConfig.sm2PublicKey,
+      enableSm2Encrypt: state => state.pubConfig.enableSm2Encrypt,  // 添加SM2开关
     }),
     canSendMobileCaptcha() {
       return this.countdown === 0 && validateMobile(this.form.mobile, this.form.areaCode);
@@ -270,35 +271,44 @@ export default {
         showDanger(this.$t('register.passwordsNotMatch'))
         return
       }
-      // 验证验证码
-      if (!this.validateInput(this.form.captcha, this.$t('register.requiredCaptcha'))) {
-        return;
-      }
-      // 加密
-      let encryptedPassword;
-      try {
-        // 拼接验证码和密码
-        const captchaAndPassword = this.form.captcha + this.form.password;
-        encryptedPassword = sm2Encrypt(this.sm2PublicKey, captchaAndPassword);
-      } catch (error) {
-        console.error("密码加密失败:", error);
-        showDanger(this.$t('sm2.encryptionFailed'));
-        return;
-      }
-
+      let passwordToSend;
       let plainUsername;
+      
       if (this.enableMobileRegister) {
         plainUsername = this.form.areaCode + this.form.mobile;
       } else {
         plainUsername = this.form.username;
       }
+      
+      // 根据enableSm2Encrypt决定是否加密
+      if (this.enableSm2Encrypt) {
+        // SM2加密模式
+        // 验证验证码
+        if (!this.validateInput(this.form.captcha, this.$t('register.requiredCaptcha'))) {
+          return;
+        }
+        try {
+          // 拼接验证码和密码
+          const captchaAndPassword = this.form.captcha + this.form.password;
+          passwordToSend = sm2Encrypt(this.sm2PublicKey, captchaAndPassword);
+        } catch (error) {
+          console.error("密码加密失败:", error);
+          showDanger(this.$t('sm2.encryptionFailed'));
+          return;
+        }
+      } else {
+        // 明文模式（开发环境）
+        console.log("开发模式：跳过SM2加密");
+        passwordToSend = this.form.password;
+      }
 
       // 准备注册数据
       const registerData = {
         username: plainUsername,
-        password: encryptedPassword,
+        password: passwordToSend,
         captchaId: this.form.captchaId,
-        mobileCaptcha: this.form.mobileCaptcha
+        mobileCaptcha: this.form.mobileCaptcha,
+        captcha: this.enableSm2Encrypt ? undefined : this.form.captcha  // 明文模式时传递验证码
       };
 
       Api.user.register(registerData, ({ data }) => {

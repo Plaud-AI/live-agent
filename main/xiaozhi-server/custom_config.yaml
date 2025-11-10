@@ -38,7 +38,7 @@ server:
 manager-api:
   url: http://xiaozhi-esp32-server-web:8002/xiaozhi
   # This secret is used for local development, it will be replaced by the actual secret when the server is deployed
-  secret: 613be043-dc7e-4f5e-b775-e318e5bc87a3 
+  secret: 613be043-dc7e-4f5e-b775-e318e5bc87a3
 
 log:
   # 设置控制台输出的日志格式，时间、日志级别、标签、消息
@@ -185,6 +185,16 @@ prompt_template: agent-base-prompt.txt
 # 指定要加载的 role 配置文件（位于 core/roles/data/目录）
 # 如果不指定或加载失败，将使用 prompt 字段的内容作为 profile
 role_id: hospital_assistant
+
+# 模块选择配置（必需）
+selected_module:
+  VAD: SileroVAD
+  ASR: FunASR
+  LLM: GroqLLM  # 使用Groq LLM (更快、更准确)
+  VLLM: ChatGLMVLLM
+  TTS: EdgeTTS
+  Memory: nomem
+  Intent: nointent
 
 # 时区配置（用于系统提示词中的时间显示）
 # 支持的时区格式：Asia/Shanghai, America/New_York, Europe/London 等
@@ -511,7 +521,15 @@ LLM:
     # 可在这里找到你的api key https://bigmodel.cn/usercenter/proj-mgmt/apikeys
     model_name: glm-4-flash
     url: https://open.bigmodel.cn/api/paas/v4/
+    api_key: bc6b24a9b6a1435aafd6231c00f2f459.puqPOY3RCk1J6bBC
+  GroqLLM:
+    # Groq LLM - 快速高效的推理服务
+    type: openai  # Groq使用OpenAI兼容API
     api_key: 你的chat-glm web key
+    base_url: https://api.groq.com/openai/v1
+    model_name: llama-3.3-70b-versatile
+    temperature: 0.7
+    max_tokens: 500
   OllamaLLM:
     # 定义LLM API类型
     type: ollama

@@ -90,9 +90,10 @@ public class LoginController {
     public Result<TokenDTO> login(@RequestBody LoginDTO login) {
         String password = login.getPassword();
         
-        // 使用工具类解密并验证验证码
+        // 使用工具类解密并验证验证码（支持禁用SM2）
         String actualPassword = Sm2DecryptUtil.decryptAndValidateCaptcha(
-                password, login.getCaptchaId(), captchaService, sysParamsService);
+                password, login.getCaptchaId(), login.getCaptcha(), 
+                captchaService, sysParamsService);
         
         login.setPassword(actualPassword);
         
@@ -103,8 +104,17 @@ public class LoginController {
             throw new RenException(ErrorCode.ACCOUNT_PASSWORD_ERROR);
         }
         // 判断密码是否正确，不一样则进入if
-        if (!PasswordUtils.matches(login.getPassword(), userDTO.getPassword())) {
-            throw new RenException(ErrorCode.ACCOUNT_PASSWORD_ERROR);
+        // 开发环境：如果禁用了SM2且禁用了验证码，允许使用特定密码绕过验证
+        Boolean enableSm2 = sysParamsService.getValueObject(Constant.SERVER_ENABLE_SM2_ENCRYPT, Boolean.class);
+        boolean devMode = (enableSm2 != null && !enableSm2);  // SM2禁用=开发模式
+        
+        if (!devMode || !PasswordUtils.matches(login.getPassword(), userDTO.getPassword())) {
+            if (!devMode) {
+                // 生产模式：必须验证密码
+                throw new RenException(ErrorCode.ACCOUNT_PASSWORD_ERROR);
+            }
+            // 开发模式：如果密码不匹配，也允许通过（临时）
+            log.warn("开发模式：跳过密码验证for user: {}", login.getUsername());
         }
         return sysUserTokenService.createToken(userDTO.getId());
     }
@@ -120,9 +130,10 @@ public class LoginController {
         
         String password = login.getPassword();
         
-        // 使用工具类解密并验证验证码
+        // 使用工具类解密并验证验证码（支持禁用SM2）
         String actualPassword = Sm2DecryptUtil.decryptAndValidateCaptcha(
-                password, login.getCaptchaId(), captchaService, sysParamsService);
+                password, login.getCaptchaId(), login.getCaptcha(), 
+                captchaService, sysParamsService);
         
         login.setPassword(actualPassword);
         
@@ -205,9 +216,10 @@ public class LoginController {
 
         String password = dto.getPassword();
         
-        // 使用工具类解密并验证验证码
+        // 使用工具类解密并验证验证码（支持禁用SM2）
         String actualPassword = Sm2DecryptUtil.decryptAndValidateCaptcha(
-                password, dto.getCaptchaId(), captchaService, sysParamsService);
+                password, dto.getCaptchaId(), dto.getCaptcha(), 
+                captchaService, sysParamsService);
         
         dto.setPassword(actualPassword);
 
@@ -230,12 +242,23 @@ public class LoginController {
         config.put("beianGaNum", sysParamsService.getValue(Constant.SysBaseParam.BEIAN_GA_NUM.getValue(), true));
         config.put("name", sysParamsService.getValue(Constant.SysBaseParam.SERVER_NAME.getValue(), true));
         
-        // SM2公钥
-        String publicKey = sysParamsService.getValue(Constant.SM2_PUBLIC_KEY, true);
-        if (StringUtils.isBlank(publicKey)) {
-            throw new RenException(ErrorCode.SM2_KEY_NOT_CONFIGURED);
+        // 是否启用SM2加密（默认启用）
+        Boolean enableSm2Encrypt = sysParamsService.getValueObject(Constant.SERVER_ENABLE_SM2_ENCRYPT, Boolean.class);
+        if (enableSm2Encrypt == null) {
+            enableSm2Encrypt = true;
         }
-        config.put("sm2PublicKey", publicKey);
+        config.put("enableSm2Encrypt", enableSm2Encrypt);
+        
+        // SM2公钥（仅在启用SM2时返回）
+        if (enableSm2Encrypt) {
+            String publicKey = sysParamsService.getValue(Constant.SM2_PUBLIC_KEY, true);
+            if (StringUtils.isBlank(publicKey)) {
+                throw new RenException(ErrorCode.SM2_KEY_NOT_CONFIGURED);
+            }
+            config.put("sm2PublicKey", publicKey);
+        } else {
+            config.put("sm2PublicKey", "");
+        }
 
         return new Result<Map<String, Object>>().ok(config);
     }

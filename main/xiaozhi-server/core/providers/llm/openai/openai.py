@@ -14,7 +14,7 @@ class LLMProvider(LLMProviderBase):
         self.model_name = config.get("model_name")
         self.api_key = config.get("api_key")
         if "base_url" in config:
-            self.base_url = config.get("base_url")
+        self.base_url = config.get("base_url")
         else:
             self.base_url = config.get("url")
         # 增加timeout的配置项，单位为秒
@@ -84,7 +84,7 @@ class LLMProvider(LLMProviderBase):
                         content = content.split("</think>")[-1]
                     if is_active:
                         yield content
-
+            
         except Exception as e:
             try:
                 error_msg = repr(e)[:200]
@@ -107,12 +107,12 @@ class LLMProvider(LLMProviderBase):
                 # 存在 CompletionUsage 消息时，生成 Token 消耗 log
                 elif isinstance(getattr(chunk, "usage", None), CompletionUsage):
                     usage_info = getattr(chunk, "usage", None)
-                    logger.bind(tag=TAG).debug(
+            logger.bind(tag=TAG).debug(
                         f"Token 消耗：输入 {getattr(usage_info, 'prompt_tokens', '未知')}，"
                         f"输出 {getattr(usage_info, 'completion_tokens', '未知')}，"
                         f"共计 {getattr(usage_info, 'total_tokens', '未知')}"
-                    )
-
+            )
+            
         except Exception as e:
             try:
                 error_msg = repr(e)[:200]

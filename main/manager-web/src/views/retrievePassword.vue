@@ -116,7 +116,8 @@ export default {
     ...mapState({
       allowUserRegister: state => state.pubConfig.allowUserRegister,
       mobileAreaList: state => state.pubConfig.mobileAreaList,
-      sm2PublicKey: state => state.pubConfig.sm2PublicKey
+      sm2PublicKey: state => state.pubConfig.sm2PublicKey,
+      enableSm2Encrypt: state => state.pubConfig.enableSm2Encrypt  // 添加SM2开关
     }),
     canSendMobileCaptcha() {
       return this.countdown === 0 && validateMobile(this.form.mobile, this.form.areaCode);
@@ -230,23 +231,33 @@ export default {
         return;
       }
 
-      // 加密密码
-      let encryptedPassword;
-      try {
-        // 拼接图形验证码和新密码进行加密
-        const captchaAndPassword = this.form.captcha + this.form.newPassword;
-        encryptedPassword = sm2Encrypt(this.sm2PublicKey, captchaAndPassword);
-      } catch (error) {
-        console.error("密码加密失败:", error);
-        showDanger(this.$t('sm2.encryptionFailed'));
-        return;
+      // 准备密码
+      let passwordToSend;
+      
+      // 根据enableSm2Encrypt决定是否加密
+      if (this.enableSm2Encrypt) {
+        // SM2加密模式
+        try {
+          // 拼接图形验证码和新密码进行加密
+          const captchaAndPassword = this.form.captcha + this.form.newPassword;
+          passwordToSend = sm2Encrypt(this.sm2PublicKey, captchaAndPassword);
+        } catch (error) {
+          console.error("密码加密失败:", error);
+          showDanger(this.$t('sm2.encryptionFailed'));
+          return;
+        }
+      } else {
+        // 明文模式（开发环境）
+        console.log("开发模式：跳过SM2加密");
+        passwordToSend = this.form.newPassword;
       }
 
       Api.user.retrievePassword({
         phone: this.form.areaCode + this.form.mobile,
-        password: encryptedPassword,
+        password: passwordToSend,
         code: this.form.mobileCaptcha,
-        captchaId: this.form.captchaId
+        captchaId: this.form.captchaId,
+        captcha: this.enableSm2Encrypt ? undefined : this.form.captcha  // 明文模式时传递验证码
       }, (res) => {
         showSuccess(this.$t('retrievePassword.passwordUpdateSuccess'));
         goToPage('/login');

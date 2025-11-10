@@ -16,7 +16,8 @@ export default new Vuex.Store({
       beianIcpNum: 'null',
       beianGaNum: 'null',
       allowUserRegister: false,
-      sm2PublicKey: ''
+      sm2PublicKey: '',
+      enableSm2Encrypt: false  // 添加SM2加密开关
     }
   },
   getters: {

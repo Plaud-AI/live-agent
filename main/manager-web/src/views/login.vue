@@ -162,6 +162,7 @@ export default {
       enableMobileRegister: (state) => state.pubConfig.enableMobileRegister,
       mobileAreaList: (state) => state.pubConfig.mobileAreaList,
       sm2PublicKey: (state) => state.pubConfig.sm2PublicKey,
+      enableSm2Encrypt: (state) => state.pubConfig.enableSm2Encrypt,  // 添加SM2开关
     }),
     // 获取当前语言
     currentLanguage() {
@@ -281,31 +282,52 @@ export default {
       if (!this.validateInput(this.form.password, 'login.requiredPassword')) {
         return;
       }
-      // 验证验证码
-      if (!this.validateInput(this.form.captcha, 'login.requiredCaptcha')) {
-        return;
-      }
-      // 加密密码
-      let encryptedPassword;
-      try {
-        // 拼接验证码和密码
-        const captchaAndPassword = this.form.captcha + this.form.password;
-        encryptedPassword = sm2Encrypt(this.sm2PublicKey, captchaAndPassword);
-      } catch (error) {
-        console.error("密码加密失败:", error);
-        showDanger(this.$t('sm2.encryptionFailed'));
-        return;
-      }
-
+      
+      // 准备登录数据
       const plainUsername = this.form.username;
-
       this.form.captchaId = this.captchaUuid;
+      let passwordToSend;
+      
+      // 调试输出
+      console.log("=== 登录调试信息 ===");
+      console.log("enableSm2Encrypt:", this.enableSm2Encrypt);
+      console.log("sm2PublicKey:", this.sm2PublicKey ? "有值" : "空");
+      
+      // 根据enableSm2Encrypt决定是否加密
+      if (this.enableSm2Encrypt === true) {
+        // SM2加密模式
+        // 验证验证码
+        if (!this.validateInput(this.form.captcha, 'login.requiredCaptcha')) {
+          return;
+        }
+        try {
+          // 拼接验证码和密码
+          const captchaAndPassword = this.form.captcha + this.form.password;
+          passwordToSend = sm2Encrypt(this.sm2PublicKey, captchaAndPassword);
+        } catch (error) {
+          console.error("密码加密失败:", error);
+          showDanger(this.$t('sm2.encryptionFailed'));
+          return;
+        }
+      } else {
+        // 明文模式（开发环境）
+        console.log("✅ 开发模式：跳过SM2加密");
+        console.log("直接使用明文密码");
+        passwordToSend = this.form.password;
+      }
+      
+      console.log("最终发送的数据:", {
+        username: plainUsername,
+        password: "***" + passwordToSend.substring(passwordToSend.length - 3),
+        hasCaptcha: !!this.form.captcha
+      });
 
-      // 加密
+      // 准备登录数据
       const loginData = {
         username: plainUsername,
-        password: encryptedPassword,
-        captchaId: this.form.captchaId
+        password: passwordToSend,
+        captchaId: this.form.captchaId,
+        captcha: this.enableSm2Encrypt ? undefined : this.form.captcha  // 明文模式时传递验证码
       };
 
       Api.user.login(

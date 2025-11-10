@@ -97,6 +97,11 @@ public interface Constant {
     String SM2_PRIVATE_KEY = "server.private_key";
 
     /**
+     * 是否启用SM2加密（开发环境可禁用，生产环境建议启用）
+     */
+    String SERVER_ENABLE_SM2_ENCRYPT = "server.enable_sm2_encrypt";
+
+    /**
      * websocket地址
      */
     String SERVER_WEBSOCKET = "server.websocket";

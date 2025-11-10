@@ -24,8 +24,10 @@ public class LoginDTO implements Serializable {
     @Schema(description = "手机验证码")
     private String mobileCaptcha;
 
-    @Schema(description = "唯一标识")
-    @NotBlank(message = "{sysuser.uuid.require}")
+    @Schema(description = "唯一标识（验证码可选）")
     private String captchaId;
+
+    @Schema(description = "图形验证码（可选）")
+    private String captcha;
 
 }
