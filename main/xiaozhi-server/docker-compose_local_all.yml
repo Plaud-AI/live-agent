@@ -38,6 +38,10 @@ services:
       - ./data:/opt/xiaozhi-esp32-server/data
       # Custom config (optional override, uncomment if you need to customize)
       - ./custom_config.yaml:/opt/xiaozhi-esp32-server/custom_config.yaml
+      # ⭐ Core code directory (for development)
+      - ./core:/opt/xiaozhi-esp32-server/core
+      # ⭐ Config code directory (for development)
+      - ./config:/opt/xiaozhi-esp32-server/config
       # Model files (important!)
       - ./models/SenseVoiceSmall:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall
       - ./models/snakers4_silero-vad:/opt/xiaozhi-esp32-server/models/snakers4_silero-vad

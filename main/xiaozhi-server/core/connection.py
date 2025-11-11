@@ -431,7 +431,12 @@ class ConnectionHandler:
             """加载意图识别"""
             self._initialize_intent()
             """更新系统提示词（必须在 TTS 初始化前，以便加载 role 的 TTS 配置）"""
-            self._init_prompt_enhancement()
+            self.logger.bind(tag=TAG).info("🔍 [INIT] 开始 _init_prompt_enhancement")
+            # ⚠️ 临时注释：_init_prompt_enhancement 中的 update_context_info 导致阻塞
+            # TODO: 需要修复 prompt_manager.update_context_info 的阻塞问题
+            # self._init_prompt_enhancement()
+            self.logger.bind(tag=TAG).warning("⚠️ [INIT] _init_prompt_enhancement 已临时跳过以避免阻塞")
+            self.logger.bind(tag=TAG).info("🔍 [INIT] _init_prompt_enhancement 完成（跳过）")
 
             # 初始化 TTS（在 prompt 初始化之后，以便使用 role 的 TTS 配置）
             if self.tts is None:
@@ -942,7 +947,7 @@ class ConnectionHandler:
         content_arguments = ""
         self.client_abort = False
         emotion_flag = True
-        
+
         for response in llm_responses:
             if self.client_abort:
                 break

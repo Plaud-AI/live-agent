@@ -20,7 +20,7 @@ class ServeReferenceAudio(BaseModel):
     def decode_audio(cls, values):
         audio = values.get("audio")
         if (
-            isinstance(audio, str) and len(audio) > 255
+                isinstance(audio, str) and len(audio) > 255
         ):  # Check if audio is a string (Base64)
             try:
                 values["audio"] = base64.b64decode(audio)
@@ -86,10 +86,10 @@ class TTSProvider(TTSProviderBase):
             None if not config.get("reference_id") else config.get("reference_id")
         )
         self.reference_audio = parse_string_to_list(
-             config.get('ref_audio')if config.get('ref_audio') else config.get("reference_audio")
+            config.get('ref_audio') if config.get('ref_audio') else config.get("reference_audio")
         )
         self.reference_text = parse_string_to_list(
-             config.get('ref_text')if config.get('ref_text') else config.get("reference_text")
+            config.get('ref_text') if config.get('ref_text') else config.get("reference_text")
         )
         self.format = config.get("response_format", "pcm")
         self.sample_rate = config.get("sample_rate", 16000)
@@ -98,7 +98,7 @@ class TTSProvider(TTSProviderBase):
         if self.api_key is None:
             raise ValueError("FishSpeech API key is required")
         self.session = Session(self.api_key)
-        
+
         self.normalize = str(config.get("normalize", True)).lower() in (
             "true",
             "1",
@@ -142,7 +142,8 @@ class TTSProvider(TTSProviderBase):
 
         request = TTSRequest(
             text=text,
-            references=[ReferenceAudio(audio=audio if audio else b"", text=ref_text) for ref_text, audio in zip(ref_texts, byte_audios)],
+            references=[ReferenceAudio(audio=audio if audio else b"", text=ref_text) for ref_text, audio in
+                        zip(ref_texts, byte_audios)],
             reference_id=self.reference_id,
             sample_rate=self.sample_rate,
             format=self.format,

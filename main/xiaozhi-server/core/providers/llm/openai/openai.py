@@ -14,7 +14,7 @@ class LLMProvider(LLMProviderBase):
         self.model_name = config.get("model_name")
         self.api_key = config.get("api_key")
         if "base_url" in config:
-        self.base_url = config.get("base_url")
+            self.base_url = config.get("base_url")
         else:
             self.base_url = config.get("url")
         # 增加timeout的配置项，单位为秒
@@ -98,6 +98,7 @@ class LLMProvider(LLMProviderBase):
                 model=self.model_name, messages=dialogue, stream=True, tools=functions
             )
 
+            usage_info = None  # 初始化，避免 UnboundLocalError
             for chunk in stream:
                 # 检查是否存在有效的choice且content不为空
                 if getattr(chunk, "choices", None):
