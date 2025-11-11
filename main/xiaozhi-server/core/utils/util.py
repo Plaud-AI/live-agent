@@ -12,7 +12,8 @@ from io import BytesIO
 from core.utils import p3
 from pydub import AudioSegment
 from typing import Callable, Any
-
+from config.logger import setup_logging
+logger = setup_logging()
 TAG = __name__
 emoji_map = {
     "neutral": "😶",
@@ -315,19 +316,22 @@ def audio_to_data(audio_file_path: str, is_opus: bool = True) -> list[bytes]:
 
 def audio_bytes_to_data_stream(audio_bytes, file_type, is_opus, callback: Callable[[Any], Any]) -> None:
     """
-    直接用音频二进制数据转为opus/pcm数据，支持wav、mp3、p3
+    transfer audio bytes to opus/pcm data, support wav、mp3、p3、pcm
     """
+    logger.bind(tag=TAG).info(f"audio_bytes_to_data_stream: {file_type}")
     if file_type == "p3":
         # 直接用p3解码
         return p3.decode_opus_from_bytes_stream(audio_bytes, callback)
+    elif file_type == "pcm":
+        return pcm_to_data_stream(audio_bytes, is_opus, callback)
     else:
-        # 其他格式用pydub
+        # other formats use pydub
         audio = AudioSegment.from_file(
             BytesIO(audio_bytes), format=file_type, parameters=["-nostdin"]
         )
-        audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
-        raw_data = audio.raw_data
-        pcm_to_data_stream(raw_data, is_opus, callback)
+    audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+    raw_data = audio.raw_data
+    pcm_to_data_stream(raw_data, is_opus, callback)
 
 
 def pcm_to_data_stream(raw_data, is_opus=True, callback: Callable[[Any], Any] = None):
