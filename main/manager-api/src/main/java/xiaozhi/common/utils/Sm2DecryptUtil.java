@@ -89,14 +89,31 @@ public class Sm2DecryptUtil {
             actualCaptcha = captcha;
         }
         
-        // 验证验证码是否正确（如果提供了验证码）
-        if (captchaId != null && !captchaId.isEmpty() && actualCaptcha != null && !actualCaptcha.isEmpty()) {
+        // 检查是否禁用验证码验证
+        Boolean disableCaptcha = sysParamsService.getValueObject(
+            Constant.SERVER_DISABLE_CAPTCHA, 
+            Boolean.class
+        );
+        
+        log.info("🔍 验证码验证检查:");
+        log.info("  - server.disable_captcha: {}", disableCaptcha);
+        log.info("  - captchaId: {}", captchaId);
+        log.info("  - actualCaptcha: {}", actualCaptcha);
+        
+        // 如果禁用验证码或未提供验证码，则跳过验证
+        if (disableCaptcha != null && disableCaptcha) {
+            log.info("  ✅ 验证码验证已禁用，跳过验证");
+        } else if (captchaId != null && !captchaId.isEmpty() && actualCaptcha != null && !actualCaptcha.isEmpty()) {
+            log.info("  🔍 开始验证验证码...");
             boolean captchaValid = captchaService.validate(captchaId, actualCaptcha, true);
             if (!captchaValid) {
+                log.error("  ❌ 验证码验证失败");
                 throw new RenException(ErrorCode.SMS_CAPTCHA_ERROR);
             }
+            log.info("  ✅ 验证码验证成功");
+        } else {
+            log.info("  ⚠️ 未提供验证码，跳过验证（开发模式）");
         }
-        // 否则跳过验证码验证（开发环境）
         
         return actualPassword;
     }

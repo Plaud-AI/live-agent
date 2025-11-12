@@ -100,6 +100,11 @@ public interface Constant {
      * 是否启用SM2加密（开发环境可禁用，生产环境建议启用）
      */
     String SERVER_ENABLE_SM2_ENCRYPT = "server.enable_sm2_encrypt";
+    
+    /**
+     * 是否禁用验证码验证
+     */
+    String SERVER_DISABLE_CAPTCHA = "server.disable_captcha";
 
     /**
      * websocket地址
