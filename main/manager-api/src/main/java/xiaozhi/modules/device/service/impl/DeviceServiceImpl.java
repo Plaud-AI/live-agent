@@ -157,8 +157,11 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
             response.setFirmware(firmware);
         } else {
             // 只有在设备已绑定且autoUpdate不为0的情况下才返回固件升级信息
-            if (deviceById.getAutoUpdate() != 0) {
-                String type = deviceReport.getBoard() == null ? null : deviceReport.getBoard().getType();
+            // ⚠️ 对虚拟设备（Flutter_App）跳过 OTA 检查
+            String type = deviceReport.getBoard() == null ? null : deviceReport.getBoard().getType();
+            boolean isVirtualDevice = "Flutter_App".equals(type);
+            
+            if (deviceById.getAutoUpdate() != 0 && !isVirtualDevice) {
                 DeviceReportRespDTO.Firmware firmware = buildFirmwareInfo(type,
                         deviceReport.getApplication() == null ? null : deviceReport.getApplication().getVersion());
                 response.setFirmware(firmware);
