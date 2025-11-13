@@ -27,6 +27,7 @@ import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.redis.RedisKeys;
 import xiaozhi.common.redis.RedisUtils;
 import xiaozhi.common.user.UserDetail;
+import xiaozhi.common.utils.AuthTokenUtil;
 import xiaozhi.common.utils.Result;
 import xiaozhi.modules.device.dto.DeviceManualAddDTO;
 import xiaozhi.modules.device.dto.DeviceRegisterDTO;
@@ -207,5 +208,49 @@ public class DeviceController {
         UserDetail user = SecurityUser.getUser();
         deviceService.manualAddDevice(user.getId(), dto);
         return new Result<>();
+    }
+
+    @PostMapping("/generate-vision-token")
+    @Operation(summary = "生成视觉服务 JWT Token")
+    @RequiresPermissions("sys:role:normal")
+    public Result<String> generateVisionToken(@RequestBody java.util.Map<String, String> request) {
+        String deviceId = request.get("deviceId");
+        
+        if (StringUtils.isBlank(deviceId)) {
+            return new Result<String>().error(ErrorCode.NOT_NULL, "设备ID不能为空");
+        }
+        
+        // 验证设备归属
+        UserDetail user = SecurityUser.getUser();
+        DeviceEntity device = deviceService.getDeviceByMacAddress(deviceId);
+        
+        if (device == null) {
+            return new Result<String>().error("设备不存在");
+        }
+        
+        if (!device.getUserId().equals(user.getId())) {
+            return new Result<String>().error("您没有该设备的权限");
+        }
+        
+        try {
+            // 获取 auth_key（优先级：server.auth_key > server.secret）
+            String authKey = sysParamsService.getValue("server.auth_key", false);
+            if (StringUtils.isBlank(authKey)) {
+                authKey = sysParamsService.getValue("server.secret", true);
+            }
+            
+            if (StringUtils.isBlank(authKey)) {
+                return new Result<String>().error("服务器配置错误：缺少 auth_key");
+            }
+            
+            // 生成 device JWT token
+            AuthTokenUtil authTokenUtil = new AuthTokenUtil(authKey);
+            String jwtToken = authTokenUtil.generateToken(deviceId);
+            
+            return new Result<String>().ok(jwtToken);
+            
+        } catch (Exception e) {
+            return new Result<String>().error("生成 token 失败: " + e.getMessage());
+        }
     }
 }
