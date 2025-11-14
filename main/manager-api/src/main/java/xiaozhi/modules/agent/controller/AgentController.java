@@ -1,12 +1,15 @@
 package xiaozhi.modules.agent.controller;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
@@ -28,10 +32,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import xiaozhi.common.constant.Constant;
+import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.page.PageData;
 import xiaozhi.common.redis.RedisKeys;
 import xiaozhi.common.redis.RedisUtils;
 import xiaozhi.common.user.UserDetail;
+import xiaozhi.common.utils.AuthTokenUtil;
 import xiaozhi.common.utils.Result;
 import xiaozhi.common.utils.ResultUtils;
 import xiaozhi.modules.agent.dto.AgentChatHistoryDTO;
@@ -52,6 +58,7 @@ import xiaozhi.modules.agent.vo.AgentInfoVO;
 import xiaozhi.modules.device.entity.DeviceEntity;
 import xiaozhi.modules.device.service.DeviceService;
 import xiaozhi.modules.security.user.SecurityUser;
+import xiaozhi.modules.sys.service.SysParamsService;
 
 @Tag(name = "智能体管理")
 @AllArgsConstructor
@@ -65,6 +72,7 @@ public class AgentController {
     private final AgentChatAudioService agentChatAudioService;
     private final AgentPluginMappingService agentPluginMappingService;
     private final RedisUtils redisUtils;
+    private final SysParamsService sysParamsService;
 
     @GetMapping("/list")
     @Operation(summary = "获取用户智能体列表")
@@ -241,6 +249,123 @@ public class AgentController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"play.wav\"")
                 .body(audioData);
+    }
+
+    @PostMapping("/{agentId}/memory")
+    @Operation(summary = "查询智能体记忆")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Map<String, Object>> getAgentMemory(
+            @PathVariable("agentId") String agentId,
+            @RequestBody(required = false) Map<String, Object> requestBody) {
+        
+        // 1. 获取当前用户
+        UserDetail user = SecurityUser.getUser();
+        
+        // 2. 验证 Agent 权限
+        if (!agentService.checkAgentPermission(agentId, user.getId())) {
+            return new Result<Map<String, Object>>().error("没有权限查看该智能体的记忆");
+        }
+        
+        // 3. 获取 Agent 信息
+        AgentInfoVO agent = agentService.getAgentById(agentId);
+        if (agent == null) {
+            return new Result<Map<String, Object>>().error("智能体不存在");
+        }
+        
+        // 4. 获取记忆模型类型
+        String memModelId = agent.getMemModelId();
+        
+        // 5. 根据记忆类型处理
+        if ("Memory_mem_local_short".equals(memModelId)) {
+            // 本地记忆：直接从数据库返回
+            Map<String, Object> result = new HashMap<>();
+            result.put("memory_type", memModelId);
+            result.put("summary_memory", agent.getSummaryMemory());
+            return new Result<Map<String, Object>>().ok(result);
+            
+        } else if ("Memory_mem0ai".equals(memModelId)) {
+            // mem0ai 云端记忆：调用 Python 服务查询
+            try {
+                // 5.1 获取设备ID（使用 Agent 绑定的第一个设备）
+                List<DeviceEntity> devices = deviceService.getUserDevices(user.getId(), agentId);
+                if (devices.isEmpty()) {
+                    return new Result<Map<String, Object>>().error("该智能体尚未绑定设备");
+                }
+                String deviceId = devices.get(0).getMacAddress();
+                
+                // 5.2 生成 JWT token（用于调用 Python API）
+                String authKey = sysParamsService.getValue("server.auth_key", false);
+                if (StringUtils.isBlank(authKey)) {
+                    authKey = sysParamsService.getValue("server.secret", true);
+                }
+                if (StringUtils.isBlank(authKey)) {
+                    return new Result<Map<String, Object>>().error("服务器配置错误：缺少 auth_key");
+                }
+                
+                AuthTokenUtil authTokenUtil = new AuthTokenUtil(authKey);
+                String jwtToken = authTokenUtil.generateToken(deviceId);
+                
+                // 5.3 调用 Python Memory API
+                String pythonServiceUrl = sysParamsService.getValue("server.python_url", false);
+                if (StringUtils.isBlank(pythonServiceUrl)) {
+                    // 默认使用容器内网络
+                    pythonServiceUrl = "http://xiaozhi-esp32-server:8003";
+                }
+                
+                String memoryApiUrl = pythonServiceUrl + "/api/memory";
+                
+                // 构建请求头
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.set("Authorization", "Bearer " + jwtToken);
+                headers.set("Device-Id", deviceId);
+                headers.set("Client-Id", user.getId().toString());
+                
+                // 构建请求体
+                Map<String, Object> requestPayload = new HashMap<>();
+                if (requestBody != null) {
+                    requestPayload.put("query", requestBody.getOrDefault("query", "user information, preferences, background"));
+                    requestPayload.put("limit", requestBody.getOrDefault("limit", 10));
+                } else {
+                    requestPayload.put("query", "user information, preferences, background");
+                    requestPayload.put("limit", 10);
+                }
+                
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestPayload, headers);
+                
+                // 发送请求
+                RestTemplate restTemplate = new RestTemplate();
+                ResponseEntity<Map> response = restTemplate.exchange(
+                    memoryApiUrl,
+                    HttpMethod.POST,
+                    entity,
+                    Map.class
+                );
+                
+                // 返回结果
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    Map<String, Object> responseBody = response.getBody();
+                    if (Boolean.TRUE.equals(responseBody.get("success"))) {
+                        return new Result<Map<String, Object>>().ok((Map<String, Object>) responseBody.get("data"));
+                    } else {
+                        String errorMsg = responseBody.getOrDefault("error", "未知错误").toString();
+                        return new Result<Map<String, Object>>().error("查询记忆失败: " + errorMsg);
+                    }
+                } else {
+                    return new Result<Map<String, Object>>().error("调用 Python 服务失败");
+                }
+                
+            } catch (Exception e) {
+                return new Result<Map<String, Object>>().error("查询记忆异常: " + e.getMessage());
+            }
+            
+        } else {
+            // 无记忆或其他类型
+            Map<String, Object> result = new HashMap<>();
+            result.put("memory_type", memModelId);
+            result.put("message", "该智能体未配置记忆模块");
+            return new Result<Map<String, Object>>().ok(result);
+        }
     }
 
 }
