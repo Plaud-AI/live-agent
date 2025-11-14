@@ -43,7 +43,7 @@ class MemoryProvider(MemoryProviderBase):
                 if message.role != "system"
             ]
             result = self.client.add(
-                messages, user_id=self.role_id, output_format=self.api_version
+                messages, user_id=self.role_id
             )
             logger.bind(tag=TAG).debug(f"Save memory result: {result}")
         except Exception as e:
@@ -54,8 +54,12 @@ class MemoryProvider(MemoryProviderBase):
         if not self.use_mem0:
             return ""
         try:
+            # Mem0ai SDK 现在默认使用 v2 API，需要 filters 参数
+            # output_format 参数已废弃，SDK 自动使用 v1.1 格式
             results = self.client.search(
-                query, user_id=self.role_id, output_format=self.api_version
+                query=query,
+                user_id=self.role_id,
+                filters={"user_id": self.role_id}  # v2 API 必需参数
             )
             if not results or "results" not in results:
                 return ""
@@ -98,10 +102,12 @@ class MemoryProvider(MemoryProviderBase):
         
         try:
             # 使用通用查询获取所有记忆
+            # Mem0ai SDK 现在默认使用 v2 API，需要 filters 参数
+            # output_format 参数已废弃，SDK 自动使用 v1.1 格式
             results = self.client.search(
-                "user information, preferences, background, personal details",
+                query="user information, preferences, background, personal details",
                 user_id=self.role_id,
-                output_format=self.api_version,
+                filters={"user_id": self.role_id},  # v2 API 必需参数
                 limit=10  # 限制返回数量
             )
             

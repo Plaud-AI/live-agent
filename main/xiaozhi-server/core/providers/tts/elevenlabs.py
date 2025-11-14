@@ -75,14 +75,20 @@ class TTSProvider(TTSProviderBase):
         # 音频输出格式
         self.output_format = config.get("output_format", "pcm_16000")
         
-        # Voice Settings
-        self.stability = config.get("stability", 0.5)
-        self.similarity_boost = config.get("similarity_boost", 0.75)
-        self.style = config.get("style", 0.0)
-        self.use_speaker_boost = config.get("use_speaker_boost", True)
+        # Voice Settings（确保类型正确）
+        self.stability = float(config.get("stability", 0.5))
+        self.similarity_boost = float(config.get("similarity_boost", 0.75))
+        self.style = float(config.get("style", 0.0))
+        
+        # use_speaker_boost 需要特殊处理（可能是字符串 "true"/"false"）
+        use_speaker_boost_raw = config.get("use_speaker_boost", True)
+        if isinstance(use_speaker_boost_raw, str):
+            self.use_speaker_boost = use_speaker_boost_raw.lower() in ("true", "1", "yes")
+        else:
+            self.use_speaker_boost = bool(use_speaker_boost_raw)
         
         # 流式延迟优化 (0-4，越大延迟越低但质量可能下降，推荐 2-3)
-        self.optimize_streaming_latency = config.get("optimize_streaming_latency", 3)
+        self.optimize_streaming_latency = int(config.get("optimize_streaming_latency", 3))
         
         # 初始化 SDK 客户端
         self.client = ElevenLabs(api_key=self.api_key)
@@ -120,7 +126,8 @@ class TTSProvider(TTSProviderBase):
                 text=text,
                 model_id=self.model,
                 output_format=self.output_format,
-                voice_settings=self.voice_settings
+                voice_settings=self.voice_settings,
+                optimize_streaming_latency=self.optimize_streaming_latency
             )
             
             # 检查返回类型

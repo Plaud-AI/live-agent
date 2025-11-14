@@ -114,7 +114,7 @@ class MemoryHandler:
                 limit = 10
 
             # 5. 获取 Agent 配置
-            from config.manage_api_client import get_private_config_from_api
+            from config.config_loader import get_private_config_from_api
 
             try:
                 private_config = get_private_config_from_api(
@@ -125,15 +125,19 @@ class MemoryHandler:
                 raise ValueError(f"无法获取设备配置: {str(e)}")
 
             # 6. 初始化记忆提供者
-            memory_config = private_config.get("memory", {})
-            memory_type = memory_config.get("type", "nomem")
+            # 获取选中的记忆模型（从 selected_module）
+            selected_memory_type = private_config.get("selected_module", {}).get("Memory", "nomem")
+            
+            # 获取具体的记忆配置
+            memory_configs = private_config.get("Memory", {})
+            memory_config = memory_configs.get(selected_memory_type, {})
 
             logger.bind(tag=TAG).info(
-                f"查询记忆 - Device: {device_id}, Memory Type: {memory_type}"
+                f"查询记忆 - Device: {device_id}, Memory Type: {selected_memory_type}, Config: {memory_config.get('type', 'unknown')}"
             )
 
             # 7. 根据记忆类型查询
-            if memory_type == "Memory_mem0ai":
+            if selected_memory_type == "Memory_mem0ai":
                 # mem0ai 云端记忆
                 from core.providers.memory.mem0ai.mem0ai import MemoryProvider
 
@@ -162,23 +166,23 @@ class MemoryHandler:
                                 memories.append({"timestamp": "", "memory": line[2:]})
 
                 result = {
-                    "memory_type": memory_type,
+                    "memory_type": selected_memory_type,
                     "memories": memories[:limit],
                     "user_persona": user_persona,
                 }
 
-            elif memory_type == "Memory_mem_local_short":
+            elif selected_memory_type == "Memory_mem_local_short":
                 # 本地短期记忆
                 # 注意：本地记忆存储在数据库，应该通过 Java API 获取
                 result = {
-                    "memory_type": memory_type,
+                    "memory_type": selected_memory_type,
                     "message": "本地记忆存储在数据库中，请使用 GET /agent/{id} 接口获取 summaryMemory 字段",
                 }
 
             else:
                 # 无记忆或其他类型
                 result = {
-                    "memory_type": memory_type,
+                    "memory_type": selected_memory_type,
                     "memories": [],
                     "user_persona": None,
                 }
@@ -186,7 +190,8 @@ class MemoryHandler:
             # 8. 返回响应
             response = web.Response(
                 text=json.dumps(self._create_success_response(result), ensure_ascii=False),
-                content_type="application/json; charset=utf-8",
+                content_type="application/json",
+                charset="utf-8"
             )
             return response
 

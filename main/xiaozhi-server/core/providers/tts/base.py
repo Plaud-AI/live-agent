@@ -103,8 +103,9 @@ class TTSProviderBase(ABC):
                         max_repeat_time -= 1
                 except Exception as e:
                     logger.bind(tag=TAG).warning(
-                        f"语音生成失败{5 - max_repeat_time + 1}次: {text}，错误: {e}"
+                        f"语音生成失败{5 - max_repeat_time + 1}次: {text}，错误: {repr(e)}"
                     )
+                    logger.bind(tag=TAG).debug(f"详细错误堆栈:\n{traceback.format_exc()}")
                     max_repeat_time -= 1
             if max_repeat_time > 0:
                 logger.bind(tag=TAG).info(
