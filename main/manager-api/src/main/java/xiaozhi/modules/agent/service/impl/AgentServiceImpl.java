@@ -350,6 +350,14 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
             return true;
         }
         ModelConfigEntity llmModelData = modelConfigService.selectById(llmModelId);
+        
+        // 🔧 修复空指针异常：检查模型是否存在
+        if (llmModelData == null || llmModelData.getConfigJson() == null) {
+            // 如果模型不存在，返回 true（允许更新，避免阻塞）
+            // 或者可以抛出异常提示用户：throw new RenException("LLM 模型不存在");
+            return true;
+        }
+        
         String type = llmModelData.getConfigJson().get("type").toString();
         // 如果查询大语言模型是openai或者ollama，意图识别选参数都可以
         if ("openai".equals(type) || "ollama".equals(type)) {
