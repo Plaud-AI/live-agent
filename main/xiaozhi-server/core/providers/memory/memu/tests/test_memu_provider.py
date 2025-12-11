@@ -13,12 +13,6 @@ import unittest
 
 # ==================== 核心逻辑函数（从 memu.py 提取用于测试） ====================
 
-CATEGORY_TITLES = {
-    "profiles": "用户画像",
-    "events": "近期事件",
-    "activities": "近期活动",
-    "preferences": "用户偏好",
-}
 
 
 def parse_memory_items(data: dict) -> list:
@@ -35,14 +29,8 @@ def parse_memory_items(data: dict) -> list:
 
 
 def group_memories_by_category(memory_items: list) -> dict:
-    """按 category 分组记忆"""
-    grouped = {
-        "profiles": [],
-        "events": [],
-        "activities": [],
-        "preferences": [],
-        "other": []
-    }
+    """按 category 动态分组记忆"""
+    grouped = {}
     
     for entry in memory_items:
         entry_dict = entry if isinstance(entry, dict) else {}
@@ -52,17 +40,16 @@ def group_memories_by_category(memory_items: list) -> dict:
         if not isinstance(memory_obj, dict):
             memory_obj = entry_dict
         
-        category = memory_obj.get("category", "other")
+        category = memory_obj.get("category", "other") or "other"
         content = memory_obj.get("content", "") or memory_obj.get("memory", "")
         timestamp = memory_obj.get("happened_at") or memory_obj.get("created_at", "")
         
         if not content:
             continue
         
-        if category in grouped:
-            grouped[category].append((timestamp, content))
-        else:
-            grouped["other"].append((timestamp, content))
+        if category not in grouped:
+            grouped[category] = []
+        grouped[category].append((timestamp, content))
     
     return grouped
 
@@ -70,18 +57,19 @@ def group_memories_by_category(memory_items: list) -> dict:
 def format_grouped_output(grouped: dict) -> str:
     """格式化分组输出"""
     output = []
-    for category, title in CATEGORY_TITLES.items():
-        items = grouped.get(category, [])
+    for category, items in grouped.items():
         if not items:
             continue
         
-        output.append(f"## {title}")
+        # 直接使用 category 作为标题
+        output.append(f"## {category}")
         
         # 按时间倒序排列
         items.sort(key=lambda x: x[0] or "", reverse=True)
         
         for ts, content in items[:5]:
-            if category in ("events", "activities") and ts:
+            if ts:
+                # 有时间戳就显示
                 try:
                     dt = ts.split(".")[0]
                     formatted_time = dt.replace("T", " ").split(" ")[0]
@@ -90,14 +78,6 @@ def format_grouped_output(grouped: dict) -> str:
                 output.append(f"- [{formatted_time}] {content}")
             else:
                 output.append(f"- {content}")
-    
-    # 处理 other 分类
-    other_items = grouped.get("other", [])
-    if other_items:
-        output.append("## 其他")
-        other_items.sort(key=lambda x: x[0] or "", reverse=True)
-        for ts, content in other_items[:5]:
-            output.append(f"- {content}")
 
     return "\n".join(output)
 
@@ -208,15 +188,15 @@ class TestGroupMemoriesByCategory(unittest.TestCase):
         self.assertEqual(len(result["events"]), 1)
         self.assertEqual(len(result["preferences"]), 1)
 
-    def test_unknown_category_goes_to_other(self):
-        """测试未知类型归入 other"""
+    def test_unknown_category_creates_own_group(self):
+        """测试未知类型创建自己的分组"""
         memory_items = [
             {"memory": {"category": "unknown_type", "content": "某内容"}}
         ]
         
         result = group_memories_by_category(memory_items)
         
-        self.assertEqual(len(result["other"]), 1)
+        self.assertEqual(len(result["unknown_type"]), 1)
 
     def test_empty_content_skipped(self):
         """测试空内容被跳过"""
@@ -226,27 +206,24 @@ class TestGroupMemoriesByCategory(unittest.TestCase):
         
         result = group_memories_by_category(memory_items)
         
-        self.assertEqual(len(result["profiles"]), 0)
+        # 空内容被跳过，profiles 键不会被创建
+        self.assertNotIn("profiles", result)
 
 
 class TestFormatGroupedOutput(unittest.TestCase):
     """测试 format_grouped_output 函数"""
 
-    def test_format_profiles_without_timestamp(self):
-        """测试 profiles 不带时间戳"""
+    def test_format_without_timestamp(self):
+        """测试没有时间戳时不显示日期"""
         grouped = {
-            "profiles": [("2024-01-01T00:00:00Z", "素食主义者")],
-            "events": [],
-            "activities": [],
-            "preferences": [],
-            "other": []
+            "profiles": [("", "素食主义者")],  # 空时间戳
         }
         
         result = format_grouped_output(grouped)
         
-        self.assertIn("## 用户画像", result)
+        self.assertIn("## profiles", result)
         self.assertIn("- 素食主义者", result)
-        self.assertNotIn("[2024-01-01]", result)
+        self.assertNotIn("[", result)  # 不应有时间戳括号
 
     def test_format_events_with_timestamp(self):
         """测试 events 带时间戳"""
@@ -260,7 +237,7 @@ class TestFormatGroupedOutput(unittest.TestCase):
         
         result = format_grouped_output(grouped)
         
-        self.assertIn("## 近期事件", result)
+        self.assertIn("## events", result)
         self.assertIn("[2024-12-10]", result)
         self.assertIn("看电影", result)
 
@@ -276,66 +253,50 @@ class TestFormatGroupedOutput(unittest.TestCase):
         
         result = format_grouped_output(grouped)
         
-        self.assertIn("## 近期活动", result)
+        self.assertIn("## activities", result)
         self.assertIn("[2024-12-10]", result)
         self.assertIn("打网球", result)
 
-    def test_format_preferences_without_timestamp(self):
-        """测试 preferences 不带时间戳"""
+    def test_format_with_timestamp(self):
+        """测试有时间戳时显示日期"""
         grouped = {
-            "profiles": [],
-            "events": [],
-            "activities": [],
             "preferences": [("2024-01-01T00:00:00Z", "喜欢安静")],
-            "other": []
         }
         
         result = format_grouped_output(grouped)
         
-        self.assertIn("## 用户偏好", result)
-        self.assertIn("- 喜欢安静", result)
-        self.assertNotIn("[2024-01-01]", result)
+        self.assertIn("## preferences", result)
+        self.assertIn("[2024-01-01]", result)
+        self.assertIn("喜欢安静", result)
 
     def test_format_empty_groups_skipped(self):
         """测试空分组被跳过"""
         grouped = {
             "profiles": [("", "有内容")],
-            "events": [],
-            "activities": [],
-            "preferences": [],
-            "other": []
+            "events": [],  # 空分组
         }
         
         result = format_grouped_output(grouped)
         
-        self.assertIn("## 用户画像", result)
-        self.assertNotIn("## 近期事件", result)
-        self.assertNotIn("## 近期活动", result)
+        self.assertIn("## profiles", result)
+        self.assertNotIn("## events", result)
 
     def test_format_max_5_items_per_category(self):
         """测试每类最多 5 条"""
         grouped = {
             "profiles": [(f"2024-01-0{i}T00:00:00Z", f"内容{i}") for i in range(1, 8)],
-            "events": [],
-            "activities": [],
-            "preferences": [],
-            "other": []
         }
         
         result = format_grouped_output(grouped)
         
-        # 应该只有 5 条
-        self.assertEqual(result.count("- 内容"), 5)
+        # 应该只有 5 条（有时间戳会显示为 - [日期] 内容）
+        self.assertEqual(result.count("内容"), 5)
+        self.assertIn("内容7", result)  # 按时间倒序，最新的在前
+        self.assertNotIn("内容1", result)  # 最早的被截断
 
     def test_format_all_empty_returns_empty_string(self):
         """测试全空返回空字符串"""
-        grouped = {
-            "profiles": [],
-            "events": [],
-            "activities": [],
-            "preferences": [],
-            "other": []
-        }
+        grouped = {}
         
         result = format_grouped_output(grouped)
         
@@ -423,16 +384,18 @@ class TestIntegration(unittest.TestCase):
         grouped = group_memories_by_category(memory_items)
         result = format_grouped_output(grouped)
         
-        # 验证输出
-        self.assertIn("## 用户画像", result)
-        self.assertIn("- 喜欢打网球", result)
+        # 验证输出（所有有时间戳的都会显示日期）
+        self.assertIn("## profiles", result)
+        self.assertIn("[2024-01-15]", result)
+        self.assertIn("喜欢打网球", result)
         
-        self.assertIn("## 近期活动", result)
+        self.assertIn("## activities", result)
         self.assertIn("[2024-12-10]", result)
         self.assertIn("周末打了网球", result)
         
-        self.assertIn("## 用户偏好", result)
-        self.assertIn("- 喜欢户外运动", result)
+        self.assertIn("## preferences", result)
+        self.assertIn("[2024-01-01]", result)
+        self.assertIn("喜欢户外运动", result)
 
     def test_empty_response_returns_empty(self):
         """测试空响应返回空字符串"""

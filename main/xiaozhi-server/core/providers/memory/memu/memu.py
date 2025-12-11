@@ -14,13 +14,6 @@ TAG = __name__
 DEFAULT_AGENT_ID = "xiaozhi_agent"
 DEFAULT_BASE_URL = "https://api.memu.so"
 
-# Category 到中文标题的映射
-CATEGORY_TITLES = {
-    "profiles": "用户画像",
-    "events": "近期事件",
-    "activities": "近期活动",
-    "preferences": "用户偏好",
-}
 
 
 def require_memu(func: Callable) -> Callable:
@@ -197,14 +190,8 @@ class MemoryProvider(MemoryProviderBase):
             if not memory_items:
                 return ""
 
-            # 按 category 分组
-            grouped = {
-                "profiles": [],
-                "events": [],
-                "activities": [],
-                "preferences": [],
-                "other": []
-            }
+            # 按 category 动态分组
+            grouped: Dict[str, List] = {}
             
             for entry in memory_items:
                 # 转换 entry 为字典
@@ -223,7 +210,7 @@ class MemoryProvider(MemoryProviderBase):
                     memory_obj = memory_obj.dict() if callable(memory_obj.dict) else memory_obj
                 
                 # 提取字段
-                category = memory_obj.get("category", "other")
+                category = memory_obj.get("category", "other") or "other"
                 content = memory_obj.get("content", "") or memory_obj.get("memory", "")
                 # 事件类使用 happened_at，其他用 created_at
                 timestamp = memory_obj.get("happened_at") or memory_obj.get("created_at", "")
@@ -231,28 +218,27 @@ class MemoryProvider(MemoryProviderBase):
                 if not content:
                     continue
                 
-                # 分组
-                if category in grouped:
-                    grouped[category].append((timestamp, content))
-                else:
-                    grouped["other"].append((timestamp, content))
+                # 动态分组
+                if category not in grouped:
+                    grouped[category] = []
+                grouped[category].append((timestamp, content))
 
             # 格式化分组输出
             output = []
-            for category, title in CATEGORY_TITLES.items():
-                items = grouped.get(category, [])
+            for category, items in grouped.items():
                 if not items:
                     continue
                 
-                output.append(f"## {title}")
+                # 直接使用 category 作为标题
+                output.append(f"## {category}")
                 
                 # 按时间倒序排列
                 items.sort(key=lambda x: x[0] or "", reverse=True)
                 
                 # 每类最多 5 条
                 for ts, content in items[:5]:
-                    if category in ("events", "activities") and ts:
-                        # 格式化时间戳
+                    if ts:
+                        # 有时间戳就显示
                         try:
                             dt = ts.split(".")[0]  # Remove milliseconds
                             formatted_time = dt.replace("T", " ").split(" ")[0]  # 只保留日期
@@ -261,14 +247,6 @@ class MemoryProvider(MemoryProviderBase):
                         output.append(f"- [{formatted_time}] {content}")
                     else:
                         output.append(f"- {content}")
-            
-            # 处理 other 分类（如果有）
-            other_items = grouped.get("other", [])
-            if other_items:
-                output.append("## 其他")
-                other_items.sort(key=lambda x: x[0] or "", reverse=True)
-                for ts, content in other_items[:5]:
-                    output.append(f"- {content}")
 
             if not output:
                 return ""
