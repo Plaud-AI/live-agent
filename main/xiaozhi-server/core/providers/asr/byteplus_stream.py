@@ -8,6 +8,7 @@ import opuslib_next
 from core.providers.asr.base import ASRProviderBase
 from config.logger import setup_logging
 from core.providers.asr.dto.dto import InterfaceType
+from core.utils import textUtils
 
 TAG = __name__
 logger = setup_logging()
@@ -35,6 +36,7 @@ class ASRProvider(ASRProviderBase):
         self._definite_texts: list[str] = []  # 已确认片段（用于 WS 提前关闭时兜底）
         self._definite_seen: set[str] = set()
         self._end_sent_at = None  # monotonic time when last-audio(end) sent; for tail-grace waiting
+        self._chat_started = False  # 标记 ASR 收尾流程是否已调用 startToChat，避免重复调用
 
         # 配置参数
         self.appid = str(config.get("appid"))
@@ -135,6 +137,7 @@ class ASRProvider(ASRProviderBase):
                         self._pending_stop = False
                         self._definite_texts = []
                         self._definite_seen = set()
+                        self._chat_started = False
                         # 建立新的WebSocket连接
                         headers = self.token_auth()
                         safe_headers = dict(headers)
@@ -280,6 +283,8 @@ class ASRProvider(ASRProviderBase):
 
         audio_data = getattr(conn, "asr_audio_for_voiceprint", [])
         if audio_data:
+            # 设置标记，表示 ASR 收尾流程已经调用了 startToChat
+            self._chat_started = True
             await self.handle_voice_stop(conn, audio_data)
         if hasattr(conn, "asr_audio_for_voiceprint"):
             conn.asr_audio_for_voiceprint = []
@@ -351,6 +356,19 @@ class ASRProvider(ASRProviderBase):
                                         self._definite_texts.append(utext)
                                         self.text = "".join(self._definite_texts)
                                         logger.bind(tag=TAG).info(f"识别到文本(utterance): {utext}")
+                                        
+                                        # 实时推送识别结果给客户端显示
+                                        try:
+                                            stt_text = textUtils.get_string_no_punctuation_or_emoji(self.text)
+                                            await conn.websocket.send(
+                                                json.dumps({
+                                                    "type": "stt", 
+                                                    "text": stt_text, 
+                                                    "session_id": conn.session_id
+                                                })
+                                            )
+                                        except Exception as e:
+                                            logger.bind(tag=TAG).debug(f"推送 STT 中间结果失败: {e}")
                             
                             # 只有在发送结束信号后才处理最终结果
                             if self._audio_ended:

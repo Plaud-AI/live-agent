@@ -81,51 +81,93 @@ class ListenTextMessageHandler(TextMessageHandler):
                 await handleAudioMessage(conn, b"")
         elif msg_json["state"] == "detect":
             conn.client_have_voice = False
-            conn.asr_audio.clear()
-            if "text" in msg_json:
-                conn.last_activity_time = time.time() * 1000
-                original_text = msg_json["text"]  # 保留原始文本
-                filtered_len, filtered_text = remove_punctuation_and_length(
-                    original_text
+            
+            # 检查是否有流式 ASR 正在进行或已有结果
+            has_streaming_asr = hasattr(conn, 'asr') and hasattr(conn.asr, 'is_processing')
+            asr_is_processing = has_streaming_asr and conn.asr.is_processing
+            server_asr_text = getattr(conn.asr, 'text', '') if has_streaming_asr else ''
+            
+            # 检查 ASR 收尾流程是否已经调用了 startToChat
+            # 如果已调用，直接返回避免重复
+            chat_already_started = has_streaming_asr and getattr(conn.asr, '_chat_started', False)
+            if chat_already_started:
+                conn.logger.bind(tag=TAG).info(
+                    f"ASR 收尾流程已触发对话，跳过 detect 处理"
                 )
+                # 重置标记
+                conn.asr._chat_started = False
+                conn.asr_audio.clear()
+                return
+            
+            # 如果流式 ASR 正在进行，触发收尾等待结果
+            if asr_is_processing:
+                conn.logger.bind(tag=TAG).info(
+                    f"流式 ASR 正在进行，触发收尾等待结果"
+                )
+                conn.client_have_voice = True
+                conn.client_voice_stop = True
+                # 触发 ASR 收尾（发送空音频包）
+                await handleAudioMessage(conn, b"")
+                # ASR 收尾后会自动调用 handle_voice_stop -> startToChat
+                return
+            
+            # 如果服务端有 ASR 结果，优先使用服务端结果
+            if server_asr_text:
+                conn.logger.bind(tag=TAG).info(
+                    f"使用服务端 ASR 结果: {server_asr_text}"
+                )
+                original_text = server_asr_text
+                # 清空服务端 ASR 结果，避免重复使用
+                conn.asr.text = ""
+            elif "text" in msg_json:
+                original_text = msg_json["text"]
+            else:
+                conn.asr_audio.clear()
+                return
+            
+            conn.asr_audio.clear()
+            conn.last_activity_time = time.time() * 1000
+            filtered_len, filtered_text = remove_punctuation_and_length(
+                original_text
+            )
 
-                # 识别是否是唤醒词
-                is_wakeup_words = filtered_text in conn.config.get("wakeup_words")
-                # 是否开启唤醒词回复
-                enable_greeting = conn.config.get("enable_greeting", True)
+            # 识别是否是唤醒词
+            is_wakeup_words = filtered_text in conn.config.get("wakeup_words")
+            # 是否开启唤醒词回复
+            enable_greeting = conn.config.get("enable_greeting", True)
 
-                if is_wakeup_words and not enable_greeting:
-                    # 如果是唤醒词，且关闭了唤醒词回复，就不用回答
-                    await send_stt_message(conn, original_text)
-                    await send_tts_message(conn, "stop", None)
-                    conn.client_is_speaking = False
-                elif is_wakeup_words:
-                    if (getattr(conn, "defer_agent_init", False) or not conn.agent_id) and getattr(conn, "read_config_from_live_agent_api", False):
-                        ready = await conn.ensure_agent_ready(filtered_text)
-                        if not ready:
-                            conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
-                            return
-                    conn.just_woken_up = True
-                    # Record timestamp for correct message ordering
-                    report_time = int(time.time())
-                    # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
-                    enqueue_asr_report(conn, "嘿，你好呀", [], report_time=report_time)
-                    await startToChat(conn, "嘿，你好呀")
+            if is_wakeup_words and not enable_greeting:
+                # 如果是唤醒词，且关闭了唤醒词回复，就不用回答
+                await send_stt_message(conn, original_text)
+                await send_tts_message(conn, "stop", None)
+                conn.client_is_speaking = False
+            elif is_wakeup_words:
+                if (getattr(conn, "defer_agent_init", False) or not conn.agent_id) and getattr(conn, "read_config_from_live_agent_api", False):
+                    ready = await conn.ensure_agent_ready(filtered_text)
+                    if not ready:
+                        conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
+                        return
+                conn.just_woken_up = True
+                # Record timestamp for correct message ordering
+                report_time = int(time.time())
+                # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
+                enqueue_asr_report(conn, "嘿，你好呀", [], report_time=report_time)
+                await startToChat(conn, "嘿，你好呀")
+            else:
+                # check if there are attachments(eg. images, files) in text mode
+                attachments = msg_json.get("attachments", [])
+                # Record timestamp for correct message ordering
+                report_time = int(time.time())
+                
+                if attachments:
+                    # build multimodal content
+                    multimodal_content = build_multimodal_content(original_text, attachments)
+                    # report text data with attachments
+                    enqueue_asr_report(conn, original_text, [], attachments, report_time=report_time)
+                    # use multimodal content to chat
+                    await startToChat(conn, original_text, multimodal_content)
                 else:
-                    # check if there are attachments(eg. images, files) in text mode
-                    attachments = msg_json.get("attachments", [])
-                    # Record timestamp for correct message ordering
-                    report_time = int(time.time())
-                    
-                    if attachments:
-                        # build multimodal content
-                        multimodal_content = build_multimodal_content(original_text, attachments)
-                        # report text data with attachments
-                        enqueue_asr_report(conn, original_text, [], attachments, report_time=report_time)
-                        # use multimodal content to chat
-                        await startToChat(conn, original_text, multimodal_content)
-                    else:
-                        # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
-                        enqueue_asr_report(conn, original_text, [], report_time=report_time)
-                        # 否则需要LLM对文字内容进行答复
-                        await startToChat(conn, original_text)
+                    # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
+                    enqueue_asr_report(conn, original_text, [], report_time=report_time)
+                    # 否则需要LLM对文字内容进行答复
+                    await startToChat(conn, original_text)
