@@ -466,6 +466,17 @@ ASR:
     dwa: wpgs # 动态修正，wpgs:实时返回中间结果
     # 调整音频处理参数以提高长语音识别质量
     output_dir: tmp/
+  BytePlusStreamASR:
+    # BytePlus 海外版大模型流式语音识别
+    # 文档地址：https://docs.byteplus.com/en/docs/byteplusvoice/asrstreaming
+    # 控制台：https://console.byteplus.com/speech/app
+    # 模式：流式输入 + 非流式输出（语音结束后返回完整结果）
+    type: byteplus_stream
+    appid: "4410924094"
+    access_token: "kX8xu770XyzlsZ9xoCI4rNa9x5w4D16x"
+    output_dir: tmp/
+    # 可选参数
+    language: ""  # 留空支持中英粤自动识别，可选：zh-CN, en-US, ja-JP 等
   
 VAD:
   SileroVAD:
@@ -1088,7 +1099,7 @@ TTS:
 # ===============================================================================
 selected_module:
   VAD: SileroVAD
-  ASR: GroqASR
+  ASR: BytePlusStreamASR
   # LLM: GroqLLM
   LLM: OpenRouterLLM
   VLLM: ChatGLMVLLM
