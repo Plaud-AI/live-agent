@@ -272,10 +272,6 @@ class TTSProvider(TTSProviderBase):
             try:
                 try:
                     tts_audio_message = self.tts_audio_queue.get_nowait()
-                    
-                    # 成功拉取到消息，重置 timer 和 flag
-                    last_message_time = time.time()
-                    timeout_last_sent = False
 
                     if isinstance(tts_audio_message, TTSAudioDTO):
                         sentence_type = tts_audio_message.sentence_type
@@ -292,6 +288,12 @@ class TTSProvider(TTSProviderBase):
                     else:
                         logger.bind(tag=TAG).warning(f"Unknown tts_audio_message type: {type(tts_audio_message)}")
                         continue
+                    
+                    # 成功拉取到消息，重置 timer 和 flag
+                    # 但如果是 MOCK LAST 消息，不重置（避免无限循环）
+                    if not (sentence_type == SentenceType.LAST and message_tag == MessageTag.MOCK):
+                        last_message_time = time.time()
+                        timeout_last_sent = False
                 except queue.Empty:
                     if self.conn.stop_event.is_set():
                         break
