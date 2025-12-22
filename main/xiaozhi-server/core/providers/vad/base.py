@@ -284,6 +284,8 @@ class VADStream(ABC):
             f"ASR MIDDLE message sent: prob={event.probability:.2f}, "
             f"speech={event.speech_duration:.2f}s"
         )
+
+        conn.last_activity_time = time.time() * 1000
         
         # Check if meeting interruption strategies
         conn._interrupt_by_audio(event.speech_duration)

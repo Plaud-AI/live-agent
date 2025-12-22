@@ -1,9 +1,8 @@
-import os
 import queue
 import asyncio
 import traceback
 import time
-from pathlib import Path
+import httpx
 from config.logger import setup_logging
 from core.utils.tts import MarkdownCleaner
 from core.providers.tts.base import TTSProviderBase
@@ -16,6 +15,12 @@ logger = setup_logging()
 
 
 class TTSProvider(TTSProviderBase):
+    
+    # Punctuation sets for text segmentation
+    # First segment: use aggressive punctuation for faster response
+    FIRST_SEGMENT_PUNCTS = (",", "，", "。", "！", "？", "!", "?", "；", ";", "：", ":")
+    # Normal segments: use sentence-ending punctuation
+    NORMAL_PUNCTS = ("。", "！", "？", "!", "?", "；", ";")
 
     def __init__(self, config, delete_audio_file):
         super().__init__(config, delete_audio_file)
@@ -23,54 +28,27 @@ class TTSProvider(TTSProviderBase):
         # Mark as streaming interface
         self.interface_type = InterfaceType.SINGLE_STREAM
 
+        # Fish Audio configuration
+        self.api_key = config.get("api_key")
+        if not self.api_key:
+            raise ValueError("FishSpeech API key is required")
+        
+        # Create httpx client with connection pool for reuse
+        self._httpx_client = httpx.Client(
+            base_url="https://api.fish.audio",  # Required for path-only requests
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            timeout=httpx.Timeout(60.0),
+            http2=True,  # Enable HTTP/2 for better multiplexing
+        )
+        self._client = FishAudio(api_key=self.api_key, httpx_client=self._httpx_client)
+        
         self.model = config.get("model", "speech-1.6")
         self.reference_id = config.get("reference_id")
-
         self.format = config.get("response_format", "pcm")
-        self.sample_rate = config.get("sample_rate", 16000)
-        self.audio_file_type = config.get("response_format", "pcm")
-        self.api_key = config.get("api_key", "YOUR_API_KEY")
-        if self.api_key is None:
-            raise ValueError("FishSpeech API key is required")
-        self._client = FishAudio(api_key=self.api_key)
-        
-        self.normalize = str(config.get("normalize", True)).lower() in (
-            "true",
-            "1",
-            "yes",
-        )
+        self.sample_rate = int(config.get("sample_rate", 16000))
+        self.normalize = str(config.get("normalize", True)).lower() in ("true", "1", "yes")
 
-        # Handle empty string cases
-        channels = config.get("channels", "1")
-        rate = config.get("rate", "44100")
-        max_new_tokens = config.get("max_new_tokens", "1024")
-        chunk_length = config.get("chunk_length", "200")
-
-        self.channels = int(channels) if channels else 1
-        self.rate = int(rate) if rate else 44100
-        self.max_new_tokens = int(max_new_tokens) if max_new_tokens else 1024
-        self.chunk_length = int(chunk_length) if chunk_length else 200
-
-        # Handle empty string cases
-        top_p = config.get("top_p", "0.7")
-        temperature = config.get("temperature", "0.7")
-        repetition_penalty = config.get("repetition_penalty", "1.2")
-
-        self.top_p = float(top_p) if top_p else 0.7
-        self.temperature = float(temperature) if temperature else 0.7
-        self.repetition_penalty = (
-            float(repetition_penalty) if repetition_penalty else 1.2
-        )
-
-        self.streaming = str(config.get("streaming", False)).lower() in (
-            "true",
-            "1",
-            "yes",
-        )
-        self.use_memory_cache = config.get("use_memory_cache", "on")
-        self.seed = int(config.get("seed")) if config.get("seed") else None
-
-        # Initialize Opus encoder (sample_rate should match FishSpeech output)
+        # Initialize Opus encoder
         self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
             sample_rate=self.sample_rate, channels=1, frame_size_ms=60
         )
@@ -78,10 +56,15 @@ class TTSProvider(TTSProviderBase):
         # PCM buffer for accumulating data before encoding
         self.pcm_buffer = bytearray()
         
-        # Track if we've sent FIRST for this session
+        # Session state
         self._session_started = False
-        # Track first chunk time for latency measurement
-        self._first_chunk_logged = False
+        
+        # Disable base class first sentence handling (STT already sends start)
+        self.tts_audio_first_sentence = False
+        
+        # Text buffer state
+        self._text_buffer = ""
+        self._processed_idx = 0
 
     def tts_text_priority_thread(self):
         """Streaming text processing thread with lifecycle alignment:
@@ -96,18 +79,12 @@ class TTSProvider(TTSProviderBase):
                 # Handle FIRST - session start
                 if message.sentence_type == SentenceType.FIRST:
                     self.conn.client_abort = False
-                    # Initialize session parameters
-                    self.tts_stop_request = False
-                    self.processed_chars = 0
-                    self.tts_text_buff = []
-                    self.is_first_sentence = True
-                    self.tts_audio_first_sentence = True
-                    self._first_chunk_logged = False
+                    self._text_buffer = ""
+                    self._processed_idx = 0
                     self._session_started = False
-                    self.before_stop_play_files.clear()
                     self.pcm_buffer.clear()
                     self.conn._latency_tts_first_text_time = None
-                    logger.bind(tag=TAG).debug("TTS session initialized, waiting for text")
+                    logger.bind(tag=TAG).debug("TTS session initialized")
                     continue
                 
                 # Check for abort
@@ -126,36 +103,39 @@ class TTSProvider(TTSProviderBase):
                 
                 # Handle TEXT content
                 if ContentType.TEXT == message.content_type:
-                    self.tts_text_buff.append(message.content_detail)
-                    segment_text = self._get_segment_text()
-                    if segment_text:
+                    self._text_buffer += message.content_detail
+                    
+                    # Try to extract and process segments
+                    while True:
+                        segment = self._extract_segment()
+                        if not segment:
+                            break
+                        
                         # Record TTS first text input time (for latency tracking)
                         if self.conn._latency_tts_first_text_time is None:
                             self.conn._latency_tts_first_text_time = time.time() * 1000
                             logger.bind(tag=TAG).debug("📝 [Latency] TTS received first text")
                         
-                        # Process text with streaming TTS
-                        self._stream_tts_segment(segment_text)
-                
-                # Handle FILE content
-                elif ContentType.FILE == message.content_type:
-                    logger.bind(tag=TAG).info(f"Adding audio file: {message.content_file}")
-                    if message.content_file and os.path.exists(message.content_file):
-                        self._process_audio_file_stream(
-                            message.content_file,
-                            callback=lambda audio_data: self.handle_audio_file(audio_data, message.content_detail)
-                        )
+                        self._stream_tts_segment(segment)
                 
                 # Handle LAST - session end
                 if message.sentence_type == SentenceType.LAST:
                     # Process remaining text
-                    self._process_remaining_text()
+                    remaining = self._text_buffer[self._processed_idx:]
+                    if remaining.strip():
+                        segment = textUtils.get_string_no_punctuation_or_emoji(remaining)
+                        if segment:
+                            self._stream_tts_segment(segment)
                     
-                    # Process any pending audio files and send LAST
-                    self._process_before_stop_play_files()
+                    # Send LAST to audio queue
+                    self.tts_audio_queue.put(TTSAudioDTO(
+                        sentence_type=SentenceType.LAST,
+                        audio_data=None,
+                        text=None,
+                        message_tag=self._message_tag,
+                    ))
                     
                     self._session_started = False
-                    self._first_chunk_logged = False
                     logger.bind(tag=TAG).debug("TTS session ended")
 
             except queue.Empty:
@@ -173,6 +153,7 @@ class TTSProvider(TTSProviderBase):
         
         logger.bind(tag=TAG).info(f"FishSpeech streaming: {text}")
         start_time = time.time() * 1000
+        first_chunk_logged = False  # Track first chunk for this segment
         
         # Calculate bytes per frame for Opus encoding
         frame_bytes = int(
@@ -214,13 +195,13 @@ class TTSProvider(TTSProviderBase):
                     logger.bind(tag=TAG).info("Abort during TTS streaming, stopping")
                     break
                 
-                # Log first chunk latency
-                if not self._first_chunk_logged:
-                    self._first_chunk_logged = True
+                # Log first chunk latency for each segment
+                if not first_chunk_logged:
+                    first_chunk_logged = True
                     first_chunk_time = time.time() * 1000
                     self.conn.tts_first_chunk_time = first_chunk_time
                     api_latency = (first_chunk_time - start_time) / 1000
-                    logger.bind(tag=TAG).info(f"[Latency] TTS API first chunk: {api_latency:.3f}s")
+                    logger.bind(tag=TAG).info(f"[Latency] TTS segment first chunk: {api_latency:.3f}s")
                 
                 # Add chunk to PCM buffer
                 self.pcm_buffer.extend(chunk)
@@ -268,6 +249,35 @@ class TTSProvider(TTSProviderBase):
             message_tag=self._message_tag,
         ))
 
+    def _extract_segment(self) -> str | None:
+        """Extract next text segment based on punctuation.
+        
+        Returns cleaned segment text or None if no complete segment found.
+        """
+        current_text = self._text_buffer[self._processed_idx:]
+        if not current_text:
+            return None
+        
+        # Choose punctuation set: aggressive for first segment, normal for rest
+        puncts = self.FIRST_SEGMENT_PUNCTS if not self._session_started else self.NORMAL_PUNCTS
+        
+        # Find earliest punctuation position
+        earliest_pos = -1
+        for punct in puncts:
+            pos = current_text.find(punct)
+            if pos != -1 and (earliest_pos == -1 or pos < earliest_pos):
+                earliest_pos = pos
+        
+        if earliest_pos == -1:
+            return None
+        
+        # Extract segment including punctuation
+        segment_raw = current_text[:earliest_pos + 1]
+        self._processed_idx += len(segment_raw)
+        
+        # Clean and return
+        return textUtils.get_string_no_punctuation_or_emoji(segment_raw)
+
     def _audio_play_priority_thread(self):
         """Override base class to accumulate all segments into one report.
         
@@ -311,14 +321,20 @@ class TTSProvider(TTSProviderBase):
                     continue
 
                 if self.conn.client_abort:
-                    logger.bind(tag=TAG).debug("Received abort, reporting accumulated content")
-                    # Report accumulated content on abort
-                    if session_text_parts and session_audio:
+                    # Only handle abort once per session
+                    if session_text_parts or session_audio:
+                        logger.bind(tag=TAG).debug("Received abort, reporting accumulated content")
                         full_text = "".join(session_text_parts)
-                        enqueue_tts_report(self.conn, full_text, session_audio, session_message_tag)
-                        logger.bind(tag=TAG).info(f"Abort report: {full_text[:50]}...")
-                    session_text_parts, session_audio = [], []
-                    last_send_future = None
+                        if full_text and session_audio:
+                            enqueue_tts_report(self.conn, full_text, session_audio, session_message_tag)
+                            logger.bind(tag=TAG).info(f"Abort report: {full_text[:50]}...")
+                        
+                        # Send LAST to trigger TTS stop message
+                        last_send_future = asyncio.run_coroutine_threadsafe(
+                            sendAudioMessage(self.conn, SentenceType.LAST, None, None, session_message_tag),
+                            self.conn.loop,
+                        )
+                        session_text_parts, session_audio = [], []
                     continue
 
                 # Handle FIRST: accumulate text, don't report yet
@@ -361,6 +377,13 @@ class TTSProvider(TTSProviderBase):
             except Exception as e:
                 logger.bind(tag=TAG).error(f"_audio_play_priority_thread error: {text} {e}")
 
+        # Wait for last send to complete before exiting
+        if last_send_future is not None:
+            try:
+                last_send_future.result(timeout=2.0)
+            except Exception as e:
+                logger.bind(tag=TAG).debug(f"Final audio send failed (connection may be closed): {e}")
+        
         # On connection close, report remaining accumulated data
         if session_text_parts and session_audio:
             try:
@@ -369,16 +392,6 @@ class TTSProvider(TTSProviderBase):
                 logger.bind(tag=TAG).info(f"Connection close report: {full_text}")
             except Exception as e:
                 logger.bind(tag=TAG).warning(f"Connection close report failed: {e}")
-
-    def _process_remaining_text(self):
-        """Process any remaining text in buffer"""
-        full_text = "".join(self.tts_text_buff)
-        remaining_text = full_text[self.processed_chars:]
-        if remaining_text:
-            segment_text = textUtils.get_string_no_punctuation_or_emoji(remaining_text)
-            if segment_text:
-                self._stream_tts_segment(segment_text)
-                self.processed_chars = len(full_text)
 
     async def text_to_speak(self, text, output_file):
         """Non-streaming TTS interface (required by base class)
@@ -408,3 +421,7 @@ class TTSProvider(TTSProviderBase):
         await super().close()
         if hasattr(self, "opus_encoder"):
             self.opus_encoder.close()
+        if hasattr(self, "_client"):
+            self._client.close()
+        if hasattr(self, "_httpx_client"):
+            self._httpx_client.close()

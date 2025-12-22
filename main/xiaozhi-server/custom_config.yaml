@@ -320,7 +320,7 @@ ASR:
     base_url: https://api.groq.com/openai/v1
     model_name: whisper-large-v3-turbo
     output_dir: tmp/
-    prompt: "Hello, 这是一个测试。We discuss the plan, 请加上标点符号。"
+    # prompt: "Hello, 这是一个测试。We discuss the plan, 请加上标点符号。"
   ByteplusStreamASR:
     type: byteplus_stream
     appid: ${BYTEPLUS_APPID}
@@ -333,9 +333,9 @@ VAD:
     model_dir: models/snakers4_silero-vad
     threshold: 0.5                    # high threshold to confirm voice
     min_silence_duration_ms: 400      # silence detection duration (ms)
-    min_speech_duration_ms: 100       # speech detection duration (ms)
-    prefix_padding_duration_ms: 300   # prefix padding duration (ms)
-    activation_threshold: 0.5         # activation threshold
+    min_speech_duration_ms: 200       # speech detection duration (ms)
+    prefix_padding_duration_ms: 100   # prefix padding duration (ms)
+    activation_threshold: 0.6         # activation threshold
     sample_rate: 16000                # sample rate
   # FSMN VAD from FunASR, optimized for Chinese
   # Reference: https://huggingface.co/funasr/fsmn-vad
@@ -505,7 +505,8 @@ TTS:
     api_key: ${FISH_API_KEY}
   FishSingleStreamTTS:
     type: fish_single_stream
-    model: speech-1.6
+    # model: speech-1.6
+    model: s1
     output_dir: tmp/
     response_format: pcm
     normalize: true
@@ -575,7 +576,8 @@ selected_module:
   # LLM: GroqLLM
   LLM: OpenRouterLLM
   VLLM: ChatGLMVLLM
-  TTS: FishDualStreamTTS
+  # TTS: FishDualStreamTTS
+  TTS: FishSingleStreamTTS
   # TODO: temporarily, fish speech doesn't reuse the wesocket connection, need to discuss further.
   # TTS: FishSpeech
   Memory: memu
