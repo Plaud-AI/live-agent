@@ -51,8 +51,12 @@ class TurnDetectionProviderBase(ABC):
         # Pending turn detection task (can be cancelled when new speech arrives)
         self._turn_detection_task: asyncio.Task = None
     
-    def _cancel_pending_task(self) -> None:  # noqa: F821
-        """Cancel pending turn detection task if exists"""
+    def cancel_pending_task(self) -> None:
+        """Cancel pending turn detection task if exists
+        
+        Should be called when new speech starts to prevent premature end-of-turn
+        detection when user pauses mid-sentence.
+        """
         if self._turn_detection_task and not self._turn_detection_task.done():
             self._turn_detection_task.cancel()
             logger.bind(tag=TAG).debug("Cancelled pending turn detection task")
