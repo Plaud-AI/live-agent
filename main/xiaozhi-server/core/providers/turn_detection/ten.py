@@ -137,7 +137,7 @@ class TurnDetectionProvider(TurnDetectionProviderBase):
             conn: Connection handler containing asr_text_buffer and _last_speaking_time
         """
         # Step 1: Cancel pending task
-        self._cancel_pending_task()
+        self.cancel_pending_task()
         
         logger.bind(tag=TAG).debug(
             f"check_end_of_turn called: buffer='{conn.asr_text_buffer[:50]}...'"

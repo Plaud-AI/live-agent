@@ -211,8 +211,9 @@ class VADStream(ABC):
     ) -> None:
         """Handle START_OF_SPEECH event
         
-        1. Update conn state (client_have_voice = True)
-        2. Send FIRST message to ASR queue
+        1. Cancel pending turn detection task (if any) - prevents premature end-of-turn
+        2. Update conn state (client_have_voice = True)
+        3. Send FIRST message to ASR queue
         
         Note: Interrupt check is done in _handle_inference_done via conn.check_and_interrupt()
         """
@@ -220,6 +221,14 @@ class VADStream(ABC):
             f"Speech start detected: prob={event.probability:.2f}, "
             f"duration={event.speech_duration:.2f}s"
         )
+        
+        # Cancel pending turn detection task to prevent premature end-of-turn
+        # This handles the case where user pauses mid-sentence and continues speaking
+        if conn.turn_detection:
+            conn.turn_detection.cancel_pending_task()
+            logger.bind(tag=TAG).debug(
+                "Cancelled pending turn detection task due to new speech"
+            )
         
         # Update connection state - voice started
         conn.client_have_voice = True
