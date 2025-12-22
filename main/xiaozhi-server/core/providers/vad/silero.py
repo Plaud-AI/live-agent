@@ -1,8 +1,8 @@
 import asyncio
+import os
 import time
-from numba import byte
 import numpy as np
-import torch
+import onnxruntime
 from dataclasses import dataclass
 
 from config.logger import setup_logging
@@ -25,17 +25,30 @@ logger = setup_logging()
 
 
 class VADProvider(VADProviderBase):
-    """Silero VAD provider"""
+    """Silero VAD provider with shared ONNX session
+    
+    The ONNX session is shared across all streams for efficiency.
+    Each stream maintains its own inference state for correctness.
+    """
     
     def __init__(self, config: dict):
         super().__init__()
-        # Load Silero model
-        self._model, _ = torch.hub.load(
-            repo_or_dir=config.get("model_dir", "models/snakers4_silero-vad"),
-            source="local",
-            model="silero_vad",
-            force_reload=False,
+        
+        # Load ONNX model - shared across all streams
+        model_dir = config.get("model_dir", "models/snakers4_silero-vad")
+        onnx_path = os.path.join(model_dir, "src", "silero_vad", "data", "silero_vad.onnx")
+        
+        # Configure ONNX runtime for optimal performance
+        sess_opts = onnxruntime.SessionOptions()
+        sess_opts.inter_op_num_threads = 1
+        sess_opts.intra_op_num_threads = 1
+        
+        self._session = onnxruntime.InferenceSession(
+            onnx_path,
+            providers=['CPUExecutionProvider'],
+            sess_options=sess_opts
         )
+        logger.bind(tag=TAG).info(f"Loaded Silero VAD ONNX model from {onnx_path}")
         
         # Parse config (all durations in milliseconds)
         self._opts = SileroVADOptions(
@@ -47,12 +60,16 @@ class VADProvider(VADProviderBase):
         )
         
     def stream(self) -> VADStream:
-        """Create a new VAD stream"""
-        return SileroVADStream(self, self._model, self._opts)
+        """Create a new VAD stream with independent state"""
+        return SileroVADStream(self, self._session, self._opts)
 
 
 class SileroVADStream(VADStream):
-    """Silero VAD stream implementation"""
+    """Silero VAD stream implementation with independent inference state
+    
+    Each stream maintains its own _state and _context for correct
+    sequential inference, while sharing the ONNX session for efficiency.
+    """
     
     # Silero requires 512 samples per inference (32ms at 16kHz)
     WINDOW_SIZE_SAMPLES = 512
@@ -60,11 +77,17 @@ class SileroVADStream(VADStream):
     WINDOW_DURATION_MS = WINDOW_SIZE_SAMPLES / 16000 * 1000  # milliseconds (32ms)
     SLOW_INFERENCE_THRESHOLD = 0.2  # seconds
     
-    def __init__(self, vad: VADProvider, model, opts: SileroVADOptions):
+    # Context size for 16kHz
+    CONTEXT_SIZE = 64
+    
+    def __init__(self, vad: VADProvider, session: onnxruntime.InferenceSession, opts: SileroVADOptions):
         super().__init__(vad)
-        self._model = model
+        self._session = session
         self._opts = opts
         self._exp_filter = ExpFilter(alpha=0.35)
+        
+        # Initialize inference state (independent per stream)
+        self._reset_inference_state()
         
         # Speech buffer for prefix padding (in bytes, not samples)
         self._prefix_padding_bytes = int(opts.prefix_padding_duration_ms / 1000 * opts.sample_rate) * 2
@@ -72,6 +95,44 @@ class SileroVADStream(VADStream):
         max_speech_bytes = 60 * opts.sample_rate * 2 + self._prefix_padding_bytes
         self._speech_buffer = bytearray(max_speech_bytes)
         self._speech_buffer_max_reached = False
+    
+    def _reset_inference_state(self) -> None:
+        """Reset the inference state for this stream
+        
+        Each stream has independent state to ensure correct sequential inference.
+        """
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, self.CONTEXT_SIZE), dtype=np.float32)
+        self._sr = np.array(self._opts.sample_rate, dtype=np.int64)
+    
+    def _run_inference(self, audio_chunk: np.ndarray) -> float:
+        """Run inference with stream-independent state
+        
+        Args:
+            audio_chunk: float32 array of shape (512,) for 16kHz
+            
+        Returns:
+            Speech probability (0.0 - 1.0)
+        """
+        # Reshape to batch format (1, 512)
+        x = audio_chunk.reshape(1, -1).astype(np.float32)
+        
+        # Concatenate context with current chunk: (1, 64 + 512) = (1, 576)
+        x_with_context = np.concatenate([self._context, x], axis=1)
+        
+        # Run ONNX inference
+        ort_inputs = {
+            'input': x_with_context,
+            'state': self._state,
+            'sr': self._sr
+        }
+        out, new_state = self._session.run(None, ort_inputs)
+        
+        # Update stream state
+        self._state = new_state
+        self._context = x_with_context[:, -self.CONTEXT_SIZE:]
+        
+        return float(out[0, 0])
     
     async def _run_task(self) -> None:
         """Main processing loop - receives PCM data from base class"""
@@ -110,10 +171,8 @@ class SileroVADStream(VADStream):
                     )
                     np.divide(window_int16, 32768.0, out=inference_data)
                     
-                    # Convert to tensor and run inference
-                    audio_tensor = torch.from_numpy(inference_data)
-                    with torch.no_grad():
-                        prob = self._model(audio_tensor, self._opts.sample_rate).item()
+                    # Run inference with stream-independent state
+                    prob = self._run_inference(inference_data)
                     
                     # Apply exponential smoothing
                     prob = self._exp_filter.apply(prob)
@@ -238,3 +297,4 @@ class SileroVADStream(VADStream):
     def reset(self):
         """Reset stream state for new utterance"""
         self._exp_filter.reset()
+        self._reset_inference_state()
