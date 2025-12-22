@@ -37,6 +37,7 @@ dependencies = [
     "silero_vad==6.0.0",
     "funasr==1.2.3",
     "funasr_onnx==0.4.1",
+    "onnxruntime>=1.16.0",
     
     # ASR
     "sherpa_onnx==1.12.11",
