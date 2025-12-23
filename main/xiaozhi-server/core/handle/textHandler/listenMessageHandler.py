@@ -6,6 +6,7 @@ from core.handle.reportHandle import enqueue_asr_report
 from core.handle.sendAudioHandle import send_stt_message, send_tts_message
 from core.handle.textMessageHandler import TextMessageHandler
 from core.handle.textMessageType import TextMessageType
+from core.handle.helloHandle import checkWakeupWords
 from core.utils.util import remove_punctuation_and_length
 
 TAG = __name__
@@ -105,9 +106,20 @@ class ListenTextMessageHandler(TextMessageHandler):
                         if not ready:
                             conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
                             return
-                    conn.just_woken_up = True
+                    
                     # Record timestamp for correct message ordering
                     report_time = int(time.time())
+                    
+                    # 尝试播放缓存的唤醒词短回复（如"我在这里哦！"）
+                    wakeup_handled = await checkWakeupWords(conn, filtered_text)
+                    if wakeup_handled:
+                        # 成功播放了缓存的短回复，上报唤醒事件后返回
+                        enqueue_asr_report(conn, original_text, [], report_time=report_time)
+                        conn.logger.bind(tag=TAG).info("设备端唤醒词已通过缓存短回复处理")
+                        return
+                    
+                    # Fallback: 如果缓存未启用，使用 LLM 生成回复
+                    conn.just_woken_up = True
                     # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
                     enqueue_asr_report(conn, "嘿，你好呀", [], report_time=report_time)
                     await startToChat(conn, "嘿，你好呀")
