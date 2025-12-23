@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, Depends, Query, Form, File, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,16 +16,70 @@ from schemas.voice import (
     AudioSample,
     MyVoiceResponse,
     VoiceUpdateRequest,
-    VoiceAddRequest
+    VoiceAddRequest,
+    VoiceLibraryItem,
+    VoiceLibraryResponse,
+    VoiceTags
 )
 from utils.response import success_response, error_response
 from api.auth import get_current_user_id
 from config.logger import setup_logging
-from utils.exceptions import InternalServerException
 
 TAG = __name__
 logger = setup_logging(TAG)
 router = APIRouter()
+
+
+@router.get("/library", summary="Get Voice Library")
+async def get_voice_library(
+    gender: Optional[str] = Query(None, description="Filter by gender (male/female)"),
+    age: Optional[str] = Query(None, description="Filter by age (youth/young_adult/adult/middle_aged/senior)"),
+    language: Optional[str] = Query(None, description="Filter by language (en/zh/ja/etc.)"),
+    cursor: Optional[str] = Query(None, description="Pagination cursor"),
+    page_size: int = Query(20, ge=1, le=50, description="Number of items per page"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get voice library voices with filtering
+    
+    - **gender**: Filter by gender (male/female)
+    - **age**: Filter by age (youth/young_adult/adult/middle_aged/senior)
+    - **language**: Filter by language code (en/zh/ja/etc.)
+    
+    Returns paginated list of preset voices from the voice library.
+    Other tags (style, accent, description) are included for display only.
+    """
+    voices, next_cursor, has_more = await voice_service.get_library_voices(
+        db=db,
+        gender=gender,
+        age=age,
+        language=language,
+        cursor=cursor,
+        page_size=page_size
+    )
+    
+    # Convert VoiceModel to VoiceLibraryItem
+    voice_items = []
+    for voice in voices:
+        voice_items.append(VoiceLibraryItem(
+            voice_id=voice.voice_id,
+            name=voice.name,
+            desc=voice.desc,
+            provider=voice.provider,
+            tags=VoiceTags(**voice.tags) if voice.tags else None,
+            sample_url=voice.sample_url,
+            sample_text=voice.sample_text,
+            created_at=voice.created_at
+        ))
+    
+    response = VoiceLibraryResponse(
+        voices=voice_items,
+        next_cursor=next_cursor,
+        has_more=has_more
+    )
+    
+    return success_response(data=response.model_dump())
+
 
 @router.get("/discover", summary="Get Discover Voices")
 async def get_discover_voices(
@@ -55,7 +109,6 @@ async def get_discover_voices(
         samples = []
         for sample in voice.samples:
             samples.append(AudioSample(
-                title=sample.title,
                 text=sample.text,
                 audio=sample.audio
             ))
@@ -185,9 +238,9 @@ async def clone_voice(
     )
 
 
-@router.post("/add/{voice_id}", summary="Add Fish Voice to My Voices")
+@router.post("/add/{fish_voice_id}", summary="Add Fish Voice to My Voices")
 async def add_voice(
-    voice_id: str,
+    fish_voice_id: str,
     request: VoiceAddRequest,
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
@@ -203,7 +256,7 @@ async def add_voice(
         db=db,
         fish_client=fish_client,
         owner_id=current_user_id,
-        voice_id=voice_id,
+        fish_voice_id=fish_voice_id,
         name=request.name,
         desc=request.desc,
         sample_url=request.sample_url,

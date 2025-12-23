@@ -257,11 +257,12 @@ class DeviceService:
         agent_config = AgentConfigResponse(
             agent_id=matched_agent.agent_id,
             name=matched_agent.name,
-            voice_id=matched_agent.voice_id,
+            voice=None,  # Will be enriched by internal API
             language=None,
             instruction=matched_agent.instruction,
             voice_opening=matched_agent.voice_opening,
             voice_closing=matched_agent.voice_closing,
+            raw_voice_id=matched_agent.voice_id,  # Internal use only
         )
 
         return DeviceAgentResolveResponse(

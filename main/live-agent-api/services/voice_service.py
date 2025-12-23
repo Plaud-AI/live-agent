@@ -2,14 +2,15 @@ from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import UploadFile
 from fishaudio import AsyncFishAudio
-from fishaudio.types import PaginatedResponse, Voice as FishVoice, Sample as FishSample
+from fishaudio.types import PaginatedResponse, Voice as FishVoice
 
 from repositories import VoiceModel, Voice
-
+from repositories.voice import VoiceCategory, VoiceProvider
 from repositories import FileRepository
 from datetime import datetime, timezone
 from config.logger import setup_logging
 from utils.exceptions import NotFoundException
+from utils.ulid import generate_voice_id
 
 
 TAG = __name__
@@ -21,6 +22,8 @@ DEFAULT_SAMPLE_TEXT = {
     "zh": "只有热爱才能做出伟大的工作。",
     "ja": "偉大な仕事をする唯一の方法は、あなたが何を愛するかです。"
 } 
+
+
 class VoiceService:
     """Voice service layer"""
     
@@ -52,28 +55,39 @@ class VoiceService:
         
         return response.items, has_more
     
-    async def get_default_voices(
+    async def get_library_voices(
         self,
         db: AsyncSession,
-        page: int = 1,
+        gender: Optional[str] = None,
+        age: Optional[str] = None,
+        language: Optional[str] = None,
+        cursor: Optional[str] = None,
         page_size: int = 20
-    ) -> List[VoiceModel]:
+    ) -> Tuple[List[VoiceModel], Optional[str], bool]:
         """
-        Get platform default voices (default tab)
-        TODO: Implement after PM discussion
+        Get voice library voices with tag filtering
         
+        Args:
+            db: Database session
+            gender: Filter by gender (male/female)
+            age: Filter by age (youth/young_adult/adult/middle_aged/senior)
+            language: Filter by language (en/zh/ja/etc.)
+            cursor: Pagination cursor
+            page_size: Number of items per page
+            
         Returns:
-            List of VoiceModel objects
+            Tuple of (voices, next_cursor, has_more)
         """
-        skip = (page - 1) * page_size
-        voices = await Voice.get_list(
-            db,
-            owner_id=None,
-            category="default",
-            skip=skip,
+        voices, next_cursor, has_more = await Voice.get_library_voices(
+            db=db,
+            gender=gender,
+            age=age,
+            language=language,
+            cursor=cursor,
             limit=page_size
         )
-        return voices
+        
+        return voices, next_cursor, has_more
     
     async def get_my_voices(
         self,
@@ -116,10 +130,11 @@ class VoiceService:
         Clone a voice using Fish Audio API, generate TTS preview, and save to database
         
         Flow:
-        1. Clone voice from uploaded audio + optional text
-        2. Generate TTS preview audio using the new voice (with provided or default text)
-        3. Upload TTS preview to S3 as sample_url
-        4. Create voice record in database
+        1. Generate voice_id in voice_{ulid} format
+        2. Clone voice from uploaded audio + optional text
+        3. Generate TTS preview audio using the new voice
+        4. Upload TTS preview to S3 as sample_url
+        5. Create voice record in database
         
         Args:
             db: Database session
@@ -139,6 +154,7 @@ class VoiceService:
         
         fish_voice_id: Optional[str] = None
         sample_url: Optional[str] = None
+        voice_id = generate_voice_id()  # Generate our own voice_id
         
         try:
             # Read audio file content for cloning
@@ -156,7 +172,7 @@ class VoiceService:
             )
             fish_voice_id = fish_voice.id
             language = fish_voice.languages[0] if len(fish_voice.languages) > 0 else "en"
-            sample_text = DEFAULT_SAMPLE_TEXT[language]
+            sample_text = DEFAULT_SAMPLE_TEXT.get(language, DEFAULT_SAMPLE_TEXT["en"])
             
             # Step 2: Generate TTS preview using the new voice
             logger.bind(tag=TAG).info(f"Generating TTS preview with voice {fish_voice_id}")
@@ -171,7 +187,7 @@ class VoiceService:
             sample_url = await FileRepository.upload_voice_sample(
                 s3=s3,
                 audio_data=audio_bytes,
-                voice_id=fish_voice_id,
+                voice_id=voice_id,  # Use our voice_id for S3 path
                 file_ext="mp3"
             )
             logger.bind(tag=TAG).info(f"TTS preview uploaded to S3: {sample_url}")
@@ -179,10 +195,14 @@ class VoiceService:
             # Step 4: Create voice record in database
             voice = await Voice.create(
                 db=db,
-                voice_id=fish_voice_id,
+                voice_id=voice_id,
+                reference_id=fish_voice_id,  # Store Fish Audio ID as reference
                 owner_id=owner_id,
                 name="Cloned Voice",
                 desc="",
+                category=VoiceCategory.CLONE.value,
+                provider=VoiceProvider.FISHSPEECH.value,
+                tags={"language": language},
                 sample_url=sample_url,
                 sample_text=sample_text
             )
@@ -219,7 +239,7 @@ class VoiceService:
         db: AsyncSession,
         fish_client: AsyncFishAudio,
         owner_id: str,
-        voice_id: str,
+        fish_voice_id: str,
         name: str,
         desc: str,
         sample_url: Optional[str] = None,
@@ -232,28 +252,33 @@ class VoiceService:
             db: Database session
             fish_client: Fish Audio client
             owner_id: User ID
-            voice_id: Audio voice ID
+            fish_voice_id: Fish Audio voice ID
             name: Voice name
             desc: Voice description
-            sample_url: Optional URL of stored audio sample (for cloned voices)
-            sample_text: Optional transcription text (for cloned voices)
+            sample_url: Optional URL of stored audio sample
+            sample_text: Optional transcription text
             
         Returns:
             Created VoiceModel
         """
         # Verify the Fish voice exists and get its info
-        fish_voice = await fish_client.voices.get(voice_id)
+        fish_voice = await fish_client.voices.get(fish_voice_id)
         if not fish_voice:
-            from utils.exceptions import NotFoundException
-            raise NotFoundException(f"Fish voice {voice_id} not found")
+            raise NotFoundException(f"Fish voice {fish_voice_id} not found")
 
-        # Create voice record in database using Fish voice ID directly
+        # Generate our own voice_id
+        voice_id = generate_voice_id()
+
+        # Create voice record in database
         voice = await Voice.create(
             db=db,
-            voice_id=voice_id,  # Use Fish Audio voice ID directly
+            voice_id=voice_id,
+            reference_id=fish_voice_id,  # Store Fish Audio ID as reference
             owner_id=owner_id,
             name=name,
             desc=desc,
+            category=VoiceCategory.CLONE.value,
+            provider=VoiceProvider.FISHSPEECH.value,
             sample_url=sample_url,
             sample_text=sample_text
         )
@@ -275,7 +300,7 @@ class VoiceService:
             db: Database session
             s3: S3 client
             fish_client: Fish Audio client
-            voice_id: Voice ID
+            voice_id: Voice ID (voice_{ulid} format)
             owner_id: User ID
             
         Returns:
@@ -285,23 +310,26 @@ class VoiceService:
             NotFoundException: If voice not found or not owned by user
         """
         
-        # Get voice record first to get sample_url for S3 cleanup
+        # Get voice record first to get sample_url and reference_id for cleanup
         voice = await Voice.get_by_voice_and_owner(db=db, voice_id=voice_id, owner_id=owner_id)
         if not voice:
             raise NotFoundException(f"Voice {voice_id} not found or not owned by user")
         
         sample_url = voice.sample_url
+        reference_id = voice.reference_id
         
         # Delete from database first
         deleted = await Voice.delete(db=db, voice_id=voice_id, owner_id=owner_id)
         if not deleted:
             raise NotFoundException(f"Voice {voice_id} not found or not owned by user")
         
-        # Cleanup S3 file (best effort, don't fail if cleanup fails)
+        # Cleanup S3 file and Fish Audio voice (best effort)
         try:
             if sample_url:
                 await self._cleanup_s3_file(s3, sample_url)
-            await self._cleanup_fish_voice(fish_client, voice_id)
+            # Only cleanup Fish Audio voice if it's a clone (has reference_id)
+            if reference_id:
+                await self._cleanup_fish_voice(fish_client, reference_id)
         except Exception as e:
             logger.bind(tag=TAG).warning(f"Cleanup failed: {e}")
             return False
@@ -320,7 +348,7 @@ class VoiceService:
         
         Args:
             db: Database session
-            voice_id: Voice ID
+            voice_id: Voice ID (voice_{ulid} format)
             owner_id: User ID
             name: New voice name (optional)
             desc: New voice description (optional)
@@ -336,7 +364,6 @@ class VoiceService:
         )
         
         if not voice:
-            from utils.exceptions import NotFoundException
             raise NotFoundException(f"Voice {voice_id} not found or not owned by user")
         
         # Update only provided fields
@@ -349,7 +376,73 @@ class VoiceService:
         )
         
         return updated_voice
+    
+    async def get_voice_by_id(
+        self,
+        db: AsyncSession,
+        voice_id: str
+    ) -> Optional[VoiceModel]:
+        """
+        Get voice by voice_id
+        
+        Handles both formats:
+        - voice_{ulid}: Look up by voice_id field
+        - Other format: Assume it's a Fish Audio reference_id
+        
+        Args:
+            db: Database session
+            voice_id: Voice ID or reference ID
+            
+        Returns:
+            VoiceModel if found, None otherwise
+        """
+        if voice_id.startswith("voice_"):
+            # Our voice_id format
+            return await Voice.get_by_voice_id(db, voice_id)
+        else:
+            # Assume it's a Fish Audio reference_id
+            return await Voice.get_by_reference_id(db, voice_id)
+
+    async def get_voice_config(
+        self,
+        db: AsyncSession,
+        voice_id: str
+    ) -> Optional[dict]:
+        """
+        Get voice configuration for internal API
+        
+        Logic:
+        - If voice_id has 'voice_' prefix: look up in voices table
+        - Otherwise: it's a Fish discover voice, use voice_id as reference_id
+        
+        Args:
+            db: Database session
+            voice_id: Voice ID from agent.voice_id
+            
+        Returns:
+            Dict with {voice_id, reference_id, provider} or None
+        """
+        if not voice_id:
+            return None
+        
+        if voice_id.startswith("voice_"):
+            # Our voice_id format - look up in database
+            voice = await Voice.get_by_voice_id(db, voice_id)
+            if voice:
+                return {
+                    "voice_id": voice.voice_id,
+                    "reference_id": voice.reference_id or voice.voice_id,
+                    "provider": voice.provider
+                }
+            return None
+        else:
+            # Fish discover voice - not in our database
+            # voice_id is the Fish Audio ID directly
+            return {
+                "voice_id": voice_id,
+                "reference_id": voice_id,
+                "provider": "fishspeech"
+            }
 
 
 voice_service = VoiceService()
-
