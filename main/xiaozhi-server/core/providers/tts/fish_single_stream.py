@@ -166,6 +166,7 @@ class TTSProvider(TTSProviderBase):
         
         try:
             # Get audio stream from FishSpeech
+            logger.bind(tag=TAG).info(f"TTS stream request: reference_id={self.reference_id}, text={text[:50]}...")
             audio_stream = self._client.tts.stream(
                 text=text,
                 reference_id=self.reference_id,
