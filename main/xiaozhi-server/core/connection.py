@@ -983,12 +983,12 @@ class ConnectionHandler:
             modules = initialize_modules(
                 self.logger,
                 self.config,
-                False,
-                False,
-                True,
-                True,
-                False,
-                False,
+                init_vad=False,  # VAD 使用公共实例
+                init_asr=True,   # ASR 需要初始化！
+                init_llm=True,
+                init_tts=True,
+                init_memory=False,
+                init_intent=False,
             )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
@@ -1002,11 +1002,25 @@ class ConnectionHandler:
             asyncio.run_coroutine_threadsafe(
                 self.tts.open_audio_channels(self), self.loop
             )
+        if modules.get("asr", None) is not None:
+            self.asr = modules["asr"]
         if modules.get("intent", None) is not None:
             self.intent = modules["intent"]
         if modules.get("memory", None) is not None:
             self.memory = modules["memory"]
 
+        # 初始化 VAD stream（使用公共 VAD 实例）
+        if self.vad is None:
+            self.vad = self._vad
+        if self.vad is not None and self.vad_stream is None:
+            self._initialize_vad_stream()
+        
+        # 打开 ASR 音频通道
+        if self.asr is not None:
+            asyncio.run_coroutine_threadsafe(
+                self.asr.open_audio_channels(self), self.loop
+            )
+        
         # 初始化 prompt 与上报线程
         self._init_prompt_enhancement()
         self._init_report_threads()

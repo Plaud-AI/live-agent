@@ -554,7 +554,7 @@ TTS:
     type: openai
     # 你可以在这里获取到 api key
     # https://platform.openai.com/api-keys
-    api_key: 你的openai api key
+    api_key: ${OPENAI_API_KEY}
     # 国内需要使用代理
     api_url: https://api.openai.com/v1/audio/speech
     # 可选tts-1或tts-1-hd，tts-1速度更快tts-1-hd质量更好
