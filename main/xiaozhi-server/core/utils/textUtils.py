@@ -147,3 +147,32 @@ def strip_emotion_tags(text: str) -> str:
     # Clean up multiple spaces and trim
     result = re.sub(r'\s+', ' ', result)
     return result.strip()
+
+
+def get_emotion_tag(text: str) -> str | None:
+    """
+    Extract the first emotion tag from the text.
+    
+    Emotion tags are in format: (emotion) e.g., "(happy)", "(sad)", "(curious)"
+    
+    Examples:
+        "(happy) Hello!" -> "happy"
+        "(sad) I'm sorry" -> "sad"
+        "Hello world" -> None
+    
+    Args:
+        text: Text with potential emotion tags
+        
+    Returns:
+        The emotion tag name (e.g., "happy") or None if not found
+    """
+    if not text:
+        return None
+    
+    match = EMOTION_TAG_PATTERN.search(text)
+    if match:
+        # Extract content inside parentheses, e.g., "(happy)" -> "happy"
+        content = match.group().strip()
+        if content.startswith('(') and content.endswith(')'):
+            return content[1:-1]
+    return None
