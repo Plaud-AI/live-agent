@@ -185,6 +185,8 @@ class ConnectionHandler:
 
         # 标记连接是否来自MQTT
         self.conn_from_mqtt_gateway = False
+        # identify the connection is from device-end (audio without header)
+        self.conn_from_device = False
 
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(config, self.logger)
@@ -240,6 +242,11 @@ class ConnectionHandler:
             self.conn_from_mqtt_gateway = request_path.endswith("?from=mqtt_gateway")
             if self.conn_from_mqtt_gateway:
                 self.logger.bind(tag=TAG).info("连接来自:MQTT网关")
+            
+            # Device-end connection: no agent_id in headers (audio without header)
+            self.conn_from_device = not self.agent_id
+            if self.conn_from_device:
+                self.logger.bind(tag=TAG).info("connection is from device-end (audio without header)")
 
             # 初始化活动时间戳
             self.last_activity_time = time.time() * 1000

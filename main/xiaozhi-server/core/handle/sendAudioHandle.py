@@ -104,8 +104,12 @@ async def _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence):
 async def _send_audio_with_header(conn, audios, message_tag=MessageTag.NORMAL):
     if audios is None or len(audios) == 0:
         return
-    complete_packet = pack_opus_with_header(audios, message_tag)
-    await conn.websocket.send(complete_packet)
+    # Device-end: send raw opus data without header
+    if conn.conn_from_device:
+        await conn.websocket.send(audios)
+    else:
+        complete_packet = pack_opus_with_header(audios, message_tag)
+        await conn.websocket.send(complete_packet)
 
 
 # 播放音频
