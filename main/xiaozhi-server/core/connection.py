@@ -1000,6 +1000,13 @@ class ConnectionHandler:
         self._apply_agent_runtime_config(private_config)
         self.defer_agent_init = False
 
+        # 更新已预初始化的 TTS 实例的 reference_id（voice_id）
+        # 因为预初始化时还没有 agent 配置，reference_id 为 null
+        voice_id = private_config.get("voice_id")
+        if voice_id and self.tts and hasattr(self.tts, "reference_id"):
+            self.tts.reference_id = voice_id
+            self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
+
         # 模块已在连接时预初始化，这里只需要确保 ASR 和 VAD stream 就绪
         # 只有在模块未初始化时才重新初始化（正常情况下不会进入）
         if not self.llm or not self.tts:
@@ -1590,6 +1597,11 @@ class ConnectionHandler:
         if not self.client_is_speaking:
             return
         if self.client_listen_mode == "manual":
+            return
+        # 在 agent 配置加载完成之前禁用打断检测
+        # defer_agent_init=True 表示正在等待 ensure_agent_ready 完成
+        # 这样可以避免在 agent 配置加载期间误触发打断
+        if getattr(self, "defer_agent_init", False):
             return
         
         # Check speech duration threshold
