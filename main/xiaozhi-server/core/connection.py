@@ -928,14 +928,14 @@ class ConnectionHandler:
         """Apply agent-specific runtime config to connection"""
         if not private_config:
             return
-        voice_id = private_config.get("voice_id")
+        voice = private_config.get("voice")
+        voice_id = voice.get("reference_id")
+        provider = voice.get("provider")
         if voice_id:
-            if "TTS" in self.config and "FishSpeech" in self.config.get("TTS", {}):
-                self.config["TTS"]["FishSpeech"]["reference_id"] = voice_id
-            if "TTS" in self.config and "FishDualStreamTTS" in self.config.get("TTS", {}):
-                self.config["TTS"]["FishDualStreamTTS"]["reference_id"] = voice_id
-            if "TTS" in self.config and "FishSingleStreamTTS" in self.config.get("TTS", {}):
+            if provider == "fishspeech":
+                self.config["selected_module"]["TTS"] = "FishSingleStreamTTS"
                 self.config["TTS"]["FishSingleStreamTTS"]["reference_id"] = voice_id
+            # TODO: add other TTS providers support(Like minimax, etc.)
         self._instruction = private_config.get("instruction", self._instruction)
         # greeting config
         self._greeting_config["enable_greeting"] = private_config.get("enable_greeting", False)

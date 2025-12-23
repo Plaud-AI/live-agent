@@ -8,8 +8,9 @@ from infra.fishaudio import get_fish_audio
 from services.agent_service import agent_service
 from services.device_service import device_service
 from services.chat_service import chat_service
+from services.voice_service import voice_service
 from utils.response import success_response
-from schemas.agent import AgentConfigResponse
+from schemas.agent import AgentConfigResponse, VoiceConfig
 from schemas.device import DefaultAgentResponse, DeviceAgentResolveResponse
 
 router = APIRouter()
@@ -54,12 +55,12 @@ async def get_agent_config(
     
     This is an internal API for service-to-service communication:
     - No authentication required
-    - Returns agent config with voice language info from Fish Audio
+    - Returns agent config with voice info (voice_id, reference_id, provider)
     - Used by xiaozhi-server to drive AI conversations
     
     Flow:
     1. Get agent config by agent_id
-    2. Parallel fetch: Fish Audio voice language + today's message check
+    2. Parallel fetch: voice config + voice language + today's message check
     3. Enable greeting only if no messages today (reduce user annoyance)
     """
     # Parse timezone offset at API layer
@@ -68,16 +69,21 @@ async def get_agent_config(
     # Step 1: Get agent config
     agent = await agent_service.get_agent_detail(db=db, agent_id=agent_id)
     
-    # Step 2: Parallel fetch - Fish Audio language and today's message check
+    # Step 2: Get voice config from database
+    voice_config_data = await voice_service.get_voice_config(db=db, voice_id=agent.voice_id)
+    voice_config = VoiceConfig(**voice_config_data) if voice_config_data else None
+    
+    # Step 3: Parallel fetch - Fish Audio language and today's message check
     async def fetch_language():
-        if not agent.voice_id:
+        if not voice_config:
             return None
         try:
-            fish_voice = await fish_client.voices.get(agent.voice_id)
+            # Use reference_id to fetch from Fish Audio
+            fish_voice = await fish_client.voices.get(voice_config.reference_id)
             if fish_voice and hasattr(fish_voice, 'languages') and fish_voice.languages:
                 return fish_voice.languages[0] if isinstance(fish_voice.languages, list) else fish_voice.languages
         except Exception as e:
-            print(f"Warning: Failed to fetch voice language for {agent.voice_id}: {e}")
+            print(f"Warning: Failed to fetch voice language for {voice_config.reference_id}: {e}")
         return None
     
     async def check_has_messages_today():
@@ -89,16 +95,16 @@ async def get_agent_config(
         check_has_messages_today()
     )
     
-    # Step 3: Determine greeting behavior
+    # Step 4: Determine greeting behavior
     # Only enable greeting if no messages today (reduce repeated greeting annoyance)
     enable_greeting = not has_messages_today
     greeting = agent.voice_opening if enable_greeting else None
     
-    # Step 4: Build response
+    # Step 5: Build response
     response = AgentConfigResponse(
         agent_id=agent.agent_id,
         name=agent.name,
-        voice_id=agent.voice_id,
+        voice=voice_config,
         language=language,
         instruction=agent.instruction,
         voice_closing=agent.voice_closing,
@@ -126,12 +132,17 @@ async def resolve_agent_by_wake(
         wake_word=wake_word,
     )
 
-    # enrich language via Fish Audio if voice_id exists
+    # Get voice config from database using raw_voice_id
     agent_cfg = resolved.agent_config
+    voice_config_data = await voice_service.get_voice_config(db=db, voice_id=agent_cfg.raw_voice_id)
+    voice_config = VoiceConfig(**voice_config_data) if voice_config_data else None
+    agent_cfg.voice = voice_config
+    
+    # Enrich language via Fish Audio if voice exists
     language = agent_cfg.language
-    if agent_cfg.voice_id and language is None:
+    if voice_config and language is None:
         try:
-            fish_voice = await fish_client.voices.get(agent_cfg.voice_id)
+            fish_voice = await fish_client.voices.get(voice_config.reference_id)
             if fish_voice and hasattr(fish_voice, "languages") and fish_voice.languages:
                 language = (
                     fish_voice.languages[0]
@@ -165,10 +176,15 @@ async def get_default_agent(
     """
     binding, agent = await device_service.get_default_agent(db=db, device_id=device_id)
 
+    # Get voice config from database
+    voice_config_data = await voice_service.get_voice_config(db=db, voice_id=agent.voice_id)
+    voice_config = VoiceConfig(**voice_config_data) if voice_config_data else None
+    
+    # Enrich language via Fish Audio
     language = None
-    if agent.voice_id:
+    if voice_config:
         try:
-            fish_voice = await fish_client.voices.get(agent.voice_id)
+            fish_voice = await fish_client.voices.get(voice_config.reference_id)
             if fish_voice and hasattr(fish_voice, "languages") and fish_voice.languages:
                 language = (
                     fish_voice.languages[0]
@@ -181,7 +197,7 @@ async def get_default_agent(
     agent_cfg = AgentConfigResponse(
         agent_id=agent.agent_id,
         name=agent.name,
-        voice_id=agent.voice_id,
+        voice=voice_config,
         language=language,
         instruction=agent.instruction,
         voice_opening=agent.voice_opening,
@@ -195,4 +211,3 @@ async def get_default_agent(
             is_default=binding.is_default,
         ).model_dump()
     )
-
