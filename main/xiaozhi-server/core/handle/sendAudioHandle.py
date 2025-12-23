@@ -39,10 +39,20 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             f"文本: {text if text else '(无文本)'}"
         )
 
+    # 在新句子开始或会话结束前，先发送前一个句子的 sentence_end
+    # 这确保 sentence_end 在该句子的所有音频发送完毕后才发送
+    if sentenceType in (SentenceType.FIRST, SentenceType.LAST):
+        if hasattr(conn, '_pending_sentence_text') and conn._pending_sentence_text:
+            await send_tts_message(conn, "sentence_end", conn._pending_sentence_text, message_tag)
+            conn._pending_sentence_text = None
+    
     if sentenceType == SentenceType.FIRST:
         await send_tts_message(conn, "sentence_start", text, message_tag)
+        # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
+        conn._pending_sentence_text = text if text else None
 
     await sendAudio(conn, audios, message_tag=message_tag)
+    
     # 发送句子开始消息
     if sentenceType is not SentenceType.MIDDLE:
         conn.logger.bind(tag=TAG).info(f"发送音频消息: {sentenceType}, {text}")
@@ -255,6 +265,13 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
         "session_id": conn.session_id,
         "message_tag": message_tag.value,
     }
+    
+    # TTS 开始时添加 sample_rate 参数（官方协议要求）
+    if state == "start":
+        # 从配置中获取 TTS 的 sample_rate，默认 16000
+        tts_sample_rate = conn.config.get("xiaozhi", {}).get("audio_params", {}).get("sample_rate", 16000)
+        message["sample_rate"] = tts_sample_rate
+    
     if text is not None:
         text = textUtils.check_emoji(text)
         text = strip_emotion_tags(text)

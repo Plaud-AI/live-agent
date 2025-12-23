@@ -14,6 +14,7 @@ import websockets
 from core.utils.util import (
     extract_json_from_string,
 )
+from core.utils import textUtils
 from typing import Dict, Any
 from collections import deque
 from core.utils.modules_initialize import (
@@ -1165,12 +1166,15 @@ class ConnectionHandler:
                 )
 
             # 在llm回复中获取情绪表情，一轮对话只在开头获取一次
-            # if emotion_flag and content is not None and content.strip():
-            #     asyncio.run_coroutine_threadsafe(
-            #         textUtils.get_emotion(self, content),
-            #         self.loop,
-            #     )
-            #     emotion_flag = False
+            if emotion_flag and content is not None and content.strip():
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        textUtils.get_emotion(self, content),
+                        self.loop,
+                    )
+                except Exception as e:
+                    self.logger.bind(tag=TAG).warning(f"发送emotion失败: {e}")
+                emotion_flag = False
 
             if content is not None and len(content) > 0:
                 if not tool_call_flag:
