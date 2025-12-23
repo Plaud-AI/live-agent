@@ -88,6 +88,8 @@ class ConnectionHandler:
         self.chat_history_conf = 0
         self.audio_format = "opus"
         self.defer_agent_init = False
+        # 首轮对话完成标志，用于禁用首轮对话期间的打断检测
+        self.first_dialogue_completed = False
 
         # 客户端状态相关
         self.client_abort = False
@@ -1602,6 +1604,10 @@ class ConnectionHandler:
         # defer_agent_init=True 表示正在等待 ensure_agent_ready 完成
         # 这样可以避免在 agent 配置加载期间误触发打断
         if getattr(self, "defer_agent_init", False):
+            return
+        # 首轮对话完成之前禁用打断检测
+        # 避免唤醒词响应期间设备继续发送音频被误判为打断
+        if not getattr(self, "first_dialogue_completed", False):
             return
         
         # Check speech duration threshold

@@ -47,6 +47,12 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             conn._pending_sentence_text = None
     
     if sentenceType == SentenceType.FIRST:
+        # 如果当前不在 speaking 状态（之前的 TTS 已经 stop），需要先发送 tts start
+        # 这处理了多个 LLM 回复在同一会话中交叉的情况
+        if not conn.client_is_speaking:
+            conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
+            conn.client_is_speaking = True
+            await send_tts_message(conn, "start", None, message_tag)
         await send_tts_message(conn, "sentence_start", text, message_tag)
         # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
         conn._pending_sentence_text = text if text else None
@@ -279,6 +285,10 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
 
     # TTS播放结束
     if state == "stop":
+        # 首轮对话完成，启用打断检测
+        if not getattr(conn, "first_dialogue_completed", False):
+            conn.first_dialogue_completed = True
+            logger.bind(tag=TAG).info("首轮对话完成，启用打断检测")
         # 播放提示音
         tts_notify = conn.config.get("enable_stop_tts_notify", False)
         if tts_notify:
