@@ -57,8 +57,13 @@ async def synthesize_speech(
     if len(text) > 1000:
         raise HTTPException(status_code=400, detail="Text too long, max 1000 characters")
     
+    # 处理 voice_id: "default"、空字符串、None 都使用默认音色
+    voice_id = request.voice_id
+    if voice_id and voice_id.lower() == "default":
+        voice_id = None  # Fish Audio 会使用默认音色
+    
     logger.bind(tag=TAG).info(
-        f"TTS request: text='{text[:50]}...', voice_id={request.voice_id}, "
+        f"TTS request: text='{text[:50]}...', voice_id={voice_id}, "
         f"format={request.format}, sample_rate={request.sample_rate}"
     )
     
@@ -83,7 +88,9 @@ async def synthesize_speech(
             text=text,
             reference_id=request.voice_id,  # 可以为 None，使用默认音色
             model="speech-1.6",  # 指定模型，与 fish_single_stream.py 一致
-            config=tts_config
+            config=tts_config,
+            reference_id=voice_id,  # 可以为 None，使用默认音色
+            format=fish_format
         )
         
         logger.bind(tag=TAG).info(f"TTS from Fish Audio: {len(audio_bytes)} bytes ({fish_format}, {request.sample_rate}Hz)")
