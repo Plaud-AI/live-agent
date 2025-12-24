@@ -10,7 +10,7 @@ from services.device_service import device_service
 from services.chat_service import chat_service
 from services.voice_service import voice_service
 from utils.response import success_response
-from schemas.agent import AgentConfigResponse, VoiceConfig
+from schemas.agent import AgentConfigResponse, VoiceConfig, RecentMessage
 from schemas.device import DefaultAgentResponse, DeviceAgentResolveResponse
 
 router = APIRouter()
@@ -47,6 +47,7 @@ def _parse_tz_offset(tz_offset: str) -> int:
 async def get_agent_config(
     agent_id: str,
     tz_offset: str = Query(default="UTC+0", description="Client timezone offset, e.g. UTC+8, UTC-7"),
+    max_history_rounds: int = Query(default=10, ge=0, le=50, description="Max conversation rounds to load for context"),
     db: AsyncSession = Depends(get_db),
     fish_client = Depends(get_fish_audio)
 ):
@@ -60,8 +61,9 @@ async def get_agent_config(
     
     Flow:
     1. Get agent config by agent_id
-    2. Parallel fetch: voice config + voice language + today's message check
+    2. Parallel fetch: voice language + today's message check + recent messages
     3. Enable greeting only if no messages today (reduce user annoyance)
+    4. Return recent messages for dialogue context loading
     """
     # Parse timezone offset at API layer
     tz_offset_hours = _parse_tz_offset(tz_offset)
@@ -73,7 +75,7 @@ async def get_agent_config(
     voice_config_data = await voice_service.get_voice_config(db=db, voice_id=agent.voice_id)
     voice_config = VoiceConfig(**voice_config_data) if voice_config_data else None
     
-    # Step 3: Parallel fetch - Fish Audio language and today's message check
+    # Step 3: Parallel fetch - Fish Audio language, today's message check, and recent messages
     async def fetch_language():
         if not voice_config:
             return None
@@ -89,10 +91,16 @@ async def get_agent_config(
     async def check_has_messages_today():
         return await chat_service.has_messages_today(db=db, agent_id=agent_id, tz_offset_hours=tz_offset_hours)
     
-    # Execute both tasks in parallel
-    language, has_messages_today = await asyncio.gather(
+    async def fetch_recent_messages():
+        if max_history_rounds <= 0:
+            return []
+        return await chat_service.get_recent_rounds(db=db, agent_id=agent_id, max_rounds=max_history_rounds)
+    
+    # Execute all tasks in parallel
+    language, has_messages_today, recent_messages = await asyncio.gather(
         fetch_language(),
-        check_has_messages_today()
+        check_has_messages_today(),
+        fetch_recent_messages()
     )
     
     # Step 4: Determine greeting behavior
@@ -100,7 +108,24 @@ async def get_agent_config(
     enable_greeting = not has_messages_today
     greeting = agent.voice_opening if enable_greeting else None
     
-    # Step 5: Build response
+    # Step 5: Convert recent messages to simplified format
+    # msg.content is List[MessageBody], need to convert to List[dict]
+    # Filter out audio content (not useful for LLM context)
+    recent_msgs = None
+    if recent_messages:
+        recent_msgs = []
+        for msg in recent_messages:
+            filtered_content = [
+                part.model_dump() for part in msg.content 
+                if part.message_type != "audio"
+            ]
+            # Skip messages with no content after filtering
+            if filtered_content:
+                recent_msgs.append(RecentMessage(role=msg.role, content=filtered_content))
+        # Set to None if empty after filtering
+        recent_msgs = recent_msgs if recent_msgs else None
+    
+    # Step 6: Build response
     response = AgentConfigResponse(
         agent_id=agent.agent_id,
         name=agent.name,
@@ -110,6 +135,7 @@ async def get_agent_config(
         voice_closing=agent.voice_closing,
         enable_greeting=enable_greeting,
         greeting=greeting,
+        recent_messages=recent_msgs,
     )
     
     return success_response(data=response.model_dump(exclude_none=True))

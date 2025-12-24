@@ -244,3 +244,37 @@ class ChatMessage:
         count = result.scalar_one()
         return count > 0
 
+    @staticmethod
+    async def get_recent_rounds(
+        db: AsyncSession,
+        agent_id: str,
+        max_rounds: int = 10
+    ) -> List[ChatMessageModel]:
+        """
+        Get recent conversation rounds for context loading
+        
+        A round = user message + agent response pair.
+        Returns messages in chronological order (oldest first) for dialogue context.
+        
+        Args:
+            db: Database session
+            agent_id: Agent ID
+            max_rounds: Maximum number of conversation rounds (user+agent pairs)
+            
+        Returns:
+            List of messages in chronological order (oldest first)
+        """
+        # Fetch 2x max_rounds to ensure we get complete pairs
+        # Order by message_time DESC to get latest first, then reverse
+        query = select(ChatMessageModel).where(
+            ChatMessageModel.agent_id == agent_id
+        ).order_by(ChatMessageModel.message_time.desc()).limit(max_rounds * 2)
+        
+        result = await db.execute(query)
+        messages: List[ChatMessageModel] = list(result.scalars().all())
+        
+        # Reverse to chronological order (oldest first)
+        messages.reverse()
+        
+        return messages
+

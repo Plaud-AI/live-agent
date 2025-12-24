@@ -947,6 +947,13 @@ class ConnectionHandler:
         # 0: disable, 1: text only, 2: text + audio
         live_api_config = self.config.get("live-agent-api", {})
         self.chat_history_conf = live_api_config.get("chat_history_conf", 2)
+        
+        # Load recent conversation history for dialogue context
+        recent_messages = private_config.get("recent_messages")
+        if recent_messages:
+            loaded = self.dialogue.load_history_messages(recent_messages)
+            if loaded > 0:
+                self.logger.bind(tag=TAG).info(f"Loaded {loaded} history messages for dialogue context")
 
     # ensure_agent_ready is used to ensure the agent is ready when the wake word is detected
     async def ensure_agent_ready(self, wake_word: str | None = None) -> bool:
