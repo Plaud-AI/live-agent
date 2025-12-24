@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -78,6 +78,12 @@ class VoiceConfig(BaseModel):
     provider: str = "fishspeech"     # TTS provider: fishspeech or minimax
 
 
+class RecentMessage(BaseModel):
+    """Simplified message for dialogue context loading"""
+    role: int  # 1: user, 2: agent
+    content: List[dict]  # [{"message_type": "text|audio|image", "message_content": "..."}]
+
+
 class AgentConfigResponse(BaseModel):
     """Agent configuration for xiaozhi-server"""
     agent_id: str
@@ -89,5 +95,6 @@ class AgentConfigResponse(BaseModel):
     voice_closing: Optional[str] = None
     enable_greeting: bool = True         # Whether to play greeting (false if already chatted today)
     greeting: Optional[str] = None       # Greeting text (same as voice_opening, only set when enabled)
+    recent_messages: Optional[List[RecentMessage]] = None  # Recent conversation history for context
     raw_voice_id: Optional[str] = Field(default=None, exclude=True)  # Internal use: raw voice_id before enrichment
 
