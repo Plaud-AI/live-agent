@@ -76,6 +76,69 @@ class Dialogue:
         else:
             self.put(Message(role="system", content=new_content))
 
+    def load_history_messages(self, messages: List[Dict]) -> int:
+        """
+        Load historical messages from API into dialogue context
+        
+        Messages format from live-agent-api:
+        [
+            {"role": 1, "content": [{"message_type": "text", "message_content": "..."}]},
+            {"role": 2, "content": [{"message_type": "text", "message_content": "..."}]},
+        ]
+        
+        Note: Audio content is skipped (not useful for LLM context)
+        
+        Args:
+            messages: List of message dicts from API (role: 1=user, 2=agent)
+            
+        Returns:
+            Number of messages loaded
+        """
+        if not messages:
+            return 0
+        
+        loaded = 0
+        for msg in messages:
+            role_num = msg.get("role")
+            content_list = msg.get("content", [])
+            
+            # Map role: 1=user, 2=assistant
+            role = "user" if role_num == 1 else "assistant"
+            
+            # Build content: support multimodal (text, image, file)
+            # Skip audio - not useful for LLM context
+            multimodal_parts = []
+            text_content = ""
+            
+            for part in content_list:
+                msg_type = part.get("message_type")
+                msg_content = part.get("message_content", "")
+                
+                if msg_type == "text":
+                    text_content = msg_content
+                    multimodal_parts.append({"type": "text", "text": msg_content})
+                elif msg_type == "image":
+                    # Image URL (OpenAI compatible format)
+                    multimodal_parts.append({"type": "input_image", "image_url": msg_content})
+                elif msg_type == "file":
+                    # File URL (OpenAI compatible format)
+                    multimodal_parts.append({"type": "input_file", "file_url": msg_content})
+                # Skip audio type - not useful for LLM dialogue context
+            
+            # Determine final content format
+            # If only text, use simple string; if multimodal, use list
+            if len(multimodal_parts) == 1 and multimodal_parts[0].get("type") == "text":
+                final_content = text_content
+            elif len(multimodal_parts) > 0:
+                final_content = multimodal_parts
+            else:
+                continue  # Skip empty messages
+            
+            self.put(Message(role=role, content=final_content))
+            loaded += 1
+        
+        return loaded
+
     def get_llm_dialogue_with_memory(
         self, memory_str: str = None, voiceprint_config: dict = None
     ) -> List[Dict[str, str]]:
