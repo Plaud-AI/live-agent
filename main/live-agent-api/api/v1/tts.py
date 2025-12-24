@@ -86,11 +86,9 @@ async def synthesize_speech(
         # 调用 Fish Audio TTS（与 fish_single_stream.py 保持一致的调用方式）
         audio_bytes = await fish_client.tts.convert(
             text=text,
-            reference_id=request.voice_id,  # 可以为 None，使用默认音色
+            reference_id=voice_id,  # 可以为 None，使用默认音色
             model="speech-1.6",  # 指定模型，与 fish_single_stream.py 一致
             config=tts_config,
-            reference_id=voice_id,  # 可以为 None，使用默认音色
-            format=fish_format
         )
         
         logger.bind(tag=TAG).info(f"TTS from Fish Audio: {len(audio_bytes)} bytes ({fish_format}, {request.sample_rate}Hz)")
