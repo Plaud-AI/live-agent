@@ -1,14 +1,16 @@
 """
 TTS (Text-to-Speech) API endpoints
 简单封装 Fish Audio TTS，供移动端/嵌入式设备调用
+支持 mp3, wav, pcm, opus 格式输出
 """
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 
 from infra.fishaudio import get_fish_audio
 from config.logger import setup_logging
+from utils.opus_encoder import pcm_to_opus_stream, pcm_to_opus_raw
 
 TAG = __name__
 logger = setup_logging(TAG)
@@ -20,7 +22,8 @@ class TTSSynthesizeRequest(BaseModel):
     """TTS 合成请求"""
     text: str  # 要合成的文本
     voice_id: Optional[str] = None  # 可选的音色 ID (Fish Audio voice reference_id)
-    format: str = "mp3"  # 输出格式: mp3, wav, pcm
+    format: Literal["mp3", "wav", "pcm", "opus", "opus_raw"] = "mp3"  # 输出格式
+    sample_rate: int = 16000  # 采样率（仅对 opus 格式有效），默认 16000 Hz
 
 
 @router.post("/synthesize", summary="Text to Speech Synthesis")
@@ -33,10 +36,16 @@ async def synthesize_speech(
     
     - **text**: 要合成的文本内容
     - **voice_id**: 可选，Fish Audio 音色 ID。不提供则使用默认音色
-    - **format**: 输出格式，支持 mp3(默认), wav, pcm
+    - **format**: 输出格式，支持:
+        - mp3 (默认): MP3 格式
+        - wav: WAV 格式
+        - pcm: 原始 PCM 数据 (16位小端，单声道)
+        - opus: Opus 格式（带帧头，与语音对话返回给设备的格式一致）
+        - opus_raw: 原始 Opus 帧数据（无帧头）
+    - **sample_rate**: 采样率，仅对 opus/opus_raw 格式有效，默认 16000 Hz
     
     Returns:
-        音频文件流 (audio/mpeg 或 audio/wav)
+        音频文件流
     """
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
@@ -47,31 +56,60 @@ async def synthesize_speech(
     if len(text) > 1000:
         raise HTTPException(status_code=400, detail="Text too long, max 1000 characters")
     
-    logger.bind(tag=TAG).info(f"TTS request: text='{text[:50]}...', voice_id={request.voice_id}, format={request.format}")
+    logger.bind(tag=TAG).info(
+        f"TTS request: text='{text[:50]}...', voice_id={request.voice_id}, "
+        f"format={request.format}, sample_rate={request.sample_rate}"
+    )
     
     try:
+        # 判断是否需要 opus 格式转换
+        is_opus_format = request.format in ("opus", "opus_raw")
+        
+        # Fish Audio API 请求格式：opus 需要先获取 pcm 再转换
+        fish_format = "pcm" if is_opus_format else request.format
+        
         # 调用 Fish Audio TTS
         audio_bytes = await fish_client.tts.convert(
             text=text,
             reference_id=request.voice_id,  # 可以为 None，使用默认音色
-            format=request.format
+            format=fish_format
         )
         
-        logger.bind(tag=TAG).info(f"TTS success, audio size: {len(audio_bytes)} bytes")
+        logger.bind(tag=TAG).info(f"TTS from Fish Audio: {len(audio_bytes)} bytes ({fish_format})")
+        
+        # 如果需要 opus 格式，进行 PCM -> Opus 转换
+        if is_opus_format:
+            if request.format == "opus":
+                # 带帧头的 opus 格式（与语音对话返回给设备的格式一致）
+                audio_bytes = pcm_to_opus_stream(audio_bytes, sample_rate=request.sample_rate)
+            else:
+                # 原始 opus 帧数据
+                audio_bytes = pcm_to_opus_raw(audio_bytes, sample_rate=request.sample_rate)
+            
+            logger.bind(tag=TAG).info(f"Opus encoded: {len(audio_bytes)} bytes")
         
         # 根据格式返回不同的 Content-Type
         content_type_map = {
             "mp3": "audio/mpeg",
             "wav": "audio/wav",
-            "pcm": "audio/pcm"
+            "pcm": "audio/pcm",
+            "opus": "audio/opus",
+            "opus_raw": "audio/opus"
         }
         content_type = content_type_map.get(request.format, "audio/mpeg")
+        
+        # 文件扩展名
+        extension_map = {
+            "opus": "opus",
+            "opus_raw": "opus"
+        }
+        extension = extension_map.get(request.format, request.format)
         
         return Response(
             content=audio_bytes,
             media_type=content_type,
             headers={
-                "Content-Disposition": f"inline; filename=tts.{request.format}"
+                "Content-Disposition": f"inline; filename=tts.{extension}"
             }
         )
         
