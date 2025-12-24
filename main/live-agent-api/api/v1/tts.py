@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, Literal
 
+from fishaudio.types.tts import TTSConfig
 from infra.fishaudio import get_fish_audio
 from config.logger import setup_logging
 from utils.opus_encoder import pcm_to_opus_stream, pcm_to_opus_raw
@@ -68,14 +69,24 @@ async def synthesize_speech(
         # Fish Audio API 请求格式：opus 需要先获取 pcm 再转换
         fish_format = "pcm" if is_opus_format else request.format
         
-        # 调用 Fish Audio TTS
+        # 构建 TTS 配置（参考 fish_single_stream.py 的配置）
+        # Fish Audio 支持 sample_rate 参数，会返回对应采样率的 PCM 数据
+        tts_config = TTSConfig(
+            format=fish_format,
+            sample_rate=request.sample_rate,  # 使用请求指定的采样率
+            normalize=True,
+            latency="balanced",
+        )
+        
+        # 调用 Fish Audio TTS（与 fish_single_stream.py 保持一致的调用方式）
         audio_bytes = await fish_client.tts.convert(
             text=text,
             reference_id=request.voice_id,  # 可以为 None，使用默认音色
-            format=fish_format
+            model="speech-1.6",  # 指定模型，与 fish_single_stream.py 一致
+            config=tts_config
         )
         
-        logger.bind(tag=TAG).info(f"TTS from Fish Audio: {len(audio_bytes)} bytes ({fish_format})")
+        logger.bind(tag=TAG).info(f"TTS from Fish Audio: {len(audio_bytes)} bytes ({fish_format}, {request.sample_rate}Hz)")
         
         # 如果需要 opus 格式，进行 PCM -> Opus 转换
         if is_opus_format:
