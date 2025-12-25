@@ -1107,6 +1107,11 @@ class ConnectionHandler:
             if self.base_prompt:
                 if memories and memories.strip():
                     turn_prompt = self.base_prompt.replace("{relevant_memory}", memories)
+                else:
+                    turn_prompt = self.base_prompt.replace(
+                        "{relevant_memory}", 
+                        "No relevant memories retrieved for this turn."
+                    )
                 # Update system message for this turn
                 self.dialogue.update_system_message(turn_prompt)
 
