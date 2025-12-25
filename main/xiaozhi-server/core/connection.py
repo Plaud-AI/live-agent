@@ -188,6 +188,8 @@ class ConnectionHandler:
 
         # 标记连接是否来自MQTT
         self.conn_from_mqtt_gateway = False
+        # identify the connection is from device-end (audio without header)
+        self.conn_from_device = False
 
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(config, self.logger)
@@ -243,6 +245,11 @@ class ConnectionHandler:
             self.conn_from_mqtt_gateway = request_path.endswith("?from=mqtt_gateway")
             if self.conn_from_mqtt_gateway:
                 self.logger.bind(tag=TAG).info("连接来自:MQTT网关")
+            
+            # Device-end connection: no agent_id in headers (audio without header)
+            self.conn_from_device = not self.agent_id
+            if self.conn_from_device:
+                self.logger.bind(tag=TAG).info("connection is from device-end (audio without header)")
 
             # 初始化活动时间戳
             self.last_activity_time = time.time() * 1000
@@ -943,14 +950,14 @@ class ConnectionHandler:
         """Apply agent-specific runtime config to connection"""
         if not private_config:
             return
-        voice_id = private_config.get("voice_id")
+        voice = private_config.get("voice")
+        voice_id = voice.get("reference_id")
+        provider = voice.get("provider")
         if voice_id:
-            if "TTS" in self.config and "FishSpeech" in self.config.get("TTS", {}):
-                self.config["TTS"]["FishSpeech"]["reference_id"] = voice_id
-            if "TTS" in self.config and "FishDualStreamTTS" in self.config.get("TTS", {}):
-                self.config["TTS"]["FishDualStreamTTS"]["reference_id"] = voice_id
-            if "TTS" in self.config and "FishSingleStreamTTS" in self.config.get("TTS", {}):
+            if provider == "fishspeech":
+                self.config["selected_module"]["TTS"] = "FishSingleStreamTTS"
                 self.config["TTS"]["FishSingleStreamTTS"]["reference_id"] = voice_id
+            # TODO: add other TTS providers support(Like minimax, etc.)
         self._instruction = private_config.get("instruction", self._instruction)
         # greeting config
         self._greeting_config["enable_greeting"] = private_config.get("enable_greeting", False)
@@ -962,6 +969,13 @@ class ConnectionHandler:
         # 0: disable, 1: text only, 2: text + audio
         live_api_config = self.config.get("live-agent-api", {})
         self.chat_history_conf = live_api_config.get("chat_history_conf", 2)
+        
+        # Load recent conversation history for dialogue context
+        recent_messages = private_config.get("recent_messages")
+        if recent_messages:
+            loaded = self.dialogue.load_history_messages(recent_messages)
+            if loaded > 0:
+                self.logger.bind(tag=TAG).info(f"Loaded {loaded} history messages for dialogue context")
 
     # ensure_agent_ready is used to ensure the agent is ready when the wake word is detected
     async def ensure_agent_ready(self, wake_word: str | None = None) -> bool:

@@ -209,6 +209,40 @@ class ChatService:
         """
         return await ChatMessageRepo.has_messages_today(db=db, agent_id=agent_id, tz_offset_hours=tz_offset_hours)
 
+    async def get_recent_rounds(
+        self,
+        db: AsyncSession,
+        agent_id: str,
+        max_rounds: int = 10
+    ) -> List[ChatMessageSchema]:
+        """
+        Get recent conversation rounds for dialogue context loading
+        
+        Args:
+            db: Database session
+            agent_id: Agent ID
+            max_rounds: Maximum number of conversation rounds
+            
+        Returns:
+            List of ChatMessage in chronological order (oldest first)
+        """
+        messages = await ChatMessageRepo.get_recent_rounds(
+            db=db,
+            agent_id=agent_id,
+            max_rounds=max_rounds
+        )
+        
+        return [
+            ChatMessageSchema(
+                message_id=msg.message_id,
+                agent_id=msg.agent_id,
+                role=msg.role,
+                content=msg.content,
+                message_time=msg.message_time,
+            )
+            for msg in messages
+        ]
+
 
 # Global singleton instance
 chat_service = ChatService()

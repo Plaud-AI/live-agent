@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+from typing import Optional, List
+from pydantic import BaseModel, Field
 
 
 # ==================== Template Schemas ====================
@@ -71,15 +71,30 @@ class AgentListResponse(BaseModel):
     has_more: bool = False
 
 
+class VoiceConfig(BaseModel):
+    """Voice configuration for TTS"""
+    voice_id: str                    # Our voice_id (voice_{ulid}) or Fish discover ID
+    reference_id: str                # Provider's voice ID (Fish Audio ID, MiniMax ID)
+    provider: str = "fishspeech"     # TTS provider: fishspeech or minimax
+
+
+class RecentMessage(BaseModel):
+    """Simplified message for dialogue context loading"""
+    role: int  # 1: user, 2: agent
+    content: List[dict]  # [{"message_type": "text|audio|image", "message_content": "..."}]
+
+
 class AgentConfigResponse(BaseModel):
     """Agent configuration for xiaozhi-server"""
     agent_id: str
     name: str
-    voice_id: Optional[str] = None
-    language: Optional[str] = None  # Voice language from Fish Audio
+    voice: Optional[VoiceConfig] = None  # Voice configuration with provider info
+    language: Optional[str] = None       # Voice language from Fish Audio
     instruction: str
     voice_opening: Optional[str] = None
     voice_closing: Optional[str] = None
-    enable_greeting: bool = True  # Whether to play greeting (false if already chatted today)
-    greeting: Optional[str] = None  # Greeting text (same as voice_opening, only set when enabled)
+    enable_greeting: bool = True         # Whether to play greeting (false if already chatted today)
+    greeting: Optional[str] = None       # Greeting text (same as voice_opening, only set when enabled)
+    recent_messages: Optional[List[RecentMessage]] = None  # Recent conversation history for context
+    raw_voice_id: Optional[str] = Field(default=None, exclude=True)  # Internal use: raw voice_id before enrichment
 

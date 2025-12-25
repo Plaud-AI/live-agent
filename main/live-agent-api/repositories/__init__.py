@@ -6,7 +6,7 @@ Repositories package - ORM models and data access layer
 from .user import UserModel
 from .agent import AgentModel
 from .agent_template import AgentTemplateModel
-from .voice import VoiceModel
+from .voice import VoiceModel, VoiceCategory, VoiceProvider, GenderTag, AgeTag, SYSTEM_VOICE_LIBRARY_OWNER
 from .chat import ChatMessageModel
 from .device import DeviceModel, AgentDeviceBindingModel
 from .memory_sharing import MemorySharingModel, MemorySharingTargetModel
@@ -42,4 +42,10 @@ __all__ = [
     "Device",
     "AgentDeviceBinding",
     "MemorySharingRepository",
+    # Voice Enums
+    "VoiceCategory",
+    "VoiceProvider",
+    "GenderTag",
+    "AgeTag",
+    "SYSTEM_VOICE_LIBRARY_OWNER",
 ]
