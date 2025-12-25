@@ -14,13 +14,47 @@ TAG = __name__
 DEFAULT_AGENT_ID = "xiaozhi_agent"
 DEFAULT_BASE_URL = "https://api.memu.so"
 
-# Category 到中文标题的映射
+# Category display titles with brief descriptions
 CATEGORY_TITLES = {
-    "profiles": "用户画像",
-    "events": "近期事件",
-    "activities": "近期活动",
-    "preferences": "用户偏好",
+    "profile": "Profile (user background and characteristics)",
+    "event": "Events (important events in recent 7 days)",
 }
+
+
+def _process_summary(text: str) -> str:
+    """Process MemU summary: remove first-level header and adjust remaining headers
+    
+    MemU summary starts with a # header (e.g. "# 事件", "# 用户档案") which is redundant
+    since we already add our own title. We remove it and adjust remaining headers.
+    
+    Args:
+        text: Markdown text from MemU summary
+    
+    Returns:
+        Processed text with first header removed and headers adjusted
+    """
+    import re
+    
+    lines = text.strip().split('\n')
+    
+    # Remove first line ONLY if it's a single # header (e.g. "# 用户档案", not "## 近期动态")
+    if lines and re.match(r'^#(?!#)\s+\S', lines[0]):
+        lines = lines[1:]
+    
+    # Skip any leading empty lines after removing the header
+    while lines and not lines[0].strip():
+        lines = lines[1:]
+    
+    result = '\n'.join(lines)
+    
+    # Adjust remaining header levels: ## -> ####, ### -> #####, etc.
+    def replace_header(match):
+        hashes = match.group(1)
+        content = match.group(2)
+        # Add 2 levels: ## becomes ####
+        return "#" * (len(hashes) + 2) + " " + content
+    
+    return re.sub(r'^(#{1,6})\s+(.+)$', replace_header, result, flags=re.MULTILINE)
 
 
 def require_memu(func: Callable) -> Callable:
@@ -280,6 +314,106 @@ class MemoryProvider(MemoryProviderBase):
             logger.bind(tag=TAG).error(f"查询记忆失败: {str(e)}")
             logger.bind(tag=TAG).error(f"详细错误: {traceback.format_exc()}")
             return ""
+
+    @require_memu
+    def get_user_persona(self, client_timezone: str = None) -> Optional[str]:
+        """Get user persona with category summaries and recent events from MemU
+        
+        Args:
+            client_timezone: Client timezone string (e.g., 'Asia/Shanghai', 'UTC+8')
+        
+        Retrieves:
+        - profile category: summary only
+        - event category: memory items from last 7 days
+        
+        Returns:
+            Formatted user persona string for system prompt
+        """
+        from datetime import datetime, timedelta
+        from core.utils.current_time import parse_timezone
+        
+        try:
+            result = self.client.retrieve_default_categories(
+                user_id=self.role_id,
+                agent_id=self.agent_id,
+                want_memory_items=True
+            )
+            
+            logger.bind(tag=TAG).debug(f"User persona result: {result}")
+            if not result.categories:
+                return None
+            
+            # Use client timezone for "today/yesterday" calculation
+            tz = parse_timezone(client_timezone)
+            now = datetime.now(tz)
+            seven_days_ago = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            output = []
+            
+            for cat in result.categories:
+                # Only process profile and event categories
+                if cat.name not in ("profile", "event"):
+                    continue
+                
+                # Add category title
+                title = CATEGORY_TITLES.get(cat.name, cat.name)
+                section = [f"### {title}"]
+                
+                # For profile: add summary; for event: only add recent memory items
+                if cat.name == "profile" and cat.summary and cat.summary.strip():
+                    processed_summary = _process_summary(cat.summary.strip())
+                    if processed_summary:
+                        section.append(processed_summary)
+                        logger.bind(tag=TAG).debug(f"Profile summary: {processed_summary}")
+                
+                # For event category, add recent memory items (last 7 days), skip summary
+                if cat.name == "event" and cat.memory_items and cat.memory_items.memories:
+                    from datetime import timezone as dt_timezone
+                    recent_items = []
+                    for memory in cat.memory_items.memories:
+                        happened_at = memory.happened_at
+                        if not happened_at:
+                            continue
+                        # Normalize to aware datetime for comparison
+                        if happened_at.tzinfo is None:
+                            # Assume naive datetime is UTC
+                            happened_at = happened_at.replace(tzinfo=dt_timezone.utc)
+                        # Convert to client timezone for calculation
+                        happened_at_local = happened_at.astimezone(tz)
+                        if happened_at_local >= seven_days_ago:
+                            # Calculate time string with hour-level granularity
+                            time_delta = now - happened_at_local
+                            total_hours = int(time_delta.total_seconds() / 3600)
+                            
+                            if total_hours < 1:
+                                time_str = "Within the last hour"
+                            elif total_hours < 24:
+                                time_str = f"{total_hours} hours ago" if total_hours > 1 else "1 hour ago"
+                            elif time_delta.days == 1:
+                                time_str = "Yesterday"
+                            else:
+                                time_str = f"{time_delta.days} days ago"
+                            recent_items.append((happened_at_local, time_str, memory.content))
+                    
+                    if recent_items:
+                        # Sort by time descending (most recent first)
+                        recent_items.sort(key=lambda x: x[0], reverse=True)
+                        for _, time_str, content in recent_items[:10]:
+                            section.append(f"- [{time_str}] {content}")
+                        logger.bind(tag=TAG).debug(f"Recent events count: {len(recent_items)}")
+                output.append("\n".join(section))
+            
+            if not output:
+                return None
+            
+            persona_str = "\n\n".join(output)
+            logger.bind(tag=TAG).debug(f"User persona loaded, length: {len(persona_str)}")
+            return persona_str
+            
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"Failed to get user persona: {str(e)}")
+            logger.bind(tag=TAG).debug(traceback.format_exc())
+            return None
 
     # ==================== Memory Item CRUD ====================
 

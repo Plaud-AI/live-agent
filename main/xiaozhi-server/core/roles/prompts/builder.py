@@ -36,6 +36,60 @@ WEEKDAY_MAP = {
 }
 
 
+def _parse_timezone(tz_str: str) -> tuple:
+    """Parse timezone string and return (tzinfo, display_name)
+    
+    Supports formats:
+    - IANA timezone: 'Asia/Shanghai', 'America/New_York'
+    - UTC offset: 'UTC+8', 'UTC-7', '+8', '-5'
+    
+    Returns:
+        (tzinfo object, display string for prompt)
+    """
+    from datetime import timezone as dt_timezone, timedelta
+    
+    if not tz_str:
+        return ZoneInfo("UTC"), "UTC"
+    
+    tz_str = tz_str.strip()
+    
+    # Try UTC offset format first: UTC+8, UTC-7, +8, -5
+    upper_tz = tz_str.upper()
+    if upper_tz.startswith("UTC") or tz_str.startswith("+") or tz_str.startswith("-"):
+        try:
+            # Remove "UTC" prefix if present
+            offset_str = upper_tz.replace("UTC", "").strip()
+            if not offset_str or offset_str == "0":
+                return dt_timezone.utc, "UTC"
+            
+            # Parse hours (and optional minutes)
+            if ":" in offset_str:
+                parts = offset_str.split(":")
+                hours = int(parts[0])
+                minutes = int(parts[1]) if len(parts) > 1 else 0
+            else:
+                hours = int(offset_str)
+                minutes = 0
+            
+            # Create timezone with offset
+            offset = timedelta(hours=hours, minutes=minutes)
+            tz = dt_timezone(offset)
+            
+            # Format display name
+            sign = "+" if hours >= 0 else ""
+            display = f"UTC{sign}{hours}" if minutes == 0 else f"UTC{sign}{hours}:{abs(minutes):02d}"
+            return tz, display
+        except (ValueError, TypeError):
+            pass
+    
+    # Try IANA timezone format
+    try:
+        return ZoneInfo(tz_str), tz_str
+    except Exception:
+        logger.bind(tag=TAG).warning(f"Invalid timezone: {tz_str}, using UTC")
+        return ZoneInfo("UTC"), "UTC"
+
+
 def _build_system_context(
     timezone: str,
     language: str,
@@ -49,25 +103,21 @@ def _build_system_context(
     """构建系统上下文部分（时间、时区、语言、位置、天气等）
     
     Args:
-        timezone: 时区字符串（如 'Asia/Shanghai', 'America/New_York'）
-        language: 语言代码（'zh' 或 'en'）
-        today_date: 今天日期（可选，如未提供则自动计算）
-        today_weekday: 今天星期几（可选，如未提供则自动计算）
-        lunar_date: 今天农历（可选）
-        local_address: 用户所在城市（可选）
-        weather_info: 天气信息（可选）
-        device_id: 设备ID（可选）
+        timezone: timezone string:
+                  - IANA format: 'Asia/Shanghai', 'America/New_York'
+                  - UTC offset: 'UTC+8', 'UTC-7', '+8', '-5'
+        language: language code ('zh' or 'en')
+        today_date: today's date (optional, auto-calculated if not provided)
+        today_weekday: today's weekday (optional, auto-calculated if not provided)
+        lunar_date: today's lunar date (optional)
+        local_address: user's location (optional)
+        weather_info: weather information (optional)
+        device_id: device ID (optional)
         
     Returns:
-        格式化的系统上下文字符串
+        formatted system context string
     """
-    # TODO: Here, we need to use the client ip to figure out the timezone
-    try:
-        tz = ZoneInfo(timezone)
-    except Exception:
-        tz = ZoneInfo("UTC")
-        timezone = "UTC"
-        logger.bind(tag=TAG).warning(f"无效的时区配置: {timezone}，使用 UTC")
+    tz, tz_display = _parse_timezone(timezone)
 
     now = datetime.now(tz)
     
@@ -91,7 +141,7 @@ def _build_system_context(
     # 构建系统上下文规则
     system_rules = []
     
-    formatted_datetime = f"{now.strftime('%A')}, {time_str} {today_date} ({timezone})"
+    formatted_datetime = f"{now.strftime('%A')}, {time_str} {today_date} ({tz_display})"
     system_rules.append(f"- The user started this conversation on {formatted_datetime}")
     if local_address:
         system_rules.append(f"- User location: {local_address}")
@@ -165,27 +215,28 @@ def build_system_prompt(
         device_id=device_id,
     )
     
-    # Step 3: 构建用户画像部分（可选）
-    user_persona_prompt = ""
+    # Step 3: 构建用户记忆块（可选）
+    user_memory_block = ""
     if user_persona:
-        user_persona_prompt = build_user_persona_prompt(user_persona)
+        user_memory_block = user_persona.strip()
     
     # Step 4: 获取语言特定提示
     language_specific_prompt = LANG_MAP.get(language, "")
     
-    # Step 6: 填充主模板
+    # Step 5: 填充主模板
     template_vars = {
         "profile": profile,
         "system_context": system_context,
-        # "user_persona_prompt": user_persona_prompt,
-        # "language_specific_prompt": language_specific_prompt
+        "user_memory_block": user_memory_block,
     }
     
-    # Step 7: 填充模板（不包含 profile）
+    # Step 6: 填充模板
     try:
-        system_prompt= ROLE_TEXT.format(**template_vars)
+        system_prompt = ROLE_TEXT.format(**template_vars)
     except KeyError as e:
-        logger.bind(tag=TAG).error(f"模板变量缺失: {e}")
+        logger.bind(tag=TAG).error(f"Template variable missing: {e}")
         system_prompt = profile_content
+    
+    logger.bind(tag=TAG).info(f"Built system prompt: {system_prompt}")
     
     return system_prompt

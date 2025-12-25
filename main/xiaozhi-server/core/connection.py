@@ -566,21 +566,24 @@ class ConnectionHandler:
         
         # 获取用户画像（如果 Memory 模块已初始化）
         user_persona = None
+        client_timezone = self.headers.get("timezone")
         if self.memory and hasattr(self.memory, 'get_user_persona'):
             try:
-                user_persona = self.memory.get_user_persona()
+                user_persona = self.memory.get_user_persona(client_timezone=client_timezone)
                 if user_persona:
                     self.logger.bind(tag=TAG).debug(f"获取到用户画像，长度: {len(user_persona)}")
             except Exception as e:
                 self.logger.bind(tag=TAG).warning(f"获取用户画像失败: {e}")
         
-        # 构建增强的系统提示词（返回 (enhanced_prompt, role_tts_config)）
+        # priority: client timezone > config timezone
+        client_timezone = self.headers.get("timezone")
         result = self.prompt_manager.build_enhanced_prompt(
             user_prompt=self._instruction,
             device_id=self.device_id,
             client_ip=self.client_ip,
             language=self._language,
             user_persona=user_persona,
+            client_timezone=client_timezone,
         )
         
         # 解包返回值
