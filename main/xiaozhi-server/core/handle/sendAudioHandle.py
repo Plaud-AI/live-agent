@@ -333,6 +333,9 @@ async def send_stt_message(conn, text):
         display_text = text
     stt_text = textUtils.get_string_no_punctuation_or_emoji(display_text)
     
+    # 官方协议时序：先发 tts start，再发 stt
+    # 这样设备可以提前准备好接收音频
+    conn.client_is_speaking = True
     await send_tts_message(conn, "start")
     await conn.websocket.send(
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
