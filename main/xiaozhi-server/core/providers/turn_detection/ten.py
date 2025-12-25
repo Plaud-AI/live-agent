@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import TYPE_CHECKING
 import httpx
 
@@ -93,10 +94,11 @@ class TurnDetectionProvider(TurnDetectionProviderBase):
         """Task that calls turn detection, then waits for appropriate delay
         
         Flow:
-        1. Call turn detection service to get result
-        2. If finished: wait min_endpoint_delay
-        3. If unfinished: wait max_endpoint_delay
-        4. After delay completes, call startToChat and report ASR
+        1. Cancel any pending memory task from previous turn
+        2. Call turn detection service to get result
+        3. If finished: start memory prefetch in parallel with delay wait
+        4. Wait for the delay (memory prefetch runs in parallel)
+        5. After delay completes, call on_end_of_turn
         
         Args:
             conn: Connection handler
@@ -107,21 +109,71 @@ class TurnDetectionProvider(TurnDetectionProviderBase):
         Raises:
             asyncio.CancelledError: If cancelled by new speech
         """
+        # Step 1: Cancel any pending memory task from previous turn
+        if conn._memory_task is not None:
+            if not conn._memory_task.done():
+                conn._memory_task.cancel()
+                logger.bind(tag=TAG).debug("Cancelled previous memory task")
+            conn._memory_task = None
+        
         full_text = conn.asr_text_buffer
         
-        # Step 1: Call turn detection service
+        # Step 2: Call turn detection service
         is_finished = await self._call_turn_detection(full_text)
         
-        # Step 2: Calculate sleep time based on result
+        # Step 3: Calculate sleep time based on result
         sleep_time = self._calculate_sleep_time(conn, is_finished)
         
-        # Step 3: Wait for the delay
+        # Step 4: Start memory prefetch in parallel (if finished and memory available)
+        if is_finished and conn.memory is not None:
+            logger.bind(tag=TAG).debug(
+                f"Starting memory prefetch: '{full_text[:50]}...'"
+            )
+            conn._memory_task = asyncio.create_task(
+                self._prefetch_memory(conn, full_text)
+            )
+        
+        # Step 5: Wait for the delay (memory prefetch runs in parallel)
         if sleep_time > 0:
             await asyncio.sleep(sleep_time / 1000)  # Convert ms to seconds
         
-        # Step 4: After delay, trigger end of turn processing
+        # Step 6: Cancel memory task if still running after delay
+        if conn._memory_task is not None:
+            if not conn._memory_task.done():
+                conn._memory_task.cancel()
+                logger.bind(tag=TAG).info("Memory prefetch timeout, cancelled")
+            conn._memory_task = None
+        
+        # Step 7: After delay, trigger end of turn processing
         logger.bind(tag=TAG).info("Endpoint delay completed, triggering on_end_of_turn")
         await conn.on_end_of_turn()
+    
+    async def _prefetch_memory(self, conn: "ConnectionHandler", query: str) -> None:
+        """Prefetch memory during endpoint delay
+        
+        Results are stored in conn._prefetched_memory_result for later use in chat().
+        
+        Args:
+            conn: Connection handler with memory provider
+            query: Full ASR text to query memory with
+        """
+        start_time = time.time()
+        client_timezone = conn.client_timezone
+        
+        try:
+            result = await conn.memory.query_memory(query, client_timezone=client_timezone),
+            conn.relevant_memories_this_turn = result
+            
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.bind(tag=TAG).info(
+                f"Memory prefetch done: {elapsed_ms:.0f}ms, len={len(result) if result else 0}"
+            )
+        except asyncio.TimeoutError:
+            logger.bind(tag=TAG).warning("Memory prefetch timeout")
+            conn.relevant_memories_this_turn = "No relevant memories retrieved for this turn."
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"Memory prefetch error: {e}")
+            conn.relevant_memories_this_turn = "No relevant memories retrieved for this turn."
     
     def check_end_of_turn(self, conn: "ConnectionHandler"):
         """Check if the user has finished their turn with endpoint delay mechanism

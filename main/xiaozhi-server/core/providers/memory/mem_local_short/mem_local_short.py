@@ -199,7 +199,7 @@ class MemoryProvider(MemoryProviderBase):
 
         return self.short_memory
 
-    async def query_memory(self, query: str) -> str:
+    async def query_memory(self, query: str, client_timezone: str = None) -> str:
         return self.short_memory
 
     def get_user_persona(self) -> Optional[str]:
