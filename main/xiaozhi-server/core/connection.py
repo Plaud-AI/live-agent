@@ -1018,7 +1018,11 @@ class ConnectionHandler:
 
         # 更新已预初始化的 TTS 实例的 reference_id（voice_id）
         # 因为预初始化时还没有 agent 配置，reference_id 为 null
+        # voice_id 可能在顶层或嵌套在 voice 对象中
         voice_id = private_config.get("voice_id")
+        if not voice_id:
+            voice_config = private_config.get("voice", {})
+            voice_id = voice_config.get("voice_id") or voice_config.get("reference_id")
         if voice_id and self.tts and hasattr(self.tts, "reference_id"):
             self.tts.reference_id = voice_id
             self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
