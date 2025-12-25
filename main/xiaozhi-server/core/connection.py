@@ -14,7 +14,6 @@ import websockets
 from core.utils.util import (
     extract_json_from_string,
 )
-from core.utils import textUtils
 from typing import Dict, Any
 from collections import deque
 from core.utils.modules_initialize import (
@@ -54,7 +53,7 @@ auto_import_modules("plugins_func.functions")
 class TTSException(RuntimeError):
     pass
 
- 
+
 class ConnectionHandler:
     def __init__(
         self,
@@ -88,8 +87,6 @@ class ConnectionHandler:
         self.chat_history_conf = 0
         self.audio_format = "opus"
         self.defer_agent_init = False
-        # 首轮对话完成标志，用于禁用首轮对话期间的打断检测
-        self.first_dialogue_completed = False
 
         # 客户端状态相关
         self.client_abort = False
@@ -474,38 +471,19 @@ class ConnectionHandler:
             self.logger = create_connection_logger(self.selected_module_str)
 
             # when missing agent_id, we identify the request is from device-end rather app-side
-            # 优化：即使没有 agent_id，也预初始化默认模块，减少首次对话延迟
+            # therefore, we defer the initialization of all components 
             if self.read_config_from_live_agent_api and not self.agent_id:
                 self.defer_agent_init = True
                 self.logger.bind(tag=TAG).info(
-                    "agent-id missing, pre-initializing default modules for faster first response"
+                    "agent-id missing, defer LLM/TTS init until wake word resolves agent"
                 )
-                # 预初始化默认的 LLM/TTS/ASR 模块（使用默认配置）
-                try:
-                    modules = initialize_modules(
-                        self.logger,
-                        self.config,
-                        init_vad=False,  # VAD 使用公共实例
-                        init_asr=True,
-                        init_llm=True,
-                        init_tts=True,
-                        init_memory=False,
-                        init_intent=False,
-                    )
-                    if modules.get("tts"):
-                        self.tts = modules["tts"]
-                    if modules.get("llm"):
-                        self.llm = modules["llm"]
-                    if modules.get("asr"):
-                        self.asr = modules["asr"]
-                    self.logger.bind(tag=TAG).info("Pre-initialized LLM/TTS/ASR modules successfully")
-                except Exception as e:
-                    self.logger.bind(tag=TAG).warning(f"Pre-initialization failed: {e}, will init on wake")
+                # delay initialization until wake word resolves agent
+                return
             else:
                 self._initialize_agent_config()
             
-            init_llm = True
-            init_tts = True
+            init_llm = not self.defer_agent_init
+            init_tts = not self.defer_agent_init
             init_memory = not self.defer_agent_init
             init_intent = not self.defer_agent_init
 
@@ -980,8 +958,7 @@ class ConnectionHandler:
     # ensure_agent_ready is used to ensure the agent is ready when the wake word is detected
     async def ensure_agent_ready(self, wake_word: str | None = None) -> bool:
         """
-        Resolve agent when missing and apply agent config.
-        模块已在连接时预初始化，这里只需要解析 agent 并应用配置。
+        Resolve agent when missing and initialize LLM/TTS lazily.
         """
         if not self.read_config_from_live_agent_api:
             return True
@@ -1016,59 +993,34 @@ class ConnectionHandler:
         self._apply_agent_runtime_config(private_config)
         self.defer_agent_init = False
 
-        # 更新已预初始化的 TTS 实例的 reference_id（voice_id）
-        # 因为预初始化时还没有 agent 配置，reference_id 为 null
-        voice_id = private_config.get("voice_id")
-        if voice_id and self.tts and hasattr(self.tts, "reference_id"):
-            self.tts.reference_id = voice_id
-            self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
-
-        # 模块已在连接时预初始化，这里只需要确保 ASR 和 VAD stream 就绪
-        # 只有在模块未初始化时才重新初始化（正常情况下不会进入）
-        if not self.llm or not self.tts:
-            self.logger.bind(tag=TAG).warning("Modules not pre-initialized, initializing now...")
-            try:
-                modules = initialize_modules(
-                    self.logger,
-                    self.config,
-                    init_vad=False,  # VAD 使用公共实例
-                    init_asr=True,   # ASR 需要初始化！
-                    init_llm=True,
-                    init_tts=True,
-                    init_memory=False,
-                    init_intent=False,
-                )
-            except Exception as e:
-                self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
-                modules = {}
-            if modules.get("llm", None) is not None:
-                self.llm = modules["llm"]
-                if isinstance(self.llm, LLMProviderBase):
-                    self.llm.prewarm()
-            if modules.get("tts", None) is not None:
-                self.tts = modules["tts"]
-                asyncio.run_coroutine_threadsafe(
-                    self.tts.open_audio_channels(self), self.loop
-                )
-            if modules.get("asr", None) is not None:
-                self.asr = modules["asr"]
-            if modules.get("intent", None) is not None:
-                self.intent = modules["intent"]
-            if modules.get("memory", None) is not None:
-                self.memory = modules["memory"]
-
-        # 初始化 VAD stream（使用公共 VAD 实例）
-        if self.vad is None:
-            self.vad = self._vad
-        if self.vad is not None and self.vad_stream is None:
-            self._initialize_vad_stream()
-        
-        # 打开 ASR 音频通道（如果尚未打开）
-        if self.asr is not None:
-            asyncio.run_coroutine_threadsafe(
-                self.asr.open_audio_channels(self), self.loop
+        try:
+            modules = initialize_modules(
+                self.logger,
+                self.config,
+                False,
+                False,
+                True,
+                True,
+                False,
+                False,
             )
-        
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
+            modules = {}
+        if modules.get("llm", None) is not None:
+            self.llm = modules["llm"]
+            if isinstance(self.llm, LLMProviderBase):
+                self.llm.prewarm()
+        if modules.get("tts", None) is not None:
+            self.tts = modules["tts"]
+            asyncio.run_coroutine_threadsafe(
+                self.tts.open_audio_channels(self), self.loop
+            )
+        if modules.get("intent", None) is not None:
+            self.intent = modules["intent"]
+        if modules.get("memory", None) is not None:
+            self.memory = modules["memory"]
+
         # 初始化 prompt 与上报线程
         self._init_prompt_enhancement()
         self._init_report_threads()
@@ -1213,15 +1165,12 @@ class ConnectionHandler:
                 )
 
             # 在llm回复中获取情绪表情，一轮对话只在开头获取一次
-            if emotion_flag and content is not None and content.strip():
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        textUtils.get_emotion(self, content),
-                        self.loop,
-                    )
-                except Exception as e:
-                    self.logger.bind(tag=TAG).warning(f"发送emotion失败: {e}")
-                emotion_flag = False
+            # if emotion_flag and content is not None and content.strip():
+            #     asyncio.run_coroutine_threadsafe(
+            #         textUtils.get_emotion(self, content),
+            #         self.loop,
+            #     )
+            #     emotion_flag = False
 
             if content is not None and len(content) > 0:
                 if not tool_call_flag:
@@ -1613,15 +1562,6 @@ class ConnectionHandler:
         if not self.client_is_speaking:
             return
         if self.client_listen_mode == "manual":
-            return
-        # 在 agent 配置加载完成之前禁用打断检测
-        # defer_agent_init=True 表示正在等待 ensure_agent_ready 完成
-        # 这样可以避免在 agent 配置加载期间误触发打断
-        if getattr(self, "defer_agent_init", False):
-            return
-        # 首轮对话完成之前禁用打断检测
-        # 避免唤醒词响应期间设备继续发送音频被误判为打断
-        if not getattr(self, "first_dialogue_completed", False):
             return
         
         # Check speech duration threshold
