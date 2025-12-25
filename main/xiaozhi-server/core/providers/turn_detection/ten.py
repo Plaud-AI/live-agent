@@ -161,7 +161,8 @@ class TurnDetectionProvider(TurnDetectionProviderBase):
         client_timezone = conn.client_timezone
         
         try:
-            result = await conn.memory.query_memory(query, client_timezone=client_timezone),
+            result = await conn.memory.query_memory(query, client_timezone=client_timezone)
+            logger.bind(tag=TAG).debug(f"Memory result type: {type(result)}")
             conn.relevant_memories_this_turn = result
             
             elapsed_ms = (time.time() - start_time) * 1000
