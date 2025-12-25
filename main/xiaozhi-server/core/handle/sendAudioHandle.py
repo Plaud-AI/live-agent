@@ -17,7 +17,12 @@ logger = setup_logging()
 async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=MessageTag.NORMAL):
     if conn.tts.tts_audio_first_sentence:
         conn.tts.tts_audio_first_sentence = False
-        await send_tts_message(conn, "start", None, message_tag)
+        
+        # 只有当 client_is_speaking 为 False 时才发送 tts/start
+        # 如果 send_stt_message() 已经发送过 tts/start，此时 client_is_speaking 已为 True
+        if not conn.client_is_speaking:
+            await send_tts_message(conn, "start", None, message_tag)
+            conn.client_is_speaking = True
         
         # 记录首句 TTS 播放时间（端到端延迟的终点）
         first_audio_time = time.time() * 1000
@@ -49,6 +54,7 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
     if sentenceType == SentenceType.FIRST:
         # 如果当前不在 speaking 状态（之前的 TTS 已经 stop），需要先发送 tts start
         # 这处理了多个 LLM 回复在同一会话中交叉的情况
+        # 注意：tts_audio_first_sentence 的检查已经在上面处理过了，这里只处理非首句的情况
         if not conn.client_is_speaking:
             conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
             conn.client_is_speaking = True
@@ -314,7 +320,19 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
 
 
 async def send_stt_message(conn, text):
-    """发送 STT 状态消息"""
+    """发送 STT 状态消息
+    
+    注意：此函数在同一对话轮次中只应被调用一次。
+    如果 client_is_speaking 已为 True，说明本轮对话已开始，
+    此时再次调用是重复的（可能由于 wake word 音频被误识别导致）。
+    """
+    # 防止重复发送：如果已经在 speaking 状态，说明本轮对话的 tts/start 和 stt 已经发送过了
+    if conn.client_is_speaking:
+        logger.bind(tag=TAG).warning(
+            f"跳过重复的 stt 消息发送：已在 speaking 状态 (text: {text[:50] if text else ''}...)"
+        )
+        return
+    
     end_prompt_str = conn.config.get("end_prompt", {}).get("prompt")
     if end_prompt_str and end_prompt_str == text:
         await send_tts_message(conn, "start")
@@ -344,3 +362,4 @@ async def send_stt_message(conn, text):
     await conn.websocket.send(
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
+    logger.bind(tag=TAG).info(f"发送STT消息: {stt_text}")
