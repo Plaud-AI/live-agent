@@ -81,6 +81,8 @@ class ConnectionHandler:
         self.device_id = None
         self.owner_id = None  # Device owner's user_id for memory storage
         self.client_ip = None
+        self.client_timezone = "UTC+0"  # Client timezone (e.g., 'Asia/Shanghai', 'UTC+8')
+        
         self.prompt = None
         self.welcome_msg = None
         self.max_output_size = 0
@@ -201,6 +203,9 @@ class ConnectionHandler:
 
         # reconnected flag
         self.reconnected: bool = False
+        # memory
+        self.relevant_memories_this_turn: str = "No relevant memories retrieved for this turn."
+        self._memory_task = None  # Async task for memory prefetch
 
     async def handle_connection(self, ws):
         try:
@@ -219,6 +224,7 @@ class ConnectionHandler:
 
             self.device_id = self.headers.get("device-id", None)
             self.agent_id = self.headers.get("agent-id", None)
+            self.client_timezone = self.headers.get("timezone", "UTC+0")
             
             # Extract user_id from JWT token (if live-agent-api secret_key configured)
             # This enables proper memory initialization with the real user identity
@@ -568,19 +574,19 @@ class ConnectionHandler:
         user_persona = None
         if self.memory and hasattr(self.memory, 'get_user_persona'):
             try:
-                user_persona = self.memory.get_user_persona()
+                user_persona = self.memory.get_user_persona(client_timezone=self.client_timezone)
                 if user_persona:
                     self.logger.bind(tag=TAG).debug(f"获取到用户画像，长度: {len(user_persona)}")
             except Exception as e:
                 self.logger.bind(tag=TAG).warning(f"获取用户画像失败: {e}")
         
-        # 构建增强的系统提示词（返回 (enhanced_prompt, role_tts_config)）
         result = self.prompt_manager.build_enhanced_prompt(
             user_prompt=self._instruction,
             device_id=self.device_id,
             client_ip=self.client_ip,
             language=self._language,
             user_persona=user_persona,
+            client_timezone=self.client_timezone,
         )
         
         # 解包返回值
@@ -597,8 +603,15 @@ class ConnectionHandler:
             enhanced_prompt = result
         
         if enhanced_prompt:
-            self.change_system_prompt(enhanced_prompt)
-            self.logger.bind(tag=TAG).info("系统提示词已增强更新")
+            # Store base prompt as template (with {relevant_memory} placeholder)
+            self.base_prompt = enhanced_prompt
+            # Initialize system prompt with empty memory placeholder
+            initial_prompt = enhanced_prompt.replace(
+                "{relevant_memory}", 
+                "No relevant memories retrieved for this turn."
+            )
+            self.change_system_prompt(initial_prompt)
+            self.logger.bind(tag=TAG).info("system prompt loaded")
 
     def _init_report_threads(self):
         """Initialize chat message report thread for live-agent-api"""
@@ -1081,20 +1094,30 @@ class ConnectionHandler:
         response_message = []
 
         try:
-            # use dialogue with memory (use text for memory query)
-            memory_str = None
-            # if self.memory is not None:
-            #     memory_start_time = time.time() * 1000
-            #     future = asyncio.run_coroutine_threadsafe(
-            #         self.memory.query_memory(query_text), self.loop
-            #     )
-            #     memory_str = future.result()
-            #     memory_duration = (time.time() * 1000 - memory_start_time) / 1000
-            #     self.logger.bind(tag=TAG).info(f"[Latency] Memory查询完成, 耗时: {memory_duration:.3f}s")
+            # Use retrieved memory (prefetched during turn detection delay)
+            memories = self.relevant_memories_this_turn
+            
+            # Log relevant memory for this turn
+            if memories and memories.strip():
+                self.logger.bind(tag=TAG).info(f"[Memory] Relevant memories for this turn:\n{memories}")
+            else:
+                self.logger.bind(tag=TAG).info("[Memory] No relevant memories for this turn")
+            
+            # Inject memory into base prompt template for this turn
+            if self.base_prompt:
+                if memories and memories.strip():
+                    turn_prompt = self.base_prompt.replace("{relevant_memory}", memories)
+                else:
+                    turn_prompt = self.base_prompt.replace(
+                        "{relevant_memory}", 
+                        "No relevant memories retrieved for this turn."
+                    )
+                # Update system message for this turn
+                self.dialogue.update_system_message(turn_prompt)
 
-            # 获取对话历史
+            # Build dialogue history (with voiceprint speakers info)
             dialogue_history = self.dialogue.get_llm_dialogue_with_memory(
-                memory_str, self.config.get("voiceprint", {})
+                None, self.config.get("voiceprint", {})
             )
             
             if self.intent_type == "function_call" and functions is not None:
@@ -1259,6 +1282,7 @@ class ConnectionHandler:
                 )
             )
         self.llm_finish_task = True
+        self.relevant_memories_this_turn = "No relevant memories retrieved for this turn."
         # 使用lambda延迟计算，只有在DEBUG级别时才执行get_llm_dialogue()
         self.logger.bind(tag=TAG).debug(
             lambda: json.dumps(

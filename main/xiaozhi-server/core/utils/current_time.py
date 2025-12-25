@@ -1,10 +1,13 @@
 """
-时间工具模块
-提供统一的时间获取功能
+Time utility module
+Provides unified time retrieval with timezone support
 """
 
 import cnlunar
-from datetime import datetime
+from datetime import datetime, timedelta, timezone as dt_timezone
+from typing import Optional
+from zoneinfo import ZoneInfo
+
 
 WEEKDAY_MAP = {
     "Monday": "星期一",
@@ -17,34 +20,72 @@ WEEKDAY_MAP = {
 }
 
 
-def get_current_time() -> str:
+def parse_timezone(tz_str: str):
+    """Parse timezone string and return tzinfo object
+    
+    Supports formats:
+    - IANA timezone: 'Asia/Shanghai', 'America/New_York'
+    - UTC offset: 'UTC+8', 'UTC-7', '+8', '-5'
     """
-    获取当前时间字符串 (格式: HH:MM)
-    """
-    return datetime.now().strftime("%H:%M")
+    if not tz_str:
+        return ZoneInfo("Asia/Shanghai")
+    
+    tz_str = tz_str.strip()
+    upper_tz = tz_str.upper()
+    
+    # Try UTC offset format: UTC+8, UTC-7, +8, -5
+    if upper_tz.startswith("UTC") or tz_str.startswith("+") or tz_str.startswith("-"):
+        try:
+            offset_str = upper_tz.replace("UTC", "").strip()
+            if not offset_str or offset_str == "0":
+                return dt_timezone.utc
+            
+            if ":" in offset_str:
+                parts = offset_str.split(":")
+                hours = int(parts[0])
+                minutes = int(parts[1]) if len(parts) > 1 else 0
+            else:
+                hours = int(offset_str)
+                minutes = 0
+            
+            return dt_timezone(timedelta(hours=hours, minutes=minutes))
+        except (ValueError, TypeError):
+            pass
+    
+    # Try IANA timezone format
+    try:
+        return ZoneInfo(tz_str)
+    except Exception:
+        return ZoneInfo("Asia/Shanghai")
 
 
-def get_current_date() -> str:
-    """
-    获取今天日期字符串 (格式: YYYY-MM-DD)
-    """
-    return datetime.now().strftime("%Y-%m-%d")
+def get_current_time(tz_str: Optional[str] = None) -> str:
+    """Get current time string (format: HH:MM)"""
+    tz = parse_timezone(tz_str) if tz_str else None
+    return datetime.now(tz).strftime("%H:%M")
 
 
-def get_current_weekday() -> str:
-    """
-    获取今天星期几
-    """
-    now = datetime.now()
+def get_current_date(tz_str: Optional[str] = None) -> str:
+    """Get today's date string (format: YYYY-MM-DD)"""
+    tz = parse_timezone(tz_str) if tz_str else None
+    return datetime.now(tz).strftime("%Y-%m-%d")
+
+
+def get_current_weekday(tz_str: Optional[str] = None) -> str:
+    """Get current weekday in Chinese"""
+    tz = parse_timezone(tz_str) if tz_str else None
+    now = datetime.now(tz)
     return WEEKDAY_MAP[now.strftime("%A")]
 
 
-def get_current_lunar_date() -> str:
-    """
-    获取农历日期字符串
-    """
+def get_current_lunar_date(tz_str: Optional[str] = None) -> str:
+    """Get lunar date string"""
     try:
-        now = datetime.now()
+        tz = parse_timezone(tz_str) if tz_str else None
+        now = datetime.now(tz)
+        # cnlunar needs naive datetime, convert to local time
+        if now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
         today_lunar = cnlunar.Lunar(now, godType="8char")
         return "%s年%s%s" % (
             today_lunar.lunarYearCn,
@@ -55,14 +96,14 @@ def get_current_lunar_date() -> str:
         return "农历获取失败"
 
 
-def get_current_time_info() -> tuple:
+def get_current_time_info(tz_str: Optional[str] = None) -> tuple:
+    """Get current time info with timezone support
+    
+    Returns: (current_time, today_date, today_weekday, lunar_date)
     """
-    获取当前时间信息
-    返回: (当前时间字符串, 今天日期, 今天星期, 农历日期)
-    """
-    current_time = get_current_time()
-    today_date = get_current_date()
-    today_weekday = get_current_weekday()
-    lunar_date = get_current_lunar_date()
+    current_time = get_current_time(tz_str)
+    today_date = get_current_date(tz_str)
+    today_weekday = get_current_weekday(tz_str)
+    lunar_date = get_current_lunar_date(tz_str)
     
     return current_time, today_date, today_weekday, lunar_date

@@ -24,8 +24,13 @@ class MemoryProviderBase(ABC):
         print("this is base func", msgs)
 
     @abstractmethod
-    async def query_memory(self, query: str) -> str:
-        """Query memories for specific role based on similarity"""
+    async def query_memory(self, query: str, client_timezone: str = None) -> str:
+        """Query memories for specific role based on similarity
+        
+        Args:
+            query: Query text to search for related memories
+            client_timezone: Client timezone string (e.g., 'Asia/Shanghai', 'UTC+8')
+        """
         return "please implement query method"
 
     def init_memory(self, role_id, llm, agent_id=None, **kwargs):

@@ -1,5 +1,4 @@
 import uuid
-import re
 from typing import List, Dict, Union, Any
 from datetime import datetime
 
@@ -176,14 +175,8 @@ class Dialogue:
                 # 配置读取失败时忽略错误，不影响其他功能
                 pass
 
-            # 使用正则表达式匹配 <memory> 标签，不管中间有什么内容
-            if memory_str is not None:
-                enhanced_system_prompt = re.sub(
-                    r"<memory>.*?</memory>",
-                    f"<memory>\n{memory_str}\n</memory>",
-                    enhanced_system_prompt,
-                    flags=re.DOTALL,
-                )
+            # Memory injection is now handled in connection.py via template replacement
+            # The memory_str parameter is kept for backward compatibility but not used here
             dialogue.append({"role": "system", "content": enhanced_system_prompt})
 
         # 添加用户和助手的对话

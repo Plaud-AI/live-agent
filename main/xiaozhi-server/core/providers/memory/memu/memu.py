@@ -1,4 +1,5 @@
 import traceback
+from datetime import datetime, timezone as dt_timezone
 from functools import wraps
 from typing import Optional, Dict, Any, List, Callable
 
@@ -14,13 +15,70 @@ TAG = __name__
 DEFAULT_AGENT_ID = "xiaozhi_agent"
 DEFAULT_BASE_URL = "https://api.memu.so"
 
-# Category 到中文标题的映射
+# Category display titles with brief descriptions
 CATEGORY_TITLES = {
-    "profiles": "用户画像",
-    "events": "近期事件",
-    "activities": "近期活动",
-    "preferences": "用户偏好",
+    "profile": "Profile (user background and characteristics)",
+    "event": "Events (important events in recent 7 days)",
 }
+
+
+def _format_relative_time(ts: datetime, now: datetime) -> str:
+    """Format datetime as relative time string
+    
+    Args:
+        ts: Target datetime (must be timezone-aware)
+        now: Current datetime (must be timezone-aware)
+    
+    Returns:
+        Relative time string like "Within the last hour", "3 hours ago", "Yesterday", "5 days ago"
+    """
+    time_delta = now - ts
+    total_hours = int(time_delta.total_seconds() / 3600)
+    
+    if total_hours < 1:
+        return "Within the last hour"
+    elif total_hours < 24:
+        return f"{total_hours} hours ago" if total_hours > 1 else "1 hour ago"
+    elif time_delta.days == 1:
+        return "Yesterday"
+    else:
+        return f"{time_delta.days} days ago"
+
+
+def _process_summary(text: str) -> str:
+    """Process MemU summary: remove first-level header and adjust remaining headers
+    
+    MemU summary starts with a # header (e.g. "# 事件", "# 用户档案") which is redundant
+    since we already add our own title. We remove it and adjust remaining headers.
+    
+    Args:
+        text: Markdown text from MemU summary
+    
+    Returns:
+        Processed text with first header removed and headers adjusted
+    """
+    import re
+    
+    lines = text.strip().split('\n')
+    
+    # Remove first line ONLY if it's a single # header (e.g. "# 用户档案", not "## 近期动态")
+    if lines and re.match(r'^#(?!#)\s+\S', lines[0]):
+        lines = lines[1:]
+    
+    # Skip any leading empty lines after removing the header
+    while lines and not lines[0].strip():
+        lines = lines[1:]
+    
+    result = '\n'.join(lines)
+    
+    # Adjust remaining header levels: ## -> ####, ### -> #####, etc.
+    def replace_header(match):
+        hashes = match.group(1)
+        content = match.group(2)
+        # Add 2 levels: ## becomes ####
+        return "#" * (len(hashes) + 2) + " " + content
+    
+    return re.sub(r'^(#{1,6})\s+(.+)$', replace_header, result, flags=re.MULTILINE)
 
 
 def require_memu(func: Callable) -> Callable:
@@ -161,114 +219,76 @@ class MemoryProvider(MemoryProviderBase):
             logger.bind(tag=TAG).error(f"保存记忆失败: {str(e)}")
             logger.bind(tag=TAG).error(f"详细错误: {traceback.format_exc()}")
             return None
-
-    async def query_memory(self, query: str) -> str:
-        if not self.use_memu:
-            return ""
+    
+    @require_memu
+    async def query_memory(self, query: str, client_timezone: str = None) -> str:
+        """Retrieve memories related to the query
+        
+        Args:
+            query: User query text to search for related memories
+            client_timezone: Client timezone string (e.g., 'Asia/Shanghai', 'UTC+8')
+            
+        Returns:
+            Formatted string of related memories grouped by category
+        """
+        import asyncio
+        from core.utils.current_time import parse_timezone
+        
         try:
-            # Use retrieve_related_memory_items to retrieve memories
-            results = self.client.retrieve_related_memory_items(
-                user_id=self.role_id,
-                agent_id=self.agent_id,
-                query=query,
-                top_k=10,
-                min_similarity=0.3
+            # Run sync HTTP call in thread pool to enable proper timeout cancellation
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.retrieve_related_memory_items(
+                    user_id=self.role_id,
+                    agent_id=self.agent_id,
+                    query=query,
+                    top_k=5,
+                    min_similarity=0.3
+                )
             )
 
-            # 转换结果
-            if hasattr(results, 'model_dump'):
-                data = results.model_dump()
-            elif hasattr(results, 'dict'):
-                data = results.dict() if callable(results.dict) else results
-            else:
-                data = results
-            
-            # 检查是否有记忆项（兼容新旧 API 格式）
-            memory_items = []
-            if isinstance(data, dict):
-                # 优先使用 related_memories（新 API 格式）
-                if 'related_memories' in data:
-                    memory_items = data['related_memories']
-                elif 'memory_items' in data:
-                    memory_items = data['memory_items']
-            elif isinstance(data, list):
-                memory_items = data
-
-            if not memory_items:
+            if not response.related_memories:
                 return ""
 
-            # 按 category 分组
-            grouped = {
-                "profiles": [],
-                "events": [],
-                "activities": [],
-                "preferences": [],
-                "other": []
-            }
+            tz = parse_timezone(client_timezone)
+            now = datetime.now(tz)
             
-            for entry in memory_items:
-                # 转换 entry 为字典
-                if hasattr(entry, 'model_dump'):
-                    entry_dict = entry.model_dump()
-                elif hasattr(entry, 'dict'):
-                    entry_dict = entry.dict() if callable(entry.dict) else entry
+            # Group by original category (no merging)
+            # tuple: (datetime for sorting, content)
+            grouped: dict[str, list[tuple[datetime, str]]] = {}
+            
+            for item in response.related_memories:
+                memory = item.memory
+                category = memory.category
+                ts = memory.happened_at or memory.created_at
+                
+                # Normalize timezone and convert to client timezone
+                if ts:
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=dt_timezone.utc)
+                    ts = ts.astimezone(tz)
                 else:
-                    entry_dict = entry
+                    ts = datetime.min.replace(tzinfo=dt_timezone.utc)
                 
-                # 解析嵌套的 memory 对象（新 API 格式）
-                memory_obj = entry_dict.get("memory", entry_dict)
-                if hasattr(memory_obj, 'model_dump'):
-                    memory_obj = memory_obj.model_dump()
-                elif hasattr(memory_obj, 'dict'):
-                    memory_obj = memory_obj.dict() if callable(memory_obj.dict) else memory_obj
-                
-                # 提取字段
-                category = memory_obj.get("category", "other")
-                content = memory_obj.get("content", "") or memory_obj.get("memory", "")
-                # 事件类使用 happened_at，其他用 created_at
-                timestamp = memory_obj.get("happened_at") or memory_obj.get("created_at", "")
-                
-                if not content:
-                    continue
-                
-                # 分组
-                if category in grouped:
-                    grouped[category].append((timestamp, content))
-                else:
-                    grouped["other"].append((timestamp, content))
+                if category not in grouped:
+                    grouped[category] = []
+                grouped[category].append((ts, memory.content))
 
-            # 格式化分组输出
+            # Format output: 
+            # 1. category
+            # - [x days ago] content
             output = []
-            for category, title in CATEGORY_TITLES.items():
-                items = grouped.get(category, [])
-                if not items:
-                    continue
-                
-                output.append(f"## {title}")
-                
-                # 按时间倒序排列
-                items.sort(key=lambda x: x[0] or "", reverse=True)
-                
-                # 每类最多 5 条
-                for ts, content in items[:5]:
-                    if category in ("events", "activities") and ts:
-                        # 格式化时间戳
-                        try:
-                            dt = ts.split(".")[0]  # Remove milliseconds
-                            formatted_time = dt.replace("T", " ").split(" ")[0]  # 只保留日期
-                        except:
-                            formatted_time = ts
-                        output.append(f"- [{formatted_time}] {content}")
+            for idx, (category, items) in enumerate(grouped.items(), 1):
+                output.append(f"{idx}. {category}")
+                # Sort by time descending (most recent first), then format
+                items.sort(key=lambda x: x[0], reverse=True)
+                for ts, content in items:
+                    if ts != datetime.min.replace(tzinfo=dt_timezone.utc):
+                        time_str = _format_relative_time(ts, now)
+                        output.append(f"- [{time_str}] {content}")
                     else:
                         output.append(f"- {content}")
-            
-            # 处理 other 分类（如果有）
-            other_items = grouped.get("other", [])
-            if other_items:
-                output.append("## 其他")
-                other_items.sort(key=lambda x: x[0] or "", reverse=True)
-                for ts, content in other_items[:5]:
-                    output.append(f"- {content}")
 
             if not output:
                 return ""
@@ -276,10 +296,98 @@ class MemoryProvider(MemoryProviderBase):
             memories_str = "\n".join(output)
             logger.bind(tag=TAG).debug(f"Query results: {memories_str}")
             return memories_str
+            
         except Exception as e:
             logger.bind(tag=TAG).error(f"查询记忆失败: {str(e)}")
             logger.bind(tag=TAG).error(f"详细错误: {traceback.format_exc()}")
             return ""
+
+    @require_memu
+    def get_user_persona(self, client_timezone: str = None) -> Optional[str]:
+        """Get user persona with category summaries and recent events from MemU
+        
+        Args:
+            client_timezone: Client timezone string (e.g., 'Asia/Shanghai', 'UTC+8')
+        
+        Retrieves:
+        - profile category: summary only
+        - event category: memory items from last 7 days
+        
+        Returns:
+            Formatted user persona string for system prompt
+        """
+        from datetime import timedelta
+        from core.utils.current_time import parse_timezone
+        
+        try:
+            result = self.client.retrieve_default_categories(
+                user_id=self.role_id,
+                agent_id=self.agent_id,
+                want_memory_items=True
+            )
+            
+            logger.bind(tag=TAG).debug(f"User persona result: {result}")
+            if not result.categories:
+                return None
+            
+            # Use client timezone for "today/yesterday" calculation
+            tz = parse_timezone(client_timezone)
+            now = datetime.now(tz)
+            seven_days_ago = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            output = []
+            
+            for cat in result.categories:
+                # Only process profile and event categories
+                if cat.name not in ("profile", "event"):
+                    continue
+                
+                # Add category title
+                title = CATEGORY_TITLES.get(cat.name, cat.name)
+                section = [f"### {title}"]
+                
+                # For profile: add summary; for event: only add recent memory items
+                if cat.name == "profile" and cat.summary and cat.summary.strip():
+                    processed_summary = _process_summary(cat.summary.strip())
+                    if processed_summary:
+                        section.append(processed_summary)
+                        logger.bind(tag=TAG).debug(f"Profile summary: {processed_summary}")
+                
+                # For event category, add recent memory items (last 7 days), skip summary
+                if cat.name == "event" and cat.memory_items and cat.memory_items.memories:
+                    recent_items = []
+                    for memory in cat.memory_items.memories:
+                        happened_at = memory.happened_at
+                        if not happened_at:
+                            continue
+                        # Normalize to aware datetime for comparison
+                        if happened_at.tzinfo is None:
+                            happened_at = happened_at.replace(tzinfo=dt_timezone.utc)
+                        # Convert to client timezone for calculation
+                        happened_at_local = happened_at.astimezone(tz)
+                        if happened_at_local >= seven_days_ago:
+                            recent_items.append((happened_at_local, memory.content))
+                    
+                    if recent_items:
+                        # Sort by time descending (most recent first), then format
+                        recent_items.sort(key=lambda x: x[0], reverse=True)
+                        for ts, content in recent_items[:10]:
+                            time_str = _format_relative_time(ts, now)
+                            section.append(f"- [{time_str}] {content}")
+                        logger.bind(tag=TAG).debug(f"Recent events count: {len(recent_items)}")
+                output.append("\n".join(section))
+            
+            if not output:
+                return None
+            
+            persona_str = "\n\n".join(output)
+            logger.bind(tag=TAG).debug(f"User persona loaded, length: {len(persona_str)}")
+            return persona_str
+            
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"Failed to get user persona: {str(e)}")
+            logger.bind(tag=TAG).debug(traceback.format_exc())
+            return None
 
     # ==================== Memory Item CRUD ====================
 

@@ -1,5 +1,6 @@
 import time
 from typing import Dict, Any, List
+import asyncio
 
 from core.handle.receiveAudioHandle import handleAudioMessage, startToChat
 from core.handle.reportHandle import enqueue_asr_report
@@ -128,6 +129,21 @@ class ListenTextMessageHandler(TextMessageHandler):
                     attachments = msg_json.get("attachments", [])
                     # Record timestamp for correct message ordering
                     report_time = int(time.time())
+
+                    if conn.memory is not None:
+                        client_timezone = conn.client_timezone
+                        memory_start = time.time()
+                        memory_task = asyncio.create_task(conn.memory.query_memory(original_text, client_timezone=client_timezone))
+                        done, _ = await asyncio.wait({memory_task}, timeout=1.0)
+                        
+                        if done:
+                            conn.relevant_memories_this_turn = memory_task.result()
+                            conn.logger.bind(tag=TAG).info(f"[Memory] query took {(time.time() - memory_start) * 1000:.0f}ms")
+                        else:
+                            # Timeout: don't wait for cancellation, just move on
+                            memory_task.cancel()
+                            conn.logger.bind(tag=TAG).warning(f"[Memory] query timeout after {(time.time() - memory_start) * 1000:.0f}ms")
+                            conn.relevant_memories_this_turn = "No relevant memories retrieved for this turn."
                     
                     if attachments:
                         # build multimodal content

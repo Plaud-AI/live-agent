@@ -260,8 +260,8 @@ Memory:
     type: memu
     # https://app.memu.so/api-key/
     # MemU AI记忆框架 - 提供长期记忆管理服务
-    api_key: mu_SJPB0t8dtY0IwL0B0RjpiVKbTEI4w8MD8YkYSVItNzxe-t3DlOtHIJnp53tJ-kr6BL06-uPN0U5WPGs4EpT5iuMZMsrfI1KYvVfg1w
-    base_url: https://api.memu.so
+    api_key: ${MEMU_API_KEY}
+    base_url: ${MEMU_BASE_URL}
     user_name: 用户
     agent_name: 小智
     # 默认用于管理后台查询的 user_id / agent_id，可选

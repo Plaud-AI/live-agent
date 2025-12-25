@@ -82,13 +82,13 @@ class PromptManager:
         self.logger.bind(tag=TAG).info(f"使用快速提示词: {user_prompt[:50]}...")
         return user_prompt
 
-    def _get_current_time_info(self) -> tuple:
-        """获取当前时间信息"""
+    def _get_current_time_info(self, tz_str: str = None) -> tuple:
+        """Get current time info with timezone support"""
         from .current_time import get_current_date, get_current_weekday, get_current_lunar_date
         
-        today_date = get_current_date()
-        today_weekday = get_current_weekday()
-        lunar_date = get_current_lunar_date() + "\n"
+        today_date = get_current_date(tz_str)
+        today_weekday = get_current_weekday(tz_str)
+        lunar_date = get_current_lunar_date(tz_str) + "\n"
 
         return today_date, today_weekday, lunar_date
 
@@ -157,6 +157,7 @@ class PromptManager:
         client_ip: str = None,
         user_persona: str = None,
         language: str = None,
+        client_timezone: str = None,
         *args,
         **kwargs
     ) -> str:
@@ -170,7 +171,8 @@ class PromptManager:
             if user_prompt and user_prompt.strip():
                 # 优先使用 API 传入的 prompt（正式部署场景）
                 profile = user_prompt
-                timezone = self.config.get("timezone", "Asia/Shanghai")
+                # priority: client timezone > config timezone > Asia/Shanghai
+                timezone = client_timezone or self.config.get("timezone", "Asia/Shanghai")
                 language = language
                 self.logger.bind(tag=TAG).info("使用 API 下发的 profile")
             else:
@@ -181,7 +183,8 @@ class PromptManager:
                 try:
                     role_config = loader.load(role_id)
                     profile = role_config.profile
-                    timezone = role_config.timezone
+                    # priority: client timezone > role timezone > Asia/Shanghai
+                    timezone = client_timezone or role_config.timezone
                     language = role_config.language
                     # 提取 TTS 配置（如果有）
                     if role_config.tts:
@@ -198,12 +201,12 @@ class PromptManager:
                     # 兜底方案：使用空 profile
                     self.logger.bind(tag=TAG).warning(f"加载 role 配置失败: {e}，使用空 profile")
                     profile = ""
-                    timezone = self.config.get("timezone", "Asia/Shanghai")
+                    # priority: client timezone > config timezone > Asia/Shanghai
+                    timezone = client_timezone or self.config.get("timezone", "Asia/Shanghai")
                     language = self.config.get("language", "zh")
             
-            # 获取最新的时间信息（不缓存）
-            today_date, today_weekday, lunar_date = self._get_current_time_info()
-            # 清理 lunar_date 的换行符
+            # Get time info with client timezone
+            today_date, today_weekday, lunar_date = self._get_current_time_info(timezone)
             lunar_date = lunar_date.strip() if lunar_date else None
 
             # 获取缓存的上下文信息
