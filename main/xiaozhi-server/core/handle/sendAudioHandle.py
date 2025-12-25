@@ -7,7 +7,7 @@ from core.providers.tts.dto.dto import (
     SentenceType,
     MessageTag,
 )
-from core.utils.textUtils import strip_emotion_tags
+from core.utils.textUtils import strip_emotion_tags, get_emotion_tag
 from core.utils.opus import pack_opus_with_header
 from config.logger import setup_logging
 
@@ -261,6 +261,10 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
     }
     if text is not None:
         text = textUtils.check_emoji(text)
+        # Extract emotion tag before stripping
+        emotion = get_emotion_tag(text)
+        if emotion:
+            message["emotion"] = emotion
         text = strip_emotion_tags(text)
         message["text"] = text
 
