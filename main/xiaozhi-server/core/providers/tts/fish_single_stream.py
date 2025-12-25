@@ -166,6 +166,7 @@ class TTSProvider(TTSProviderBase):
         
         try:
             # Get audio stream from FishSpeech
+            logger.bind(tag=TAG).info(f"TTS stream request: reference_id={self.reference_id}, text={text[:50]}...")
             audio_stream = self._client.tts.stream(
                 text=text,
                 reference_id=self.reference_id,
@@ -328,6 +329,17 @@ class TTSProvider(TTSProviderBase):
                         if full_text and session_audio:
                             enqueue_tts_report(self.conn, full_text, session_audio, session_message_tag)
                             logger.bind(tag=TAG).info(f"Abort report: {full_text[:50]}...")
+                        
+                        # 清空队列中的所有待处理消息，避免 stop 后继续发送
+                        # 注意：这不会丢失正常数据，因为：
+                        # 1. client_abort=True 只在用户主动打断时设置
+                        # 2. 被清空的音频属于被打断的会话，用户已不需要
+                        # 3. 新会话开始时 client_abort 会被重置为 False
+                        while not self.tts_audio_queue.empty():
+                            try:
+                                self.tts_audio_queue.get_nowait()
+                            except queue.Empty:
+                                break
                         
                         # Send LAST to trigger TTS stop message
                         last_send_future = asyncio.run_coroutine_threadsafe(

@@ -17,7 +17,12 @@ logger = setup_logging()
 async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=MessageTag.NORMAL):
     if conn.tts.tts_audio_first_sentence:
         conn.tts.tts_audio_first_sentence = False
-        await send_tts_message(conn, "start", None, message_tag)
+        
+        # 只有当 client_is_speaking 为 False 时才发送 tts/start
+        # 如果 send_stt_message() 已经发送过 tts/start，此时 client_is_speaking 已为 True
+        if not conn.client_is_speaking:
+            await send_tts_message(conn, "start", None, message_tag)
+            conn.client_is_speaking = True
         
         # 记录首句 TTS 播放时间（端到端延迟的终点）
         first_audio_time = time.time() * 1000
@@ -39,10 +44,27 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             f"文本: {text if text else '(无文本)'}"
         )
 
+    # 在新句子开始或会话结束前，先发送前一个句子的 sentence_end
+    # 这确保 sentence_end 在该句子的所有音频发送完毕后才发送
+    if sentenceType in (SentenceType.FIRST, SentenceType.LAST):
+        if hasattr(conn, '_pending_sentence_text') and conn._pending_sentence_text:
+            await send_tts_message(conn, "sentence_end", conn._pending_sentence_text, message_tag)
+            conn._pending_sentence_text = None
+    
     if sentenceType == SentenceType.FIRST:
+        # 如果当前不在 speaking 状态（之前的 TTS 已经 stop），需要先发送 tts start
+        # 这处理了多个 LLM 回复在同一会话中交叉的情况
+        # 注意：tts_audio_first_sentence 的检查已经在上面处理过了，这里只处理非首句的情况
+        if not conn.client_is_speaking:
+            conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
+            conn.client_is_speaking = True
+            await send_tts_message(conn, "start", None, message_tag)
         await send_tts_message(conn, "sentence_start", text, message_tag)
+        # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
+        conn._pending_sentence_text = text if text else None
 
     await sendAudio(conn, audios, message_tag=message_tag)
+    
     # 发送句子开始消息
     if sentenceType is not SentenceType.MIDDLE:
         conn.logger.bind(tag=TAG).info(f"发送音频消息: {sentenceType}, {text}")
@@ -259,6 +281,13 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
         "session_id": conn.session_id,
         "message_tag": message_tag.value,
     }
+    
+    # TTS 开始时添加 sample_rate 参数（官方协议要求）
+    if state == "start":
+        # 从配置中获取 TTS 的 sample_rate，默认 16000
+        tts_sample_rate = conn.config.get("xiaozhi", {}).get("audio_params", {}).get("sample_rate", 16000)
+        message["sample_rate"] = tts_sample_rate
+    
     if text is not None:
         text = textUtils.check_emoji(text)
         # Extract emotion tag before stripping
@@ -270,6 +299,10 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
 
     # TTS播放结束
     if state == "stop":
+        # 首轮对话完成，启用打断检测
+        if not getattr(conn, "first_dialogue_completed", False):
+            conn.first_dialogue_completed = True
+            logger.bind(tag=TAG).info("首轮对话完成，启用打断检测")
         # 播放提示音
         tts_notify = conn.config.get("enable_stop_tts_notify", False)
         if tts_notify:
@@ -287,7 +320,19 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
 
 
 async def send_stt_message(conn, text):
-    """发送 STT 状态消息"""
+    """发送 STT 状态消息
+    
+    注意：此函数在同一对话轮次中只应被调用一次。
+    如果 client_is_speaking 已为 True，说明本轮对话已开始，
+    此时再次调用是重复的（可能由于 wake word 音频被误识别导致）。
+    """
+    # 防止重复发送：如果已经在 speaking 状态，说明本轮对话的 tts/start 和 stt 已经发送过了
+    if conn.client_is_speaking:
+        logger.bind(tag=TAG).warning(
+            f"跳过重复的 stt 消息发送：已在 speaking 状态 (text: {text[:50] if text else ''}...)"
+        )
+        return
+    
     end_prompt_str = conn.config.get("end_prompt", {}).get("prompt")
     if end_prompt_str and end_prompt_str == text:
         await send_tts_message(conn, "start")
@@ -309,8 +354,12 @@ async def send_stt_message(conn, text):
         # 如果不是JSON格式，直接使用原始文本
         display_text = text
     stt_text = textUtils.get_string_no_punctuation_or_emoji(display_text)
+    
+    # 官方协议时序：先发 tts start，再发 stt
+    # 这样设备可以提前准备好接收音频
+    conn.client_is_speaking = True
+    await send_tts_message(conn, "start")
     await conn.websocket.send(
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
-    conn.client_is_speaking = True
-    await send_tts_message(conn, "start")
+    logger.bind(tag=TAG).info(f"发送STT消息: {stt_text}")

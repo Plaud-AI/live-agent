@@ -83,20 +83,29 @@ def is_punctuation_or_emoji(char):
 
 
 async def get_emotion(conn, text):
-    """获取文本内的情绪消息"""
-    emoji = "🙂"
-    emotion = "happy"
-    for char in text:
-        if char in EMOJI_MAP:
-            emoji = char
-            emotion = EMOJI_MAP[char]
-            break
+    """获取文本内的情绪消息
+    
+    优先从 emotion tag (如 "(happy)") 中提取，其次从 emoji 中提取。
+    用于发送 llm 类型消息，使设备端能够显示对应的表情动画。
+    """
+    emotion = "calm"  # 默认 calm 更中性
+    
+    # 优先从 emotion tag 中提取 (如 "(happy) Hello!")
+    emotion_tag = get_emotion_tag(text)
+    if emotion_tag:
+        emotion = emotion_tag
+    else:
+        # 其次从 emoji 中提取
+        for char in text:
+            if char in EMOJI_MAP:
+                emotion = EMOJI_MAP[char]
+                break
+    
     try:
         await conn.websocket.send(
             json.dumps(
                 {
                     "type": "llm",
-                    "text": emoji,
                     "emotion": emotion,
                     "session_id": conn.session_id,
                 }
