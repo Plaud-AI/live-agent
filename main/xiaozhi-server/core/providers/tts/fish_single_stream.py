@@ -262,7 +262,6 @@ class TTSProvider(TTSProviderBase):
         if self.conn.client_abort:
             return
         
-        logger.bind(tag=TAG).debug(f"Sending opus frame: {len(opus_data)} bytes")
         self.tts_audio_queue.put(TTSAudioDTO(
             sentence_type=SentenceType.MIDDLE,
             audio_data=opus_data,
