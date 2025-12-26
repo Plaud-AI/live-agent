@@ -1,8 +1,13 @@
+# 注意：Dokploy 从 code/ 目录运行 docker compose，但 .env 文件在 code/main/.env
+# 所以需要在 compose 文件中明确指定 env_file
+
 services:
   # ============================================================================
   # xiaozhi-server (Python WebSocket Server)
   # ============================================================================
   xiaozhi-esp32-server:
+    env_file:
+      - .env  # 相对于本 compose 文件的位置
     build:
       context: ./xiaozhi-server/
       dockerfile: Dockerfile
@@ -121,6 +126,8 @@ services:
   # live-agent-api
   # ============================================================================
   live-agent-api:
+    env_file:
+      - .env  # 相对于本 compose 文件的位置
     build:
       context: ./live-agent-api
       dockerfile: Dockerfile
@@ -153,7 +160,7 @@ services:
       MEMU_BASE_URL: ${MEMU_BASE_URL:-https://api.memu.so}
       DEBUG: ${DEBUG:-True}    # 如果是正式生产，可改成 "False"
     ports:
-      - "8081:8080"
+      - "8080:8080"
     networks:
       - xiaozhi-network
     depends_on:
