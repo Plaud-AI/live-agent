@@ -119,7 +119,7 @@ services:
       S3_ENDPOINT_URL: http://live-agent-minio:9000
       DEBUG: "True"    # 如果是正式生产，可改成 "False"
     ports:
-      - "8080:8080"
+      - "8081:8080"
     networks:
       - xiaozhi-network
     depends_on:
