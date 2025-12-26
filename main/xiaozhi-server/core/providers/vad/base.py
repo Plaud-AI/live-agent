@@ -279,11 +279,6 @@ class VADStream(ABC):
             timestamp_ms=current_time_ms,
         )
         asr_input_queue.put_nowait(asr_message)
-        
-        logger.bind(tag=TAG).debug(
-            f"ASR MIDDLE message sent: prob={event.probability:.2f}, "
-            f"speech={event.speech_duration:.2f}s"
-        )
 
         conn.last_activity_time = time.time() * 1000
         
