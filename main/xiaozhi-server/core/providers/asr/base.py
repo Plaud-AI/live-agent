@@ -31,25 +31,38 @@ class ASRProviderBase(ABC):
 
     # 打开音频通道
     async def open_audio_channels(self, conn):
-        # Thread for processing raw audio from WebSocket
-        conn.asr_priority_thread = threading.Thread(
-            target=self._asr_audio_queue_thread, 
-            args=(conn,), 
-            daemon=True
-        )
-        conn.asr_priority_thread.start()
+        """Open ASR-related audio channels for a connection (idempotent).
+        
+        NOTE: This method may be called multiple times (e.g. connection pre-init + ensure_agent_ready()).
+        It must be idempotent to avoid:
+        - Starting duplicate queue-consumer threads
+        - Re-creating VAD event processor tasks (double consumption / race conditions)
+        """
+        # Thread for processing raw audio from WebSocket (idempotent)
+        existing_priority = getattr(conn, "asr_priority_thread", None)
+        if existing_priority is None or not getattr(existing_priority, "is_alive", lambda: False)():
+            conn.asr_priority_thread = threading.Thread(
+                target=self._asr_audio_queue_thread,
+                args=(conn,),
+                daemon=True,
+            )
+            conn.asr_priority_thread.start()
 
         # Start VAD stream and event processor (must be in async context)
         await self._start_vad_stream(conn)
         
-        # Thread for processing ASR input messages from VAD stream
-        conn.asr_input_thread = threading.Thread(
-            target=self._asr_input_queue_thread,
-            args=(conn,),
-            daemon=True
-        )
-        conn.asr_input_thread.start()
-        logger.bind(tag=TAG).info("ASR input queue thread started")
+        # Thread for processing ASR input messages from VAD stream (idempotent)
+        existing_input = getattr(conn, "asr_input_thread", None)
+        if existing_input is None or not getattr(existing_input, "is_alive", lambda: False)():
+            conn.asr_input_thread = threading.Thread(
+                target=self._asr_input_queue_thread,
+                args=(conn,),
+                daemon=True,
+            )
+            conn.asr_input_thread.start()
+            logger.bind(tag=TAG).info("ASR input queue thread started")
+        else:
+            logger.bind(tag=TAG).debug("ASR input queue thread already started, skipping")
 
     async def _start_vad_stream(self, conn):
         """Start VAD stream task and event processor
@@ -60,6 +73,12 @@ class ASRProviderBase(ABC):
         
         if conn.vad_stream is None:
             logger.bind(tag=TAG).warning("VAD stream not initialized, skipping start")
+            return
+        
+        # Idempotency: if the event processor task is already running, don't start again.
+        existing_task = getattr(conn, "_vad_event_task", None)
+        if existing_task is not None and not getattr(existing_task, "done", lambda: True)():
+            logger.bind(tag=TAG).debug("VAD stream event processor already started, skipping")
             return
         
         try:
