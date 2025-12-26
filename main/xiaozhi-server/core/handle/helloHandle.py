@@ -66,6 +66,16 @@ async def checkWakeupWords(conn, text):
         "enable_wakeup_words_response_cache"
     ]
 
+    # Fast path: if not a wakeup word, return early (avoid waiting for TTS init).
+    _, filtered_text = remove_punctuation_and_length(text)
+    if filtered_text not in conn.config.get("wakeup_words"):
+        return False
+
+    # Optimization: after wakeup, the next user query should respond ASAP.
+    # Skip TurnDetection ONCE for the first ASR turn after wakeup to remove TD HTTP RTT
+    # and endpoint delay from the critical path.
+    conn._skip_turn_detection_once = True
+
     # 等待tts初始化，最多等待3秒
     start_time = time.time()
     while time.time() - start_time < 3:
@@ -79,10 +89,6 @@ async def checkWakeupWords(conn, text):
         # 选项1：即使关闭“缓存唤醒回复”，也不走 LLM，而是播放默认的短回复音频
         # 这样能保证唤醒“秒回”，且避免进入对话生成链路。
         pass
-
-    _, filtered_text = remove_punctuation_and_length(text)
-    if filtered_text not in conn.config.get("wakeup_words"):
-        return False
 
     conn.just_woken_up = True
     # 抑制“唤醒词残留音频”被 ASR/TurnDetection 再次触发一轮 chat（double-trigger）

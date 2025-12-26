@@ -287,6 +287,27 @@ class ASRProviderBase(ABC):
                     conn.asr_text_buffer += " " + raw_text
                 else:
                     conn.asr_text_buffer = raw_text
+
+                # Optimization: after wakeup, bypass TurnDetection ONCE for the first real user query.
+                # This removes TD HTTP RTT + endpoint delay from the critical path (wakeup → first answer).
+                # Note: this must run AFTER wakeup residue suppression, otherwise the skip flag could be
+                # consumed by dropped wakeup-residue ASR.
+                if getattr(conn, "_skip_turn_detection_once", False):
+                    # Consume the flag once
+                    conn._skip_turn_detection_once = False
+
+                    # Align with ConnectionHandler.on_end_of_turn() semantics: clear buffer before chat
+                    # to avoid stale accumulation across turns.
+                    conn.asr_text_buffer = ""
+
+                    enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
+                    asr_report_time = int(time.time())
+                    logger.bind(tag=TAG).info(
+                        "Bypass TurnDetection once after wakeup, triggering startToChat directly"
+                    )
+                    await startToChat(conn, enhanced_text)
+                    enqueue_asr_report(conn, enhanced_text, [], report_time=asr_report_time)
+                    return
                 
                 # Turn Detection: let turn detection handle end of turn
                 if conn.turn_detection:
