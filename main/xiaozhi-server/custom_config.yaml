@@ -523,6 +523,8 @@ TTS:
     rate: 44100
     sample_rate: 16000
     api_key: ${FISH_API_KEY}
+    # 降低软标点(逗号)切分的最小字符限制，避免长句合成首包延迟过高(默认25对于中文太长)
+    soft_punct_min_chars: 10
   MinimaxTTSHTTPStream:
   # Minimax流式语音合成服务
     type: minimax_httpstream

@@ -67,8 +67,9 @@ async def checkWakeupWords(conn, text):
     ]
 
     # Fast path: if not a wakeup word, return early (avoid waiting for TTS init).
-    _, filtered_text = remove_punctuation_and_length(text)
-    if filtered_text not in conn.config.get("wakeup_words"):
+    # Use a normalized matcher to tolerate mixed-case wake words (e.g. "OKay那不").
+    from core.utils.wakeup_suppression import is_wakeup_word
+    if not is_wakeup_word(text, conn.config.get("wakeup_words", [])):
         return False
 
     # Optimization: after wakeup, the next user query should respond ASAP.

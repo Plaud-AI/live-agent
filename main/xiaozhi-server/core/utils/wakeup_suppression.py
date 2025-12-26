@@ -67,3 +67,31 @@ def should_drop_asr_after_wakeup(
     return len(norm) <= max_norm_len
 
 
+def is_wakeup_word(text: str, wakeup_words: list[str] | None) -> bool:
+    """Return True if `text` should be treated as a wakeup word.
+
+    This is used by listen/detect and wakeup short-reply logic.
+
+    Design goals:
+    - Case-insensitive for ASCII (OKayNabu / OKAYNABU / okay nabu)
+    - Punctuation/space-insensitive (consistent with normalize_for_wakeup)
+    - Add conservative aliases for the common "okaynabu" wake word, to tolerate
+      short Chinese ASR variants like "OK那不"/"OK哪不".
+    """
+    norm = normalize_for_wakeup(text)
+    if not norm:
+        return False
+
+    wakeup_set = {normalize_for_wakeup(w) for w in (wakeup_words or []) if w}
+    if norm in wakeup_set:
+        return True
+
+    # Conservative aliases: only enable when okaynabu is configured.
+    # (Avoid impacting users who don't use this wake word.)
+    if "okaynabu" in wakeup_set:
+        if norm in {"ok那不", "ok哪不", "okay那不", "okay哪不"}:
+            return True
+
+    return False
+
+
