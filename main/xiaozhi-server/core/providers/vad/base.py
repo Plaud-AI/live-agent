@@ -219,7 +219,7 @@ class VADStream(ABC):
         """
         logger.bind(tag=TAG).debug(
             f"Speech start detected: prob={event.probability:.2f}, "
-            f"duration={event.speech_duration:.2f}s"
+            f"duration={event.speech_duration:.0f}ms"
         )
         
         # Cancel pending turn detection task to prevent premature end-of-turn
@@ -298,8 +298,8 @@ class VADStream(ABC):
         2. Update conn state (client_voice_stop = True)
         """
         logger.bind(tag=TAG).debug(
-            f"Speech end detected: duration={event.speech_duration:.2f}s, "
-            f"silence={event.silence_duration:.2f}s"
+            f"Speech end detected: duration={event.speech_duration:.0f}ms, "
+            f"silence={event.silence_duration:.0f}ms"
         )
         
         # Record latency tracking timestamp for voice end

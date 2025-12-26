@@ -222,7 +222,7 @@ class ASRProvider(ASRProviderBase):
 
     def _handle_last(self, conn, message: ASRInputMessage):
         """Handle LAST - finish segment and get result"""
-        logger.bind(tag=TAG).info(f"ASR LAST: speech={message.speech_duration:.2f}s")
+        logger.bind(tag=TAG).info(f"ASR LAST: speech={message.speech_duration:.0f}ms")
         
         if self.asr_ws and self.is_processing:
             self._run_async(conn, self._finish_segment(conn, message.audio_data), timeout=10)

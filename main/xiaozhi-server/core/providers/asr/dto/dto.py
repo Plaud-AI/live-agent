@@ -32,7 +32,7 @@ class ASRInputMessage:
     Attributes:
         message_type: Position of this chunk in the speech segment
         audio_data: PCM audio data (16-bit, 16kHz, mono)
-        speech_duration: Accumulated speech duration in seconds (from VAD)
+        speech_duration: Accumulated speech duration in milliseconds (ms, from VAD)
         probability: Speech probability for this chunk (0.0-1.0)
         timestamp_ms: Timestamp when this message was created
     """

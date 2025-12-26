@@ -129,7 +129,7 @@ class ASRProviderBase(ABC):
                     total_audio_ms = message.audio_duration_ms
                     logger.bind(tag=TAG).info(
                         f"ASR: Speech ended, total_audio={total_audio_ms:.0f}ms, "
-                        f"speech_duration={message.speech_duration:.2f}s"
+                        f"speech_duration={message.speech_duration:.0f}ms"
                     )
                     
                     # Process the complete speech segment (LAST audio only)

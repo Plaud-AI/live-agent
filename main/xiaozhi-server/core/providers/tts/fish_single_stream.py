@@ -53,12 +53,7 @@ class TTSProvider(TTSProviderBase):
         
         self.model = config.get("model", "speech-1.6")
         self.reference_id = config.get("reference_id")
-        # FishAudio returns raw PCM by default; keep base-class non-stream path consistent
-        # so that TTSProviderBase.to_tts() can correctly convert bytes to opus frames.
         self.format = config.get("response_format", "pcm")
-        # TTSProviderBase defaults audio_file_type="wav", which would make it treat raw PCM as WAV
-        # and fail decoding (ffmpeg invalid RIFF header). Align with response_format.
-        self.audio_file_type = self.format
         self.sample_rate = int(config.get("sample_rate", 16000))
         self.normalize = str(config.get("normalize", True)).lower() in ("true", "1", "yes")
         # FishAudio latency mode (keep backward-compatible default)
