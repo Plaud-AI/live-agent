@@ -16,11 +16,20 @@ logger = setup_logging()
 
 class TTSProvider(TTSProviderBase):
     
-    # Punctuation sets for text segmentation
-    # First segment: use aggressive punctuation for faster response
-    FIRST_SEGMENT_PUNCTS = (",", "，", "。", "！", "？", "!", "?", "；", ";", "：", ":")
-    # Normal segments: use sentence-ending punctuation
-    NORMAL_PUNCTS = ("。", "！", "？", "!", "?", "；", ";")
+    # Text segmentation punctuation sets
+    #
+    # HARD_PUNCTS: sentence-ending punctuation (safer boundaries)
+    # SOFT_PUNCTS: clause boundaries (lower latency, may cut mid-sentence)
+    #
+    # Note:
+    # - Include '.' for English sentences, but we skip decimal points like "1.5"
+    # - Also include fullwidth dot '．' (U+FF0E) which may appear in some model outputs
+    HARD_PUNCTS = (".", "。", "！", "？", "!", "?", "；", ";", "．")
+    SOFT_PUNCTS = (",", "，", "：", ":", "\n")
+    # First segment: allow both soft + hard for faster first audio
+    FIRST_SEGMENT_PUNCTS = SOFT_PUNCTS + HARD_PUNCTS
+    # Normal segments: prefer hard; optionally allow soft when segment is long enough
+    NORMAL_PUNCTS = HARD_PUNCTS
 
     def __init__(self, config, delete_audio_file):
         super().__init__(config, delete_audio_file)
@@ -47,6 +56,17 @@ class TTSProvider(TTSProviderBase):
         self.format = config.get("response_format", "pcm")
         self.sample_rate = int(config.get("sample_rate", 16000))
         self.normalize = str(config.get("normalize", True)).lower() in ("true", "1", "yes")
+        # FishAudio latency mode (keep backward-compatible default)
+        self.latency_mode = config.get("latency_mode", "balanced")
+
+        # Segmentation tuning (latency vs naturalness)
+        # - max chars: hard cap to prevent pathological long segments (reduces TTS first-chunk spikes)
+        # - soft punct min chars: avoid over-fragmentation at early commas
+        self.first_segment_max_chars = int(config.get("first_segment_max_chars", 120))
+        self.segment_max_chars = int(config.get("segment_max_chars", 160))
+        self.enable_soft_puncts = str(config.get("enable_soft_puncts", True)).lower() in ("true", "1", "yes")
+        self.first_soft_punct_min_chars = int(config.get("first_soft_punct_min_chars", 0))
+        self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 25))
 
         # Initialize Opus encoder
         self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
@@ -175,7 +195,7 @@ class TTSProvider(TTSProviderBase):
                     format=self.format,
                     sample_rate=self.sample_rate,
                     normalize=self.normalize,
-                    latency="balanced",
+                    latency=self.latency_mode,
                 ),
             )
             
@@ -259,25 +279,88 @@ class TTSProvider(TTSProviderBase):
         if not current_text:
             return None
         
-        # Choose punctuation set: aggressive for first segment, normal for rest
-        puncts = self.FIRST_SEGMENT_PUNCTS if not self._session_started else self.NORMAL_PUNCTS
-        
-        # Find earliest punctuation position
-        earliest_pos = -1
-        for punct in puncts:
-            pos = current_text.find(punct)
-            if pos != -1 and (earliest_pos == -1 or pos < earliest_pos):
-                earliest_pos = pos
-        
-        if earliest_pos == -1:
-            return None
-        
-        # Extract segment including punctuation
-        segment_raw = current_text[:earliest_pos + 1]
-        self._processed_idx += len(segment_raw)
-        
-        # Clean and return
-        return textUtils.get_string_no_punctuation_or_emoji(segment_raw)
+        is_first_segment = not self._session_started
+
+        # Choose max length cap (prevent extremely long segments without punctuation)
+        max_chars = (
+            getattr(self, "first_segment_max_chars", 0)
+            if is_first_segment
+            else getattr(self, "segment_max_chars", 0)
+        )
+        if max_chars is None:
+            max_chars = 0
+        if max_chars < 0:
+            max_chars = 0
+
+        # Helper: find first dot that isn't a decimal point (supports '.' and '．')
+        def _find_first_non_decimal_dot(text: str, dot_char: str, start_pos: int) -> int:
+            pos = max(start_pos, 0)
+            while True:
+                pos = text.find(dot_char, pos)
+                if pos == -1:
+                    return -1
+                prev_ch = text[pos - 1] if pos - 1 >= 0 else ""
+                next_ch = text[pos + 1] if pos + 1 < len(text) else ""
+                if prev_ch.isdigit() and next_ch.isdigit():
+                    pos += 1
+                    continue
+                return pos
+
+        def _find_first_punct(text: str, puncts: tuple[str, ...], start_pos: int) -> int:
+            earliest = -1
+            for punct in puncts:
+                if punct in (".", "．"):
+                    pos = _find_first_non_decimal_dot(text, punct, start_pos)
+                else:
+                    pos = text.find(punct, start_pos)
+                if pos != -1 and (earliest == -1 or pos < earliest):
+                    earliest = pos
+            return earliest
+
+        # 1) Always try hard puncts (sentence boundaries)
+        hard_pos = _find_first_punct(current_text, self.HARD_PUNCTS, 0)
+
+        # 2) Optionally allow soft puncts (commas/colons/newlines) for lower latency
+        soft_pos = -1
+        if is_first_segment:
+            # First segment: always allow soft puncts (min chars configurable; default 0 to allow "Oh,")
+            min_chars = max(int(getattr(self, "first_soft_punct_min_chars", 0)), 0)
+            soft_pos = _find_first_punct(current_text, self.SOFT_PUNCTS, max(min_chars - 1, 0))
+        elif getattr(self, "enable_soft_puncts", True):
+            min_chars = max(int(getattr(self, "soft_punct_min_chars", 0)), 0)
+            soft_pos = _find_first_punct(current_text, self.SOFT_PUNCTS, max(min_chars - 1, 0))
+
+        # Pick the earliest boundary we can use
+        split_pos = -1
+        if hard_pos != -1 and (soft_pos == -1 or hard_pos <= soft_pos):
+            split_pos = hard_pos
+        elif soft_pos != -1:
+            split_pos = soft_pos
+
+        if split_pos != -1:
+            segment_raw = current_text[: split_pos + 1]
+            self._processed_idx += len(segment_raw)
+            return textUtils.get_string_no_punctuation_or_emoji(segment_raw)
+
+        # 3) Fallback: no punctuation found, but segment is too long → force cut to avoid TTS latency spikes
+        if max_chars > 0 and len(current_text) >= max_chars:
+            # Prefer cutting at whitespace before max_chars
+            window = current_text[:max_chars]
+            cut_at = window.rfind(" ")
+            if cut_at <= 0:
+                # No whitespace (e.g., Chinese) → cut hard at max_chars
+                cut_at = max_chars
+
+            # Consume the cut segment plus subsequent whitespace (so next segment doesn't start with spaces)
+            consume_len = cut_at
+            while consume_len < len(current_text) and current_text[consume_len].isspace():
+                consume_len += 1
+
+            segment_raw = current_text[:cut_at]
+            self._processed_idx += consume_len
+            return textUtils.get_string_no_punctuation_or_emoji(segment_raw)
+
+        return None
 
     def _audio_play_priority_thread(self):
         """Override base class to accumulate all segments into one report.
@@ -420,7 +503,7 @@ class TTSProvider(TTSProviderBase):
                 format=self.format,
                 sample_rate=self.sample_rate,
                 normalize=self.normalize,
-                latency="balanced",
+                latency=self.latency_mode,
             )
         )
         if output_file:
