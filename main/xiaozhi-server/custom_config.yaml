@@ -85,7 +85,7 @@ tts_audio_send_delay: 0
 tts_audio_pre_buffer_count: 8
 # tts_audio_speed_multiplier: Send speed multiplier after pre-buffer phase
 #   Default: 1.2 (20% faster than realtime to maintain buffer)
-tts_audio_speed_multiplier: 1.0
+tts_audio_speed_multiplier: 1.2
 
 exit_commands:
   - "退出"
