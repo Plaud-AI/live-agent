@@ -523,6 +523,14 @@ class ConnectionHandler:
                 open_tts_audio_future.result(timeout=2)
 
                 self.logger.bind(tag=TAG).info("TTS audio channels opened")
+                # 预热唤醒词短回复缓存：确保首唤醒尽可能命中本地 wav（同音色、低时延）
+                try:
+                    from core.handle.helloHandle import prewarm_wakeup_reply_cache
+                    asyncio.run_coroutine_threadsafe(
+                        prewarm_wakeup_reply_cache(self), self.loop
+                    )
+                except Exception as e:
+                    self.logger.bind(tag=TAG).debug(f"wakeup prewarm schedule failed: {e}")
                 # once tts ready, we can initialize the report threads
                 self._init_report_threads()
 
@@ -1039,6 +1047,12 @@ class ConnectionHandler:
         if voice_id and self.tts and hasattr(self.tts, "reference_id"):
             self.tts.reference_id = voice_id
             self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
+            # voice 更新后，后台预热唤醒短回复缓存（避免首唤醒回退到固定录音）
+            try:
+                from core.handle.helloHandle import prewarm_wakeup_reply_cache
+                asyncio.create_task(prewarm_wakeup_reply_cache(self))
+            except Exception as e:
+                self.logger.bind(tag=TAG).debug(f"wakeup prewarm(schedule after voice update) failed: {e}")
 
         # 模块已在连接时预初始化，这里只需要确保 ASR 和 VAD stream 就绪
         # 只有在模块未初始化时才重新初始化（正常情况下不会进入）

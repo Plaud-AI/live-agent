@@ -54,6 +54,10 @@ class TTSProvider(TTSProviderBase):
         self.model = config.get("model", "speech-1.6")
         self.reference_id = config.get("reference_id")
         self.format = config.get("response_format", "pcm")
+        # IMPORTANT: base-class to_tts()/to_tts_stream() uses audio_file_type to decide how to decode bytes.
+        # FishAudio returns bytes in `response_format` (default pcm). If we keep base default "wav",
+        # PCM would be treated as WAV and ffmpeg will fail with "invalid RIFF header".
+        self.audio_file_type = self.format
         self.sample_rate = int(config.get("sample_rate", 16000))
         self.normalize = str(config.get("normalize", True)).lower() in ("true", "1", "yes")
         # FishAudio latency mode (keep backward-compatible default)
