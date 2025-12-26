@@ -70,18 +70,41 @@ class TurnDetectionProviderBase(ABC):
             is_finished: True if turn detection says finished, False otherwise
             
         Returns:
-            Sleep time in seconds (>= 0)
+            Sleep time in milliseconds (>= 0)
         """
         # Choose delay based on turn detection result
         endpoint_delay = self.min_endpoint_delay if is_finished else self.max_endpoint_delay
-        
-        if conn._last_speaking_time is None:
-            return endpoint_delay
-        
-        # Convert ms to seconds for calculation
-        elapsed = conn._last_speaking_time - int(time.time() * 1000)
-        sleep_time = endpoint_delay - elapsed
-        return sleep_time
+        now_ms = int(time.time() * 1000)
+        last_speaking_time_ms = conn._last_speaking_time
+
+        if last_speaking_time_ms is None:
+            sleep_time_ms = endpoint_delay
+            silence_elapsed_ms = None
+        else:
+            # Calculate silence elapsed (ms) since last speaking time
+            silence_elapsed_ms = now_ms - last_speaking_time_ms
+            if silence_elapsed_ms < 0:
+                silence_elapsed_ms = 0
+
+            # Remaining time to wait (ms), clamp to 0
+            sleep_time_ms = endpoint_delay - silence_elapsed_ms
+            if sleep_time_ms < 0:
+                sleep_time_ms = 0
+
+        # Debug log for online verification (align with existing latency tracing logs)
+        session_id = getattr(conn, "session_id", None)
+        logger.bind(
+            tag=TAG,
+            session_id=session_id,
+            is_finished=is_finished,
+            endpoint_delay_ms=endpoint_delay,
+            now_ms=now_ms,
+            last_speaking_time_ms=last_speaking_time_ms,
+            silence_elapsed_ms=silence_elapsed_ms,
+            sleep_time_ms=sleep_time_ms,
+        ).debug("TurnDetection endpoint delay calc")
+
+        return sleep_time_ms
     
     @abstractmethod
     def check_end_of_turn(self, conn: "ConnectionHandler"):
