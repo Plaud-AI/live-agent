@@ -124,6 +124,7 @@ wakeup_words:
   # 英文唤醒词（listen/detect 会通过 remove_punctuation_and_length 去空格/标点；"okay nabu" => "okaynabu"）
   - "okaynabu"
   - "OKAYNABU"
+  - "okay那不"
 # MCP接入点地址，地址格式为：ws://你的mcp接入点ip或者域名:端口号/mcp/?token=你的token
 # 详细教程 https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/mcp-endpoint-integration.md
 mcp_endpoint: 你的接入点 websocket地址

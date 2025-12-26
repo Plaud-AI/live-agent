@@ -94,7 +94,11 @@ async def checkWakeupWords(conn, text):
     # 抑制“唤醒词残留音频”被 ASR/TurnDetection 再次触发一轮 chat（double-trigger）
     # 只在短窗口内生效，避免误伤后续真实提问。
     conn._wakeup_suppress_next_asr_until_ms = int(time.time() * 1000) + 5000
+    # 注意：sendAudioMessage 也可能会在首句补发 tts/start。
+    # 这里既然显式发送了 tts/start，就必须同步更新 client_is_speaking，
+    # 否则会出现你日志里看到的 “tts/start 发送两次”，设备端可能会重置播放状态导致无声/卡顿。
     await send_tts_message(conn, "start")
+    conn.client_is_speaking = True
 
     # 获取当前音色
     voice = getattr(conn.tts, "voice", "default")
@@ -114,14 +118,29 @@ async def checkWakeupWords(conn, text):
             "text": "我在这里哦！",
         }
 
-    # 获取音频数据
-    opus_packets = audio_to_data(response.get("file_path"))
-    # 播放唤醒词回复
-    conn.client_abort = False
+    try:
+        # 获取音频数据：必须跟随设备端声明的音频格式（opus/pcm），否则会出现“服务端在发但设备播不出来”
+        # conn.audio_format 由 hello 消息的 audio_params.format 填充（见 handleHelloMessage）
+        is_opus = getattr(conn, "audio_format", "opus") != "pcm"
+        audio_packets = audio_to_data(response.get("file_path"), is_opus=is_opus)
 
-    conn.logger.bind(tag=TAG).info(f"播放唤醒词回复: {response.get('text')}")
-    await sendAudioMessage(conn, SentenceType.FIRST, opus_packets, response.get("text"))
-    await sendAudioMessage(conn, SentenceType.LAST, [], None)
+        # 播放唤醒词回复
+        conn.client_abort = False
+
+        conn.logger.bind(tag=TAG).info(f"播放唤醒词回复: {response.get('text')}")
+        await sendAudioMessage(
+            conn, SentenceType.FIRST, audio_packets, response.get("text")
+        )
+        await sendAudioMessage(conn, SentenceType.LAST, [], None)
+    except Exception as e:
+        # 保底恢复 speaking 状态，避免后续对话轮次被错误状态污染
+        conn.logger.bind(tag=TAG).error(f"播放唤醒词回复失败: {e}")
+        conn.client_is_speaking = False
+        try:
+            await send_tts_message(conn, "stop", None)
+        except Exception:
+            pass
+        return False
 
     # 补充对话
     conn.dialogue.put(Message(role="assistant", content=response.get("text")))
