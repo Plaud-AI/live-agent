@@ -121,6 +121,9 @@ wakeup_words:
   - "喵喵同学"
   - "小滨小滨"
   - "小冰小冰"
+  # 英文唤醒词（listen/detect 会通过 remove_punctuation_and_length 去空格/标点；"okay nabu" => "okaynabu"）
+  - "okaynabu"
+  - "OKAYNABU"
 # MCP接入点地址，地址格式为：ws://你的mcp接入点ip或者域名:端口号/mcp/?token=你的token
 # 详细教程 https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/mcp-endpoint-integration.md
 mcp_endpoint: 你的接入点 websocket地址
@@ -364,7 +367,9 @@ TurnDetection:
     timeout: 1              # HTTP request timeout (seconds)
     endpoint: /turn-detect    # API endpoint path
     min_endpoint_delay: 500      # Min time to wait after last speech before forcing end of turn (milliseconds)
-    max_endpoint_delay: 2000      # Max time to wait after last speech before forcing end of turn (milliseconds)
+    # Option1 优化：降低 unfinished/waiting 时的尾部等待，缩短“用户说完→开始回应”的体感延迟
+    # 如出现误截断（用户中途停顿被过早判定结束），可回滚为 2000
+    max_endpoint_delay: 1500      # Max time to wait after last speech before forcing end of turn (milliseconds)
 
 LLM:
   GroqLLM:  

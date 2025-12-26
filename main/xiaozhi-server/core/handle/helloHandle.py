@@ -76,13 +76,18 @@ async def checkWakeupWords(conn, text):
         return False
 
     if not enable_wakeup_words_response_cache:
-        return False
+        # 选项1：即使关闭“缓存唤醒回复”，也不走 LLM，而是播放默认的短回复音频
+        # 这样能保证唤醒“秒回”，且避免进入对话生成链路。
+        pass
 
     _, filtered_text = remove_punctuation_and_length(text)
     if filtered_text not in conn.config.get("wakeup_words"):
         return False
 
     conn.just_woken_up = True
+    # 抑制“唤醒词残留音频”被 ASR/TurnDetection 再次触发一轮 chat（double-trigger）
+    # 只在短窗口内生效，避免误伤后续真实提问。
+    conn._wakeup_suppress_next_asr_until_ms = int(time.time() * 1000) + 5000
     await send_tts_message(conn, "start")
 
     # 获取当前音色
@@ -91,8 +96,11 @@ async def checkWakeupWords(conn, text):
         voice = "default"
 
     # 获取唤醒词回复配置
-    response = wakeup_words_config.get_wakeup_response(voice)
+    response = None
+    if enable_wakeup_words_response_cache:
+        response = wakeup_words_config.get_wakeup_response(voice)
     if not response or not response.get("file_path"):
+        # 默认短回复（本地资源），不依赖网络与模型
         response = {
             "voice": "default",
             "file_path": "config/assets/wakeup_words_short.wav",
@@ -113,7 +121,7 @@ async def checkWakeupWords(conn, text):
     conn.dialogue.put(Message(role="assistant", content=response.get("text")))
 
     # 检查是否需要更新唤醒词回复
-    if time.time() - response.get("time", 0) > WAKEUP_CONFIG["refresh_time"]:
+    if enable_wakeup_words_response_cache and time.time() - response.get("time", 0) > WAKEUP_CONFIG["refresh_time"]:
         if not _wakeup_response_lock.locked():
             asyncio.create_task(wakeupWordsResponse(conn))
     return True

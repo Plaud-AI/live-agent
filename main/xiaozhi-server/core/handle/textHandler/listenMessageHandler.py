@@ -119,11 +119,12 @@ class ListenTextMessageHandler(TextMessageHandler):
                         conn.logger.bind(tag=TAG).info("设备端唤醒词已通过缓存短回复处理")
                         return
                     
-                    # Fallback: 如果缓存未启用，使用 LLM 生成回复
-                    conn.just_woken_up = True
-                    # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
-                    enqueue_asr_report(conn, "嘿，你好呀", [], report_time=report_time)
-                    await startToChat(conn, "嘿，你好呀")
+                    # 选项1：唤醒不走 LLM。若短回复未能播放（极少见），仅上报唤醒事件后返回。
+                    enqueue_asr_report(conn, original_text, [], report_time=report_time)
+                    conn.logger.bind(tag=TAG).warning(
+                        "唤醒词短回复未播放成功，已跳过 LLM 兜底（Option1）"
+                    )
+                    return
                 else:
                     # check if there are attachments(eg. images, files) in text mode
                     attachments = msg_json.get("attachments", [])
