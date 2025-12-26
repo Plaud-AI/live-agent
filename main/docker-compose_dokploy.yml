@@ -21,10 +21,20 @@ services:
     security_opt:
       - seccomp:unconfined
     environment:
-      - TZ=Asia/Shanghai
-      - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=INFO
-      - REGION=LOCAL
+      TZ: Asia/Shanghai
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: INFO
+      REGION: LOCAL
+      # 供 custom_config.yaml 的 ${VAR} 展开使用（由 Dokploy UI / main/.env 提供）
+      SECRET_KEY: ${SECRET_KEY:-}
+      MEMU_API_KEY: ${MEMU_API_KEY:-}
+      MEMU_BASE_URL: ${MEMU_BASE_URL:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      FISH_API_KEY: ${FISH_API_KEY:-}
+      BYTEPLUS_APPID: ${BYTEPLUS_APPID:-}
+      BYTEPLUS_ACCESS_TOKEN: ${BYTEPLUS_ACCESS_TOKEN:-}
     healthcheck:
       disable: true
     # 容器启动时自动获取公网 IP 并设置环境变量（使用 Python，无需 curl）
@@ -115,9 +125,33 @@ services:
       context: ./live-agent-api
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@live-agent-postgres:5432/live_agent
-      S3_ENDPOINT_URL: http://live-agent-minio:9000
-      DEBUG: "True"    # 如果是正式生产，可改成 "False"
+      # === Database ===
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@live-agent-postgres:5432/live_agent}
+      # === S3 / MinIO ===
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://live-agent-minio:9000}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL}
+      # === Security ===
+      SECRET_KEY: ${SECRET_KEY}
+      TOKEN_EXPIRE_DAYS: ${TOKEN_EXPIRE_DAYS:-7}
+      # === External Services ===
+      FISH_API_KEY: ${FISH_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      QUICK_PERSONA_MODEL: ${QUICK_PERSONA_MODEL:-google/gemini-2.5-flash}
+      OPTIMIZE_PERSONA_MODEL: ${OPTIMIZE_PERSONA_MODEL:-google/gemini-3-pro-preview}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_STT_MODEL: ${GROQ_STT_MODEL:-whisper-large-v3}
+      MEMU_API_KEY: ${MEMU_API_KEY:-}
+      MEMU_BASE_URL: ${MEMU_BASE_URL:-https://api.memu.so}
+      DEBUG: ${DEBUG:-True}    # 如果是正式生产，可改成 "False"
     ports:
       - "8081:8080"
     networks:
