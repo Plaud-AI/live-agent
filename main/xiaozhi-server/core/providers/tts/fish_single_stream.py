@@ -145,24 +145,8 @@ class TTSProvider(TTSProviderBase):
                     self.conn._latency_tts_first_text_time = None
                     
                     # 设置首句标志，用于触发 sendAudioHandle 中的流控重置
+                    # tts start 的发送由 sendAudioHandle.py 统一处理
                     self.tts_audio_first_sentence = True
-                    
-                    # 【关键修复】立即发送 tts start，不等待首包
-                    # 官方服务器在 TTS 请求开始时就发送 tts start，
-                    # 这样设备有 TTS 首包延迟（~500ms-1s）的时间来切换状态
-                    if not self.conn.client_is_speaking:
-                        from core.handle.sendAudioHandle import send_tts_message
-                        asyncio.run_coroutine_threadsafe(
-                            send_tts_message(self.conn, "start", None, message.message_tag),
-                            self.conn.loop
-                        )
-                        self.conn.client_is_speaking = True
-                        # 重置流控状态
-                        if hasattr(self.conn, "audio_flow_control"):
-                            self.conn.audio_flow_control["start_time"] = time.perf_counter()
-                            self.conn.audio_flow_control["packet_count"] = 0
-                            self.conn.audio_flow_control["last_send_time"] = 0
-                        logger.bind(tag=TAG).info("TTS session start: sent tts/start immediately")
                     
                     # 清理预加载状态
                     # 注意：_next_send_idx 从 1 开始，因为 segment 0 是流式发送的
