@@ -32,6 +32,13 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
         if not conn.client_is_speaking:
             await send_tts_message(conn, "start", None, message_tag)
             conn.client_is_speaking = True
+            
+            # 等待设备端完成状态切换
+            # 设备端使用 Schedule() 异步切换状态，需要一定时间
+            tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
+            if tts_start_delay > 0:
+                conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
+                await asyncio.sleep(tts_start_delay)
         
         # 在整个 TTS 会话开始时重置流控（而不是每个句子开始时）
         # 这确保同一会话内的多个句子音频可以连续播放
@@ -76,6 +83,12 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
             conn.client_is_speaking = True
             await send_tts_message(conn, "start", None, message_tag)
+            
+            # 等待设备端完成状态切换
+            tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
+            if tts_start_delay > 0:
+                conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
+                await asyncio.sleep(tts_start_delay)
             
             # 只在新 TTS 会话开始时重置流控（client_is_speaking 从 False 变为 True）
             # 这确保同一会话内的多个句子音频可以连续播放
