@@ -75,6 +75,7 @@ class TTSProvider(TTSProviderBase):
         self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 25))
 
         # Prefetch configuration - 预加载深度（同时进行的 TTS 请求数）
+        # 注意：FishSpeech API 可能有并发限制，建议设为 2 避免限速
         self.prefetch_depth = int(config.get("prefetch_depth", 2))
 
         # Initialize Opus encoder
@@ -264,6 +265,8 @@ class TTSProvider(TTSProviderBase):
         """预加载工作线程：获取 TTS 音频并存入缓冲区
         
         每个线程使用独立的 Opus 编码器实例，避免线程安全问题
+        注意：不再使用基于 segment_idx 的延迟，因为会导致跨会话累积问题。
+        并发控制通过 prefetch_depth (线程池大小) 来实现。
         """
         text = MarkdownCleaner.clean_markdown(text)
         if not text.strip():

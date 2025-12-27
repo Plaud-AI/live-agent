@@ -240,12 +240,16 @@ async def sendAudio(conn, audios, frame_duration=60, message_tag=MessageTag.NORM
         pre_buffer_count = conn.config.get("tts_audio_pre_buffer_count", 8)  # 预缓冲包数（约480ms）
         speed_multiplier = conn.config.get("tts_audio_speed_multiplier", 1.0)  # 发送速度倍率
         
+        # 最小发送间隔（毫秒）- 避免数据突发导致设备端缓冲区溢出
+        min_send_interval_ms = conn.config.get("tts_audio_min_send_interval_ms", 5)
+        
         if send_delay > 0:
             # 使用固定延迟
             await asyncio.sleep(send_delay)
         elif flow_control["packet_count"] < pre_buffer_count:
-            # 预缓冲阶段：快速发送，不做延迟
-            pass
+            # 预缓冲阶段：快速发送，但仍需要最小间隔避免突发
+            if min_send_interval_ms > 0 and flow_control["packet_count"] > 0:
+                await asyncio.sleep(min_send_interval_ms / 1000.0)
         else:
             # 按略快于实时的速度发送
             packets_after_prebuffer = flow_control["packet_count"] - pre_buffer_count
