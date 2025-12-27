@@ -602,7 +602,7 @@ class TTSProvider(TTSProviderBase):
         if max_chars < 0:
             max_chars = 0
 
-        # Helper: find first dot that isn't a decimal point (supports '.' and '．')
+        # Helper: find first dot that isn't a decimal point or part of ellipsis (supports '.' and '．')
         def _find_first_non_decimal_dot(text: str, dot_char: str, start_pos: int) -> int:
             pos = max(start_pos, 0)
             while True:
@@ -611,7 +611,17 @@ class TTSProvider(TTSProviderBase):
                     return -1
                 prev_ch = text[pos - 1] if pos - 1 >= 0 else ""
                 next_ch = text[pos + 1] if pos + 1 < len(text) else ""
+                # Skip decimal points (e.g., "1.5")
                 if prev_ch.isdigit() and next_ch.isdigit():
+                    pos += 1
+                    continue
+                # Skip ellipsis: if next char is also a dot, skip this one
+                # This handles "..." or "...." patterns
+                if next_ch == dot_char:
+                    pos += 1
+                    continue
+                # Skip if this dot follows another dot (part of ellipsis)
+                if prev_ch == dot_char:
                     pos += 1
                     continue
                 return pos
