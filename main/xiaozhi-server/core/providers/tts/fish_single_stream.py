@@ -98,7 +98,7 @@ class TTSProvider(TTSProviderBase):
         # Prefetch state
         self._prefetch_buffers = {}  # segment_idx -> {"text": str, "audio_chunks": [], "done": Event, "error": Exception}
         self._prefetch_lock = threading.Lock()
-        self._next_send_idx = 0
+        self._next_send_idx = 1  # 从 1 开始，因为 segment 0 是流式发送
         self._segment_idx = 0
         self._tts_executor = None
 
@@ -145,9 +145,10 @@ class TTSProvider(TTSProviderBase):
                     self.conn._latency_tts_first_text_time = None
                     
                     # 清理预加载状态
+                    # 注意：_next_send_idx 从 1 开始，因为 segment 0 是流式发送的
                     with self._prefetch_lock:
                         self._prefetch_buffers.clear()
-                        self._next_send_idx = 0
+                        self._next_send_idx = 1  # 从 1 开始，因为 segment 0 是流式发送
                         self._segment_idx = 0
                     
                     logger.bind(tag=TAG).debug("TTS session initialized (prefetch enabled)")
@@ -256,7 +257,10 @@ class TTSProvider(TTSProviderBase):
         logger.bind(tag=TAG).debug(f"📦 [Prefetch] Submitted segment {segment_idx}: {text[:30]}...")
 
     def _prefetch_tts_worker(self, text: str, segment_idx: int):
-        """预加载工作线程：获取 TTS 音频并存入缓冲区"""
+        """预加载工作线程：获取 TTS 音频并存入缓冲区
+        
+        每个线程使用独立的 Opus 编码器实例，避免线程安全问题
+        """
         text = MarkdownCleaner.clean_markdown(text)
         if not text.strip():
             with self._prefetch_lock:
@@ -266,16 +270,21 @@ class TTSProvider(TTSProviderBase):
         
         start_time = time.time() * 1000
         
+        # 创建独立的 Opus 编码器实例（线程安全）
+        local_encoder = opus_encoder_utils.OpusEncoderUtils(
+            sample_rate=self.sample_rate, channels=1, frame_size_ms=60
+        )
+        
         # 计算每帧字节数
         frame_bytes = int(
-            self.opus_encoder.sample_rate
-            * self.opus_encoder.channels
-            * self.opus_encoder.frame_size_ms
+            local_encoder.sample_rate
+            * local_encoder.channels
+            * local_encoder.frame_size_ms
             / 1000
             * 2
         )
         
-        # 使用独立的 PCM 缓冲区（避免与主线程冲突）
+        # 使用独立的 PCM 缓冲区
         pcm_buffer = bytearray()
         audio_chunks = []
         
@@ -315,19 +324,18 @@ class TTSProvider(TTSProviderBase):
                 # 累积 PCM 数据
                 pcm_buffer.extend(chunk)
                 
-                # 编码完整帧
+                # 编码完整帧（使用独立编码器）
                 while len(pcm_buffer) >= frame_bytes:
                     frame = bytes(pcm_buffer[:frame_bytes])
                     del pcm_buffer[:frame_bytes]
                     
-                    # 使用独立的编码器实例或同步编码
-                    opus_data = self._encode_frame_sync(frame)
+                    opus_data = self._encode_frame_with_encoder(local_encoder, frame, False)
                     if opus_data:
                         audio_chunks.append(opus_data)
             
             # 处理剩余数据
             if pcm_buffer and not self.conn.client_abort:
-                opus_data = self._encode_frame_sync(bytes(pcm_buffer), end_of_stream=True)
+                opus_data = self._encode_frame_with_encoder(local_encoder, bytes(pcm_buffer), True)
                 if opus_data:
                     audio_chunks.append(opus_data)
             
@@ -341,22 +349,26 @@ class TTSProvider(TTSProviderBase):
                     self._prefetch_buffers[segment_idx]["error"] = e
         
         finally:
+            # 清理编码器
+            try:
+                local_encoder.close()
+            except Exception:
+                pass
+            
             # 存储结果并标记完成
             with self._prefetch_lock:
                 if segment_idx in self._prefetch_buffers:
                     self._prefetch_buffers[segment_idx]["audio_chunks"] = audio_chunks
                     self._prefetch_buffers[segment_idx]["done"].set()
 
-    def _encode_frame_sync(self, pcm_data: bytes, end_of_stream: bool = False) -> bytes:
-        """同步编码 PCM 帧为 Opus（线程安全）"""
+    def _encode_frame_with_encoder(self, encoder, pcm_data: bytes, end_of_stream: bool = False) -> bytes:
+        """使用指定编码器编码 PCM 帧为 Opus"""
         result = []
         
         def callback(opus_data):
             result.append(opus_data)
         
-        # 注意：opus_encoder 需要是线程安全的，或者每个预加载线程使用独立的编码器
-        # 这里简化处理，假设编码器是线程安全的
-        self.opus_encoder.encode_pcm_to_opus_stream(
+        encoder.encode_pcm_to_opus_stream(
             pcm_data, end_of_stream=end_of_stream, callback=callback
         )
         
