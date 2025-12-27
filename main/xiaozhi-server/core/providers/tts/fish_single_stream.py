@@ -144,6 +144,9 @@ class TTSProvider(TTSProviderBase):
                     self.pcm_buffer.clear()
                     self.conn._latency_tts_first_text_time = None
                     
+                    # 设置首句标志，用于触发 sendAudioHandle 中的流控重置
+                    self.tts_audio_first_sentence = True
+                    
                     # 清理预加载状态
                     # 注意：_next_send_idx 从 1 开始，因为 segment 0 是流式发送的
                     with self._prefetch_lock:
