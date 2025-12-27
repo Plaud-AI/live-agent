@@ -3,6 +3,8 @@ import asyncio
 import traceback
 import time
 import httpx
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from config.logger import setup_logging
 from core.utils.tts import MarkdownCleaner
 from core.providers.tts.base import TTSProviderBase
@@ -72,6 +74,9 @@ class TTSProvider(TTSProviderBase):
         self.first_soft_punct_min_chars = int(config.get("first_soft_punct_min_chars", 0))
         self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 25))
 
+        # Prefetch configuration - 预加载深度（同时进行的 TTS 请求数）
+        self.prefetch_depth = int(config.get("prefetch_depth", 2))
+
         # Initialize Opus encoder
         self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
             sample_rate=self.sample_rate, channels=1, frame_size_ms=60
@@ -89,16 +94,46 @@ class TTSProvider(TTSProviderBase):
         # Text buffer state
         self._text_buffer = ""
         self._processed_idx = 0
+        
+        # Prefetch state
+        self._prefetch_buffers = {}  # segment_idx -> {"text": str, "audio_chunks": [], "done": Event, "error": Exception}
+        self._prefetch_lock = threading.Lock()
+        self._next_send_idx = 1  # 从 1 开始，因为 segment 0 是流式发送
+        self._segment_idx = 0
+        self._tts_executor = None
+
+    def _get_tts_executor(self):
+        """懒加载 TTS 线程池"""
+        if self._tts_executor is None:
+            self._tts_executor = ThreadPoolExecutor(
+                max_workers=self.prefetch_depth,
+                thread_name_prefix="TTS-Prefetch"
+            )
+        return self._tts_executor
 
     def tts_text_priority_thread(self):
-        """Streaming text processing thread with lifecycle alignment:
-        - tts_text_queue FIRST -> tts_audio_queue FIRST (session start)
-        - tts_text_queue TEXT (MIDDLE) -> tts_audio_queue MIDDLE (audio chunks)
-        - tts_text_queue LAST -> tts_audio_queue LAST (session end)
+        """Streaming text processing thread with prefetch pipeline.
+        
+        Lifecycle alignment:
+        - tts_text_queue FIRST -> initialize session
+        - tts_text_queue TEXT -> extract segments, prefetch TTS
+        - tts_text_queue LAST -> flush remaining, send LAST
+        
+        Prefetch mechanism:
+        - Multiple segments can be processed in parallel
+        - Audio is sent in order (segment 0, then 1, then 2...)
+        - First segment is streamed directly for low latency
+        - Subsequent segments are prefetched while previous ones play
         """
         while not self.conn.stop_event.is_set():
             try:
-                message = self.tts_text_queue.get(timeout=1)
+                # 尝试处理已完成的预加载任务（即使没有新消息）
+                self._flush_completed_prefetch()
+                
+                try:
+                    message = self.tts_text_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
                 
                 # Handle FIRST - session start
                 if message.sentence_type == SentenceType.FIRST:
@@ -108,7 +143,19 @@ class TTSProvider(TTSProviderBase):
                     self._session_started = False
                     self.pcm_buffer.clear()
                     self.conn._latency_tts_first_text_time = None
-                    logger.bind(tag=TAG).debug("TTS session initialized")
+                    
+                    # 设置首句标志，用于触发 sendAudioHandle 中的流控重置
+                    # tts start 的发送由 sendAudioHandle.py 统一处理
+                    self.tts_audio_first_sentence = True
+                    
+                    # 清理预加载状态
+                    # 注意：_next_send_idx 从 1 开始，因为 segment 0 是流式发送的
+                    with self._prefetch_lock:
+                        self._prefetch_buffers.clear()
+                        self._next_send_idx = 1  # 从 1 开始，因为 segment 0 是流式发送
+                        self._segment_idx = 0
+                    
+                    logger.bind(tag=TAG).debug("TTS session initialized (prefetch enabled)")
                     continue
                 
                 # Check for abort
@@ -123,24 +170,40 @@ class TTSProvider(TTSProviderBase):
                             message_tag=self._message_tag,
                         ))
                         self._session_started = False
+                    # 清理预加载
+                    with self._prefetch_lock:
+                        self._prefetch_buffers.clear()
                     continue
                 
                 # Handle TEXT content
                 if ContentType.TEXT == message.content_type:
                     self._text_buffer += message.content_detail
                     
-                    # Try to extract and process segments
+                    # 提取所有可用的句子
+                    segments_to_process = []
                     while True:
                         segment = self._extract_segment()
                         if not segment:
                             break
-                        
+                        segments_to_process.append(segment)
+                    
+                    # 处理提取到的句子
+                    for segment in segments_to_process:
                         # Record TTS first text input time (for latency tracking)
                         if self.conn._latency_tts_first_text_time is None:
                             self.conn._latency_tts_first_text_time = time.time() * 1000
                             logger.bind(tag=TAG).debug("📝 [Latency] TTS received first text")
                         
-                        self._stream_tts_segment(segment)
+                        # 第一个句子直接流式处理（保持低首包延迟）
+                        if self._segment_idx == 0:
+                            self._stream_tts_segment(segment)
+                            self._segment_idx += 1
+                        else:
+                            # 后续句子提交到预加载队列
+                            self._submit_prefetch(segment)
+                    
+                    # 尝试发送已完成的预加载
+                    self._flush_completed_prefetch()
                 
                 # Handle LAST - session end
                 if message.sentence_type == SentenceType.LAST:
@@ -149,7 +212,14 @@ class TTSProvider(TTSProviderBase):
                     if remaining.strip():
                         segment = textUtils.get_string_no_punctuation_or_emoji(remaining)
                         if segment:
-                            self._stream_tts_segment(segment)
+                            if self._segment_idx == 0:
+                                self._stream_tts_segment(segment)
+                                self._segment_idx += 1
+                            else:
+                                self._submit_prefetch(segment)
+                    
+                    # 等待所有预加载完成并发送
+                    self._flush_all_prefetch()
                     
                     # Send LAST to audio queue
                     self.tts_audio_queue.put(TTSAudioDTO(
@@ -169,13 +239,234 @@ class TTSProvider(TTSProviderBase):
                     f"TTS text processing failed: {str(e)}, type: {type(e).__name__}, stack: {traceback.format_exc()}"
                 )
 
+    def _submit_prefetch(self, text: str):
+        """提交句子到预加载队列"""
+        segment_idx = self._segment_idx
+        self._segment_idx += 1
+        
+        # 创建预加载缓冲区
+        with self._prefetch_lock:
+            self._prefetch_buffers[segment_idx] = {
+                "text": text,
+                "audio_chunks": [],
+                "done": threading.Event(),
+                "error": None,
+                "first_chunk_time": None,
+            }
+        
+        # 提交到线程池
+        executor = self._get_tts_executor()
+        executor.submit(self._prefetch_tts_worker, text, segment_idx)
+        
+        logger.bind(tag=TAG).debug(f"📦 [Prefetch] Submitted segment {segment_idx}: {text[:30]}...")
+
+    def _prefetch_tts_worker(self, text: str, segment_idx: int):
+        """预加载工作线程：获取 TTS 音频并存入缓冲区
+        
+        每个线程使用独立的 Opus 编码器实例，避免线程安全问题
+        """
+        text = MarkdownCleaner.clean_markdown(text)
+        if not text.strip():
+            with self._prefetch_lock:
+                if segment_idx in self._prefetch_buffers:
+                    self._prefetch_buffers[segment_idx]["done"].set()
+            return
+        
+        start_time = time.time() * 1000
+        
+        # 创建独立的 Opus 编码器实例（线程安全）
+        local_encoder = opus_encoder_utils.OpusEncoderUtils(
+            sample_rate=self.sample_rate, channels=1, frame_size_ms=60
+        )
+        
+        # 计算每帧字节数
+        frame_bytes = int(
+            local_encoder.sample_rate
+            * local_encoder.channels
+            * local_encoder.frame_size_ms
+            / 1000
+            * 2
+        )
+        
+        # 使用独立的 PCM 缓冲区
+        pcm_buffer = bytearray()
+        audio_chunks = []
+        
+        try:
+            logger.bind(tag=TAG).info(f"🔄 [Prefetch] TTS request: segment={segment_idx}, reference_id={self.reference_id}, text={text[:50]}...")
+            
+            audio_stream = self._client.tts.stream(
+                text=text,
+                reference_id=self.reference_id,
+                model=self.model,
+                config=TTSConfig(
+                    format=self.format,
+                    sample_rate=self.sample_rate,
+                    normalize=self.normalize,
+                    latency=self.latency_mode,
+                ),
+            )
+            
+            first_chunk_logged = False
+            
+            for chunk in audio_stream:
+                if self.conn.client_abort:
+                    logger.bind(tag=TAG).info(f"🛑 [Prefetch] Abort during prefetch, segment={segment_idx}")
+                    break
+                
+                # 记录首包时间
+                if not first_chunk_logged:
+                    first_chunk_logged = True
+                    first_chunk_time = time.time() * 1000
+                    api_latency = (first_chunk_time - start_time) / 1000
+                    logger.bind(tag=TAG).info(f"⚡ [Prefetch] Segment {segment_idx} first chunk: {api_latency:.3f}s")
+                    
+                    with self._prefetch_lock:
+                        if segment_idx in self._prefetch_buffers:
+                            self._prefetch_buffers[segment_idx]["first_chunk_time"] = first_chunk_time
+                
+                # 累积 PCM 数据
+                pcm_buffer.extend(chunk)
+                
+                # 编码完整帧（使用独立编码器）
+                while len(pcm_buffer) >= frame_bytes:
+                    frame = bytes(pcm_buffer[:frame_bytes])
+                    del pcm_buffer[:frame_bytes]
+                    
+                    opus_data = self._encode_frame_with_encoder(local_encoder, frame, False)
+                    if opus_data:
+                        audio_chunks.append(opus_data)
+            
+            # 处理剩余数据
+            if pcm_buffer and not self.conn.client_abort:
+                opus_data = self._encode_frame_with_encoder(local_encoder, bytes(pcm_buffer), True)
+                if opus_data:
+                    audio_chunks.append(opus_data)
+            
+            elapsed = (time.time() * 1000 - start_time) / 1000
+            logger.bind(tag=TAG).info(f"✅ [Prefetch] Segment {segment_idx} completed in {elapsed:.3f}s, {len(audio_chunks)} chunks")
+            
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"❌ [Prefetch] Segment {segment_idx} error: {e}")
+            with self._prefetch_lock:
+                if segment_idx in self._prefetch_buffers:
+                    self._prefetch_buffers[segment_idx]["error"] = e
+        
+        finally:
+            # 清理编码器
+            try:
+                local_encoder.close()
+            except Exception:
+                pass
+            
+            # 存储结果并标记完成
+            with self._prefetch_lock:
+                if segment_idx in self._prefetch_buffers:
+                    self._prefetch_buffers[segment_idx]["audio_chunks"] = audio_chunks
+                    self._prefetch_buffers[segment_idx]["done"].set()
+
+    def _encode_frame_with_encoder(self, encoder, pcm_data: bytes, end_of_stream: bool = False) -> bytes:
+        """使用指定编码器编码 PCM 帧为 Opus"""
+        result = []
+        
+        def callback(opus_data):
+            result.append(opus_data)
+        
+        encoder.encode_pcm_to_opus_stream(
+            pcm_data, end_of_stream=end_of_stream, callback=callback
+        )
+        
+        return result[0] if result else None
+
+    def _flush_completed_prefetch(self):
+        """发送已完成的预加载结果（按顺序）"""
+        while True:
+            with self._prefetch_lock:
+                # 检查下一个要发送的段落是否就绪
+                if self._next_send_idx not in self._prefetch_buffers:
+                    break
+                
+                buffer = self._prefetch_buffers[self._next_send_idx]
+                
+                # 如果还没完成，等待
+                if not buffer["done"].is_set():
+                    break
+                
+                # 取出并删除缓冲区
+                segment_idx = self._next_send_idx
+                self._next_send_idx += 1
+                del self._prefetch_buffers[segment_idx]
+            
+            # 发送结果（在锁外操作）
+            self._send_prefetch_result(buffer)
+
+    def _flush_all_prefetch(self):
+        """等待并发送所有剩余的预加载结果"""
+        while True:
+            with self._prefetch_lock:
+                if self._next_send_idx not in self._prefetch_buffers:
+                    break
+                
+                buffer = self._prefetch_buffers[self._next_send_idx]
+            
+            # 等待完成
+            buffer["done"].wait(timeout=30)
+            
+            with self._prefetch_lock:
+                if self._next_send_idx in self._prefetch_buffers:
+                    segment_idx = self._next_send_idx
+                    self._next_send_idx += 1
+                    del self._prefetch_buffers[segment_idx]
+            
+            # 发送结果
+            self._send_prefetch_result(buffer)
+
+    def _send_prefetch_result(self, buffer: dict):
+        """发送预加载结果到音频队列"""
+        text = buffer["text"]
+        audio_chunks = buffer["audio_chunks"]
+        error = buffer["error"]
+        
+        if error:
+            logger.bind(tag=TAG).warning(f"Skipping segment due to prefetch error: {error}")
+            return
+        
+        if not audio_chunks:
+            logger.bind(tag=TAG).debug(f"Skipping empty segment: {text[:30]}...")
+            return
+        
+        # 发送 FIRST（触发 sentence_start）
+        self.tts_audio_queue.put(TTSAudioDTO(
+            sentence_type=SentenceType.FIRST,
+            audio_data=None,
+            text=text,
+            message_tag=self._message_tag,
+        ))
+        self._session_started = True
+        
+        # 发送所有音频块
+        for opus_data in audio_chunks:
+            if self.conn.client_abort:
+                break
+            self.tts_audio_queue.put(TTSAudioDTO(
+                sentence_type=SentenceType.MIDDLE,
+                audio_data=opus_data,
+                text=None,
+                message_tag=self._message_tag,
+            ))
+        
+        logger.bind(tag=TAG).debug(f"📤 [Prefetch] Sent segment: {text[:30]}... ({len(audio_chunks)} chunks)")
+
     def _stream_tts_segment(self, text: str):
-        """Process a text segment with streaming TTS, sending audio chunks as MIDDLE messages"""
+        """Process a text segment with streaming TTS, sending audio chunks as MIDDLE messages.
+        
+        This is used for the first segment to minimize latency.
+        """
         text = MarkdownCleaner.clean_markdown(text)
         if not text.strip():
             return
         
-        logger.bind(tag=TAG).info(f"FishSpeech streaming: {text}")
+        logger.bind(tag=TAG).info(f"FishSpeech streaming (first segment): {text}")
         start_time = time.time() * 1000
         first_chunk_logged = False  # Track first chunk for this segment
         
@@ -295,7 +586,7 @@ class TTSProvider(TTSProviderBase):
         if max_chars < 0:
             max_chars = 0
 
-        # Helper: find first dot that isn't a decimal point (supports '.' and '．')
+        # Helper: find first dot that isn't a decimal point or part of ellipsis (supports '.' and '．')
         def _find_first_non_decimal_dot(text: str, dot_char: str, start_pos: int) -> int:
             pos = max(start_pos, 0)
             while True:
@@ -304,7 +595,17 @@ class TTSProvider(TTSProviderBase):
                     return -1
                 prev_ch = text[pos - 1] if pos - 1 >= 0 else ""
                 next_ch = text[pos + 1] if pos + 1 < len(text) else ""
+                # Skip decimal points (e.g., "1.5")
                 if prev_ch.isdigit() and next_ch.isdigit():
+                    pos += 1
+                    continue
+                # Skip ellipsis: if next char is also a dot, skip this one
+                # This handles "..." or "...." patterns
+                if next_ch == dot_char:
+                    pos += 1
+                    continue
+                # Skip if this dot follows another dot (part of ellipsis)
+                if prev_ch == dot_char:
                     pos += 1
                     continue
                 return pos
@@ -523,3 +824,5 @@ class TTSProvider(TTSProviderBase):
             self._client.close()
         if hasattr(self, "_httpx_client"):
             self._httpx_client.close()
+        if hasattr(self, "_tts_executor") and self._tts_executor:
+            self._tts_executor.shutdown(wait=False)
