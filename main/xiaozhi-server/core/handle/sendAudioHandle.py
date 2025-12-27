@@ -24,83 +24,100 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
         f"client_speaking={conn.client_is_speaking}"
     )
     
-    if conn.tts.tts_audio_first_sentence:
-        conn.tts.tts_audio_first_sentence = False
-        
-        # 只有当 client_is_speaking 为 False 时才发送 tts/start
-        # 如果 send_stt_message() 已经发送过 tts/start，此时 client_is_speaking 已为 True
-        if not conn.client_is_speaking:
-            await send_tts_message(conn, "start", None, message_tag)
-            conn.client_is_speaking = True
-            
-            # 等待设备端完成状态切换
-            # 设备端使用 Schedule() 异步切换状态，需要一定时间
-            tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
-            if tts_start_delay > 0:
-                conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
-                await asyncio.sleep(tts_start_delay)
-        
-        # 在整个 TTS 会话开始时重置流控（而不是每个句子开始时）
-        # 这确保同一会话内的多个句子音频可以连续播放
-        if hasattr(conn, "audio_flow_control"):
-            conn.audio_flow_control["start_time"] = time.perf_counter()
-            conn.audio_flow_control["packet_count"] = 0
-            conn.audio_flow_control["last_send_time"] = 0
-            conn.logger.bind(tag=TAG).debug("重置音频流控状态 (TTS会话开始)")
-        
-        # 记录首句 TTS 播放时间（端到端延迟的终点）
-        first_audio_time = time.time() * 1000
-        
-        # 计算 TTS 首包延迟（输入到输出）
-        tts_first_package_delay = 0
-        if hasattr(conn, '_latency_tts_first_text_time') and conn._latency_tts_first_text_time:
-            tts_first_package_delay = first_audio_time - conn._latency_tts_first_text_time
-        
-        # 计算端到端延迟
-        e2e_total_delay = 0
-        if hasattr(conn, '_latency_voice_end_time'):
-            e2e_total_delay = first_audio_time - conn._latency_voice_end_time
-        
-        conn.logger.bind(tag=TAG).info(
-            f"🔊 [延迟追踪] 首句TTS开始播放 | "
-            f"TTS首包延迟: {tts_first_package_delay:.0f}ms | "
-            f"⏱️  端到端总延迟: {e2e_total_delay:.0f}ms (用户说完→首句播放) | "
-            f"文本: {text if text else '(无文本)'}"
-        )
-
     # 在新句子开始或会话结束前，先发送前一个句子的 sentence_end
     # 这确保 sentence_end 在该句子的所有音频发送完毕后才发送
     if sentenceType in (SentenceType.FIRST, SentenceType.LAST):
         if hasattr(conn, '_pending_sentence_text') and conn._pending_sentence_text:
             await send_tts_message(conn, "sentence_end", conn._pending_sentence_text, message_tag)
             conn._pending_sentence_text = None
-    
-    if sentenceType == SentenceType.FIRST:
-        # 如果当前不在 speaking 状态（之前的 TTS 已经 stop），需要先发送 tts start
-        # 这处理了多个 LLM 回复在同一会话中交叉的情况
-        # 注意：tts_audio_first_sentence 的检查已经在上面处理过了，这里只处理非首句的情况
+
+    # IMPORTANT: streaming TTS 会先发 FIRST(仅文本, audio_data=None) 再产出音频(MIDDLE)。
+    # 如果在 FIRST(无音频) 时就发送 tts/start，设备端会进入“等待音频”状态，
+    # 一旦首包音频因网络/TTS首包延迟而超过设备阈值，就会关闭播放通道 → 用户无声（必现/偶现取决于阈值与抖动）。
+    # 因此：FIRST(无音频) 只缓存 sentence_start 文本，等到“首个非空音频包”到来时再发送 tts/start + sentence_start + 音频。
+    has_audio = bool(audios)
+    if sentenceType == SentenceType.FIRST and not has_audio:
+        if text:
+            # 记录待发送的 sentence_start（等首音频到来时再发，确保 start→audio 间隙极小）
+            conn._tts_pending_sentence_start_text = text
+            conn._tts_pending_sentence_start_message_tag = message_tag
+            # 记录待发送的 sentence_end（下一句开始/会话结束时发送）
+            conn._pending_sentence_text = text
+        return
+
+    async def _ensure_tts_session_started_before_audio(_log_text: str | None):
+        """确保在发送任何音频前，tts/start 已发送且设备已完成状态切换。"""
+        # 只有当 client_is_speaking 为 False 时才发送 tts/start
+        # 如果 wakeup/其他路径已发送过 tts/start，此时 client_is_speaking 已为 True
         if not conn.client_is_speaking:
-            conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
-            conn.client_is_speaking = True
             await send_tts_message(conn, "start", None, message_tag)
-            
-            # 等待设备端完成状态切换
+            conn.client_is_speaking = True
+
+            # 等待设备端完成状态切换（Schedule 异步切换）
             tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
             if tts_start_delay > 0:
                 conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
                 await asyncio.sleep(tts_start_delay)
-            
-            # 只在新 TTS 会话开始时重置流控（client_is_speaking 从 False 变为 True）
-            # 这确保同一会话内的多个句子音频可以连续播放
+
+        # 仅在“首个音频包”到来时做一次会话级流控重置与延迟打点
+        if hasattr(conn, "tts") and getattr(conn.tts, "tts_audio_first_sentence", False):
+            conn.tts.tts_audio_first_sentence = False
+
+            # 在整个 TTS 会话开始时重置流控（而不是每个句子开始时）
             if hasattr(conn, "audio_flow_control"):
                 conn.audio_flow_control["start_time"] = time.perf_counter()
                 conn.audio_flow_control["packet_count"] = 0
                 conn.audio_flow_control["last_send_time"] = 0
-                conn.logger.bind(tag=TAG).debug("重置音频流控状态 (新TTS会话开始)")
-        
+                conn.logger.bind(tag=TAG).debug("重置音频流控状态 (TTS会话开始)")
+
+            # 记录首句 TTS 播放时间（端到端延迟的终点）
+            first_audio_time = time.time() * 1000
+
+            # 计算 TTS 首包延迟（输入到输出）
+            tts_first_package_delay = 0
+            if hasattr(conn, "_latency_tts_first_text_time") and conn._latency_tts_first_text_time:
+                tts_first_package_delay = first_audio_time - conn._latency_tts_first_text_time
+
+            # 计算端到端延迟
+            e2e_total_delay = 0
+            if hasattr(conn, "_latency_voice_end_time"):
+                e2e_total_delay = first_audio_time - conn._latency_voice_end_time
+
+            conn.logger.bind(tag=TAG).info(
+                f"🔊 [延迟追踪] 首句TTS开始播放 | "
+                f"TTS首包延迟: {tts_first_package_delay:.0f}ms | "
+                f"⏱️  端到端总延迟: {e2e_total_delay:.0f}ms (用户说完→首句播放) | "
+                f"文本: {_log_text if _log_text else '(无文本)'}"
+            )
+    
+    if sentenceType == SentenceType.FIRST:
+        # FIRST 且有音频：在发送音频前确保会话已启动（start→audio 间隙仅剩 tts_start_delay_ms）
+        await _ensure_tts_session_started_before_audio(text)
         await send_tts_message(conn, "sentence_start", text, message_tag)
         # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
         conn._pending_sentence_text = text if text else None
+        # 清理可能存在的“延迟发送 sentence_start”缓存
+        if hasattr(conn, "_tts_pending_sentence_start_text"):
+            conn._tts_pending_sentence_start_text = None
+        if hasattr(conn, "_tts_pending_sentence_start_message_tag"):
+            conn._tts_pending_sentence_start_message_tag = None
+
+    # MIDDLE(音频) 且存在待发送 sentence_start：先补发 sentence_start，再下发音频
+    if sentenceType == SentenceType.MIDDLE and has_audio:
+        pending_start_text = getattr(conn, "_tts_pending_sentence_start_text", None)
+        if pending_start_text:
+            pending_tag = getattr(conn, "_tts_pending_sentence_start_message_tag", message_tag)
+            # 确保 tts/start 在 sentence_start 之前
+            await _ensure_tts_session_started_before_audio(pending_start_text)
+            await send_tts_message(conn, "sentence_start", pending_start_text, pending_tag)
+            # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
+            conn._pending_sentence_text = pending_start_text
+            conn._tts_pending_sentence_start_text = None
+            conn._tts_pending_sentence_start_message_tag = None
+        else:
+            # 没有 sentence_start 文本（异常/兼容场景），但仍需确保 start 在首音频前
+            if not conn.client_is_speaking:
+                await _ensure_tts_session_started_before_audio(None)
 
     await sendAudio(conn, audios, message_tag=message_tag)
     
