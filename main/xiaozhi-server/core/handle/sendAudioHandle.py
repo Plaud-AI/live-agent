@@ -367,19 +367,32 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
 
 
 async def send_stt_message(conn, text):
-    """发送 STT 状态消息
+    """发送 STT 状态消息（仅发送用户识别文本，不启动 TTS 会话）
+    
+    修复说明（2025-12-27）:
+    之前此函数会提前发送 tts start 来"预热"设备，但这导致了问题：
+    - tts start 发送后，设备进入等待音频状态
+    - LLM 生成 + TTS 合成需要 1-2 秒
+    - 设备等待超时（通常 1-2 秒阈值），关闭播放通道
+    - 后续音频到达时被丢弃，用户听不到回复
+    
+    修复方案：
+    - 此函数只发送 STT 文本消息（用于 UI 显示用户说了什么）
+    - tts start 由 sendAudioMessage 在首帧音频准备好时发送
+    - 确保 tts start 与音频数据紧密衔接，消除超时间隙
     
     注意：此函数在同一对话轮次中只应被调用一次。
     如果 client_is_speaking 已为 True，说明本轮对话已开始，
     此时再次调用是重复的（可能由于 wake word 音频被误识别导致）。
     """
-    # 防止重复发送：如果已经在 speaking 状态，说明本轮对话的 tts/start 和 stt 已经发送过了
+    # 防止重复发送：如果已经在 speaking 状态，说明本轮对话的 stt 已经发送过了
     if conn.client_is_speaking:
         logger.bind(tag=TAG).warning(
             f"跳过重复的 stt 消息发送：已在 speaking 状态 (text: {text[:50] if text else ''}...)"
         )
         return
     
+    # end_prompt 是特殊场景：用户说"再见"等结束语时，只需启动 TTS 播放告别语
     end_prompt_str = conn.config.get("end_prompt", {}).get("prompt")
     if end_prompt_str and end_prompt_str == text:
         await send_tts_message(conn, "start")
@@ -402,10 +415,9 @@ async def send_stt_message(conn, text):
         display_text = text
     stt_text = textUtils.get_string_no_punctuation_or_emoji(display_text)
     
-    # 官方协议时序：先发 tts start，再发 stt
-    # 这样设备可以提前准备好接收音频
-    conn.client_is_speaking = True
-    await send_tts_message(conn, "start")
+    # 只发送 STT 文本消息（用于设备端 UI 显示用户说了什么）
+    # 不再发送 tts start，也不设置 client_is_speaking
+    # tts start 将由 sendAudioMessage 在首帧音频到达时发送
     await conn.websocket.send(
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
