@@ -186,7 +186,7 @@ async def _send_audio_with_header(conn, audios, message_tag=MessageTag.NORMAL):
     # 非官方服务器的设备端（is_official_server_=false）期望带头部的数据
     # 头部格式：type(1) + message_tag(1) + payload_size(4, big-endian) + reserved(10) = 16 bytes
     complete_packet = pack_opus_with_header(audios, message_tag)
-    conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(complete_packet)} bytes (opus={len(audios)}, with header)")
+    # conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(complete_packet)} bytes (opus={len(audios)}, with header)")
     await conn.websocket.send(complete_packet)
     # 确保数据立即发送到网络（避免 asyncio 调度延迟导致缓冲区积压）
     # websockets 库的 send() 内部会等待 drain，但在高频发送时可能需要显式让出控制权
