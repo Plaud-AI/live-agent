@@ -276,15 +276,38 @@ class ConnectionHandler:
             try:
                 async for message in self.websocket:
                     await self._route_message(message)
-            except websockets.exceptions.ConnectionClosed:
-                self.logger.bind(tag=TAG).info("客户端断开连接")
+            except websockets.exceptions.ConnectionClosed as cc:
+                # 详细记录连接关闭信息
+                close_code_desc = {
+                    1000: "正常关闭",
+                    1001: "端点离开",
+                    1002: "协议错误",
+                    1003: "不支持的数据类型",
+                    1005: "未收到关闭码",
+                    1006: "异常关闭（网络问题）",
+                    1007: "数据类型不一致",
+                    1008: "策略违规",
+                    1009: "消息过大",
+                    1011: "服务器意外错误",
+                    1012: "服务重启",
+                    1015: "TLS握手失败",
+                }.get(cc.code, f"未知({cc.code})")
+                
+                self.logger.bind(tag=TAG).info(
+                    f"🔌 [WS断开] Device={self.device_id} | IP={self.client_ip} | "
+                    f"关闭码={cc.code}({close_code_desc}) | 原因={cc.reason or '无'}"
+                )
 
         except AuthenticationError as e:
             self.logger.bind(tag=TAG).error(f"Authentication failed: {str(e)}")
             return
         except Exception as e:
             stack_trace = traceback.format_exc()
-            self.logger.bind(tag=TAG).error(f"Connection error: {str(e)}-{stack_trace}")
+            self.logger.bind(tag=TAG).error(
+                f"❌ [连接错误] Device={self.device_id} | IP={self.client_ip} | "
+                f"异常={type(e).__name__}: {str(e)}"
+            )
+            self.logger.bind(tag=TAG).debug(f"堆栈: {stack_trace}")
             return
         finally:
             try:
@@ -1479,6 +1502,9 @@ class ConnectionHandler:
 
     async def close(self, ws=None):
         """资源清理方法"""
+        self.logger.bind(tag=TAG).info(
+            f"🧹 [开始清理] Device={self.device_id} | IP={self.client_ip} | Session={self.session_id[:8]}..."
+        )
         try:
             # 清理音频缓冲区
             if hasattr(self, "audio_buffer"):

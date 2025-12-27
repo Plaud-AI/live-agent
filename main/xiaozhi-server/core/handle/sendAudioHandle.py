@@ -15,6 +15,15 @@ TAG = __name__
 logger = setup_logging()
 
 async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=MessageTag.NORMAL):
+    # 详细日志追踪
+    audio_len = len(audios) if audios else 0
+    conn.logger.bind(tag=TAG).debug(
+        f"📨 sendAudioMessage: type={sentenceType}, audio_bytes={audio_len}, "
+        f"text={text[:30] if text else None}..., "
+        f"first_sentence={conn.tts.tts_audio_first_sentence}, "
+        f"client_speaking={conn.client_is_speaking}"
+    )
+    
     if conn.tts.tts_audio_first_sentence:
         conn.tts.tts_audio_first_sentence = False
         
@@ -23,6 +32,21 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
         if not conn.client_is_speaking:
             await send_tts_message(conn, "start", None, message_tag)
             conn.client_is_speaking = True
+            
+            # 等待设备端完成状态切换
+            # 设备端使用 Schedule() 异步切换状态，需要一定时间
+            tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
+            if tts_start_delay > 0:
+                conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
+                await asyncio.sleep(tts_start_delay)
+        
+        # 在整个 TTS 会话开始时重置流控（而不是每个句子开始时）
+        # 这确保同一会话内的多个句子音频可以连续播放
+        if hasattr(conn, "audio_flow_control"):
+            conn.audio_flow_control["start_time"] = time.perf_counter()
+            conn.audio_flow_control["packet_count"] = 0
+            conn.audio_flow_control["last_send_time"] = 0
+            conn.logger.bind(tag=TAG).debug("重置音频流控状态 (TTS会话开始)")
         
         # 记录首句 TTS 播放时间（端到端延迟的终点）
         first_audio_time = time.time() * 1000
@@ -59,6 +83,21 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
             conn.client_is_speaking = True
             await send_tts_message(conn, "start", None, message_tag)
+            
+            # 等待设备端完成状态切换
+            tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
+            if tts_start_delay > 0:
+                conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
+                await asyncio.sleep(tts_start_delay)
+            
+            # 只在新 TTS 会话开始时重置流控（client_is_speaking 从 False 变为 True）
+            # 这确保同一会话内的多个句子音频可以连续播放
+            if hasattr(conn, "audio_flow_control"):
+                conn.audio_flow_control["start_time"] = time.perf_counter()
+                conn.audio_flow_control["packet_count"] = 0
+                conn.audio_flow_control["last_send_time"] = 0
+                conn.logger.bind(tag=TAG).debug("重置音频流控状态 (新TTS会话开始)")
+        
         await send_tts_message(conn, "sentence_start", text, message_tag)
         # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
         conn._pending_sentence_text = text if text else None
@@ -126,12 +165,12 @@ async def _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence):
 async def _send_audio_with_header(conn, audios, message_tag=MessageTag.NORMAL):
     if audios is None or len(audios) == 0:
         return
-    # Device-end: send raw opus data without header
-    if conn.conn_from_device:
-        await conn.websocket.send(audios)
-    else:
-        complete_packet = pack_opus_with_header(audios, message_tag)
-        await conn.websocket.send(complete_packet)
+    # 统一发送带 16 字节头部的音频包
+    # 非官方服务器的设备端（is_official_server_=false）期望带头部的数据
+    # 头部格式：type(1) + message_tag(1) + payload_size(4, big-endian) + reserved(10) = 16 bytes
+    complete_packet = pack_opus_with_header(audios, message_tag)
+    conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(complete_packet)} bytes (opus={len(audios)}, with header)")
+    await conn.websocket.send(complete_packet)
 
 
 # 播放音频
@@ -152,6 +191,7 @@ async def sendAudio(conn, audios, frame_duration=60, message_tag=MessageTag.NORM
 
     if isinstance(audios, bytes):
         if conn.client_abort:
+            conn.logger.bind(tag=TAG).debug(f"⚠️ client_abort=True, 跳过音频发送")
             return
 
         conn.last_activity_time = time.time() * 1000
@@ -167,6 +207,13 @@ async def sendAudio(conn, audios, frame_duration=60, message_tag=MessageTag.NORM
 
         flow_control = conn.audio_flow_control
         current_time = time.perf_counter()
+        
+        # 每 20 个包记录一次流控状态
+        if flow_control["packet_count"] % 20 == 0:
+            conn.logger.bind(tag=TAG).debug(
+                f"📊 流控状态: packet_count={flow_control['packet_count']}, "
+                f"elapsed={current_time - flow_control['start_time']:.2f}s"
+            )
         
         # 流控配置
         pre_buffer_count = conn.config.get("tts_audio_pre_buffer_count", 8)  # 预缓冲包数（约480ms）

@@ -76,16 +76,24 @@ enable_stop_tts_notify: false
 stop_tts_notify_voice: "config/assets/tts_notify.mp3"
 
 # TTS Audio Send Flow Control Configuration
+# tts_start_delay_ms: Delay after sending tts/start before sending audio packets
+#   This gives the device time to switch to SPEAKING state (device uses async Schedule())
+#   Device needs ~134ms to complete state transition (Schedule callback + AudioService operations)
+#   150: 150ms delay (safe for most ESP32 devices)
+#   0: No delay (may cause audio drops on slower devices)
+tts_start_delay_ms: 150
 # tts_audio_send_delay: Control the interval of sending audio packets
 #   < 0: Use exact time control, strictly match the audio frame rate (default, calculated at runtime based on audio frame rate)
 #   > 0: Use fixed delay (milliseconds) to send, e.g.: 60
 tts_audio_send_delay: 0
 # tts_audio_pre_buffer_count: Number of packets to send quickly at the beginning (pre-buffer phase)
 #   Default: 8 packets (8 * 60ms = 480ms buffer)
-tts_audio_pre_buffer_count: 8
+#   Lower value reduces burst, helps with unstable WiFi
+tts_audio_pre_buffer_count: 5
 # tts_audio_speed_multiplier: Send speed multiplier after pre-buffer phase
-#   Default: 1.2 (20% faster than realtime to maintain buffer)
-tts_audio_speed_multiplier: 1.2
+#   1.0: Real-time speed (safest for unstable network)
+#   1.1: 10% faster (may cause buffer accumulation on slow networks)
+tts_audio_speed_multiplier: 1.0
 
 exit_commands:
   - "退出"
@@ -523,8 +531,14 @@ TTS:
     rate: 44100
     sample_rate: 16000
     api_key: ${FISH_API_KEY}
-    # 降低软标点(逗号)切分的最小字符限制，避免长句合成首包延迟过高(默认25对于中文太长)
-    soft_punct_min_chars: 10
+    # 软标点(逗号)切分的最小字符限制
+    # 设置较大值（50）减少句子分段，避免句子之间的音频间隙
+    # 代价是首句延迟略增，但整体流畅度更好
+    soft_punct_min_chars: 50
+    # 硬标点(句号)分段的最大字符数，超过此长度强制分段
+    segment_max_chars: 200
+    # 首句分段最大字符数（首句可以更短以降低首包延迟）
+    first_segment_max_chars: 20
   MinimaxTTSHTTPStream:
   # Minimax流式语音合成服务
     type: minimax_httpstream
