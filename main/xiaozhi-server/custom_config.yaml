@@ -81,11 +81,12 @@ stop_tts_notify_voice: "config/assets/tts_notify.mp3"
 #   > 0: Use fixed delay (milliseconds) to send, e.g.: 60
 tts_audio_send_delay: 0
 # tts_audio_pre_buffer_count: Number of packets to send quickly at the beginning (pre-buffer phase)
-#   Default: 8 packets (8 * 60ms = 480ms buffer)
-tts_audio_pre_buffer_count: 8
+#   Default: 8 packets (8 * 60ms = 480ms buffer), increased to 10 for more buffer
+tts_audio_pre_buffer_count: 10
 # tts_audio_speed_multiplier: Send speed multiplier after pre-buffer phase
-#   Default: 1.2 (20% faster than realtime to maintain buffer)
-tts_audio_speed_multiplier: 1.2
+#   1.05: 5% faster than realtime, allows device to play audio fully before sentence_end
+#   (Reduced from 1.2 to prevent audio truncation on device)
+tts_audio_speed_multiplier: 1.05
 
 exit_commands:
   - "退出"
