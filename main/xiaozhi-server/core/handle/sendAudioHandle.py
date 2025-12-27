@@ -188,6 +188,10 @@ async def _send_audio_with_header(conn, audios, message_tag=MessageTag.NORMAL):
     complete_packet = pack_opus_with_header(audios, message_tag)
     conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(complete_packet)} bytes (opus={len(audios)}, with header)")
     await conn.websocket.send(complete_packet)
+    # 确保数据立即发送到网络（避免 asyncio 调度延迟导致缓冲区积压）
+    # websockets 库的 send() 内部会等待 drain，但在高频发送时可能需要显式让出控制权
+    # 使用 sleep(0) 让事件循环有机会处理 I/O
+    await asyncio.sleep(0)
 
 
 # 播放音频
@@ -381,6 +385,8 @@ async def send_tts_message(conn, state, text=None, message_tag=MessageTag.NORMAL
     # 发送消息到客户端
     logger.bind(tag=TAG).info(f"发送TTS消息: {message}")
     await conn.websocket.send(json.dumps(message))
+    # 确保消息立即发送到网络（避免 TCP 缓冲区积压）
+    await asyncio.sleep(0)
 
 
 async def send_stt_message(conn, text):
@@ -438,4 +444,6 @@ async def send_stt_message(conn, text):
     await conn.websocket.send(
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
+    # 确保消息立即发送到网络
+    await asyncio.sleep(0)
     logger.bind(tag=TAG).info(f"发送STT消息: {stt_text}")

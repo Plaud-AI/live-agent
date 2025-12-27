@@ -83,13 +83,13 @@ stop_tts_notify_voice: "config/assets/tts_notify.mp3"
 #   0: No delay (may cause audio drops on slower devices)
 tts_start_delay_ms: 150
 # tts_audio_send_delay: Control the interval of sending audio packets
-#   < 0: Use exact time control, strictly match the audio frame rate (default, calculated at runtime based on audio frame rate)
-#   > 0: Use fixed delay (milliseconds) to send, e.g.: 60
-tts_audio_send_delay: 0
+#   <= 0: Use time-based flow control (calculate delay based on audio frame rate)
+#   > 0: Use fixed delay (milliseconds) between packets
+#   WARNING: Using fixed delay (>0) may cause WebSocket buffer issues!
+tts_audio_send_delay: -1
 # tts_audio_pre_buffer_count: Number of packets to send quickly at the beginning (pre-buffer phase)
 #   Default: 8 packets (8 * 60ms = 480ms buffer)
-#   Lower value reduces burst, helps with unstable WiFi
-tts_audio_pre_buffer_count: 5
+tts_audio_pre_buffer_count: 8
 # tts_audio_speed_multiplier: Send speed multiplier after pre-buffer phase
 #   1.0: Real-time speed (safest for unstable network)
 #   1.1: 10% faster (may cause buffer accumulation on slow networks)
