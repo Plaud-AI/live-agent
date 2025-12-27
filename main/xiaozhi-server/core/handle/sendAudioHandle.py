@@ -17,12 +17,6 @@ logger = setup_logging()
 async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=MessageTag.NORMAL):
     # 详细日志追踪
     audio_len = len(audios) if audios else 0
-    conn.logger.bind(tag=TAG).debug(
-        f"📨 sendAudioMessage: type={sentenceType}, audio_bytes={audio_len}, "
-        f"text={text[:30] if text else None}..., "
-        f"first_sentence={conn.tts.tts_audio_first_sentence}, "
-        f"client_speaking={conn.client_is_speaking}"
-    )
     
     # 在新句子开始或会话结束前，先发送前一个句子的 sentence_end
     # 这确保 sentence_end 在该句子的所有音频发送完毕后才发送
