@@ -24,6 +24,14 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             await send_tts_message(conn, "start", None, message_tag)
             conn.client_is_speaking = True
         
+        # 在整个 TTS 会话开始时重置流控（而不是每个句子开始时）
+        # 这确保同一会话内的多个句子音频可以连续播放
+        if hasattr(conn, "audio_flow_control"):
+            conn.audio_flow_control["start_time"] = time.perf_counter()
+            conn.audio_flow_control["packet_count"] = 0
+            conn.audio_flow_control["last_send_time"] = 0
+            conn.logger.bind(tag=TAG).debug("重置音频流控状态 (TTS会话开始)")
+        
         # 记录首句 TTS 播放时间（端到端延迟的终点）
         first_audio_time = time.time() * 1000
         
@@ -59,14 +67,14 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             conn.logger.bind(tag=TAG).info("检测到新 TTS 会话（client_is_speaking=False），补发 tts start")
             conn.client_is_speaking = True
             await send_tts_message(conn, "start", None, message_tag)
-        
-        # 重置音频流控状态，确保新句子从零开始计时
-        # 这避免了上一句的流控状态影响新句子的发送延迟
-        if hasattr(conn, "audio_flow_control"):
-            conn.audio_flow_control["start_time"] = time.perf_counter()
-            conn.audio_flow_control["packet_count"] = 0
-            conn.audio_flow_control["last_send_time"] = 0
-            conn.logger.bind(tag=TAG).debug("重置音频流控状态 (新句子开始)")
+            
+            # 只在新 TTS 会话开始时重置流控（client_is_speaking 从 False 变为 True）
+            # 这确保同一会话内的多个句子音频可以连续播放
+            if hasattr(conn, "audio_flow_control"):
+                conn.audio_flow_control["start_time"] = time.perf_counter()
+                conn.audio_flow_control["packet_count"] = 0
+                conn.audio_flow_control["last_send_time"] = 0
+                conn.logger.bind(tag=TAG).debug("重置音频流控状态 (新TTS会话开始)")
         
         await send_tts_message(conn, "sentence_start", text, message_tag)
         # 保存当前句子的文本，等待该句子的音频发送完毕后再发送 sentence_end
