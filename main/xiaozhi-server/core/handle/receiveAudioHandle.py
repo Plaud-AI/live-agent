@@ -513,9 +513,27 @@ async def startToChat(conn, text: str, multimodal_content: List[Dict[str, Any]] 
         text: Text content
         multimodal_content: Optional multimodal content
     """
-    if getattr(conn, "defer_agent_init", False) and not conn.agent_id and getattr(conn, "read_config_from_live_agent_api", False):
-        ready = await conn.ensure_agent_ready()
+    # === 唤醒延迟优化：等待后台 agent 初始化完成 ===
+    # 唤醒词处理时已经后台启动了 ensure_agent_ready()
+    # 这里只需要等待它完成即可（正常情况下已经完成了）
+    needs_wait = (
+        getattr(conn, "defer_agent_init", False) 
+        or not conn.agent_id
+    ) and getattr(conn, "read_config_from_live_agent_api", False)
+    
+    if needs_wait:
+        wait_start = time.time() * 1000
+        ready = await conn.wait_agent_ready(timeout=5.0)
+        wait_elapsed = time.time() * 1000 - wait_start
+        
+        if wait_elapsed > 100:
+            # 只有等待超过 100ms 才记录（正常情况下后台初始化应该已完成）
+            conn.logger.bind(tag=TAG).info(
+                f"⏳ [对话延迟] 等待 agent 初始化: {wait_elapsed:.0f}ms"
+            )
+        
         if not ready:
+            conn.logger.bind(tag=TAG).error("Agent 初始化失败，无法开始对话")
             return
 
     # check if input is JSON format (contains speaker information)

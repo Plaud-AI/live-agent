@@ -186,6 +186,8 @@ async def checkWakeupWords(conn, text):
         response = wakeup_words_config.get_wakeup_response(voice_key)
 
     # 缓存缺失：优先走 TTS 管线播报短句（同音色），并后台补齐缓存
+    # 注意：此时 ensure_agent_ready 已经在 listenMessageHandler 中完成
+    # voice_id 已经是正确的 agent 配置音色
     if enable_wakeup_words_response_cache and (not response or not response.get("file_path")):
         wakeup_text = WAKEUP_CONFIG.get("default_text", "我在这里哦！")
         try:
@@ -193,10 +195,10 @@ async def checkWakeupWords(conn, text):
             if not _wakeup_response_lock.locked():
                 asyncio.create_task(wakeupWordsResponse(conn, text=wakeup_text))
 
-            # 直接走 TTS 管线播放（同音色，首唤醒不回退到固定录音）
+            # 直接走 TTS 管线播放（使用正确的 agent 配置音色）
             if hasattr(conn.tts, "tts_text_queue"):
                 conn.logger.bind(tag=TAG).info(
-                    f"唤醒词缓存未命中(voice_key={voice_key}), 使用TTS短句播报"
+                    f"唤醒词缓存未命中(voice_key={voice_key}), 使用TTS短句播报(正确音色)"
                 )
                 conn.client_abort = False
                 wakeup_sentence_id = str(uuid.uuid4().hex)

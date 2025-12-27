@@ -105,8 +105,24 @@ class ListenTextMessageHandler(TextMessageHandler):
                     await send_tts_message(conn, "stop", None)
                     conn.client_is_speaking = False
                 elif is_wakeup_words:
-                    if (getattr(conn, "defer_agent_init", False) or not conn.agent_id) and getattr(conn, "read_config_from_live_agent_api", False):
+                    # === 唤醒延迟优化：异步化 agent 配置拉取 ===
+                    # 必须保证用 agent 配置的音色播放唤醒回复
+                    # 优化点：将同步 HTTP 调用改为异步，减少阻塞时间
+                    
+                    wakeup_start_time = time.time() * 1000
+                    
+                    # 1. 如果需要初始化 agent，先异步完成（必须等待，保证音色正确）
+                    needs_agent_init = (
+                        (getattr(conn, "defer_agent_init", False) or not conn.agent_id)
+                        and getattr(conn, "read_config_from_live_agent_api", False)
+                    )
+                    if needs_agent_init:
+                        init_start = time.time() * 1000
                         ready = await conn.ensure_agent_ready(filtered_text)
+                        init_elapsed = time.time() * 1000 - init_start
+                        conn.logger.bind(tag=TAG).info(
+                            f"⚡ [唤醒延迟] agent 配置加载: {init_elapsed:.0f}ms"
+                        )
                         if not ready:
                             conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
                             return
@@ -114,8 +130,14 @@ class ListenTextMessageHandler(TextMessageHandler):
                     # Record timestamp for correct message ordering
                     report_time = int(time.time())
                     
-                    # 尝试播放缓存的唤醒词短回复（如"我在这里哦！"）
+                    # 2. 播放缓存的唤醒词短回复（现在已经有正确的 voice_id 了）
                     wakeup_handled = await checkWakeupWords(conn, filtered_text)
+                    
+                    wakeup_elapsed = time.time() * 1000 - wakeup_start_time
+                    conn.logger.bind(tag=TAG).info(
+                        f"⚡ [唤醒延迟] 唤醒回复总耗时: {wakeup_elapsed:.0f}ms"
+                    )
+                    
                     if wakeup_handled:
                         # 成功播放了缓存的短回复，上报唤醒事件后返回
                         enqueue_asr_report(conn, original_text, [], report_time=report_time)

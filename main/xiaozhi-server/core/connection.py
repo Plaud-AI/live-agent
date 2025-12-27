@@ -209,6 +209,12 @@ class ConnectionHandler:
         # memory
         self.relevant_memories_this_turn: str = "No relevant memories retrieved for this turn."
         self._memory_task = None  # Async task for memory prefetch
+        
+        # Agent 初始化就绪信号（用于解耦唤醒回复与初始化）
+        # 唤醒词处理时先播放缓存音频，后台异步初始化 agent
+        # 后续对话前通过此 Event 等待初始化完成
+        self._agent_ready_event: asyncio.Event = asyncio.Event()
+        self._agent_init_error: str | None = None  # 初始化错误信息
 
     async def handle_connection(self, ws):
         try:
@@ -945,6 +951,8 @@ class ConnectionHandler:
     def _initialize_agent_config(self):
         """initialize agent config from live-agent-api"""
         if not self.read_config_from_live_agent_api:
+            # 非 live-agent-api 模式，直接标记 agent 就绪
+            self._agent_ready_event.set()
             return
         # self.logger.bind(tag=TAG).info(f"get agent config from live-agent-api for {self.agent_id}")
         private_config = get_agent_config_from_api(self.agent_id, self.config, self.headers.get("timezone", "UTC+0"))
@@ -989,6 +997,9 @@ class ConnectionHandler:
             self.intent = modules["intent"]
         if modules.get("memory", None) is not None:
             self.memory = modules["memory"]
+        
+        # 同步初始化完成，标记 agent 就绪
+        self._agent_ready_event.set()
 
     def _apply_agent_runtime_config(self, private_config: dict):
         """Apply agent-specific runtime config to connection"""
@@ -1026,16 +1037,43 @@ class ConnectionHandler:
         """
         Resolve agent when missing and apply agent config.
         模块已在连接时预初始化，这里只需要解析 agent 并应用配置。
+        
+        注意：此方法完成后会 set _agent_ready_event，供 startToChat 等待。
+        """
+        try:
+            result = await self._do_ensure_agent_ready(wake_word)
+            if result:
+                self._agent_ready_event.set()
+            else:
+                self._agent_init_error = "Agent initialization failed"
+                self._agent_ready_event.set()  # 即使失败也要 set，避免死锁
+            return result
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"ensure_agent_ready exception: {e}")
+            self._agent_init_error = str(e)
+            self._agent_ready_event.set()  # 异常时也要 set，避免死锁
+            return False
+
+    async def _do_ensure_agent_ready(self, wake_word: str | None = None) -> bool:
+        """
+        实际执行 agent 初始化的内部方法。
+        从 ensure_agent_ready 分离出来，便于错误处理和事件管理。
         """
         if not self.read_config_from_live_agent_api:
             return True
         if not self.defer_agent_init and self.tts and self.llm:
             return True
 
+        init_start_time = time.time() * 1000
+        self.logger.bind(tag=TAG).info("🚀 [后台初始化] 开始异步拉取 agent 配置...")
+
         private_config = None
         if not self.agent_id:
-            resolved = get_agent_by_wake_from_api(
-                self.device_id, wake_word=wake_word, config=self.config
+            resolved = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: get_agent_by_wake_from_api(
+                    self.device_id, wake_word=wake_word, config=self.config
+                )
             )
             if not resolved:
                 self.logger.bind(tag=TAG).error(
@@ -1050,12 +1088,18 @@ class ConnectionHandler:
             private_config = resolved.get("agent_config")
 
         if private_config is None:
-            private_config = get_agent_config_from_api(self.agent_id, self.config)
+            private_config = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: get_agent_config_from_api(self.agent_id, self.config)
+            )
         if not private_config:
             self.logger.bind(tag=TAG).error(
                 f"Failed to get agent config for {self.agent_id}"
             )
             return False
+
+        api_elapsed = time.time() * 1000 - init_start_time
+        self.logger.bind(tag=TAG).info(f"⚡ [后台初始化] API 调用完成: {api_elapsed:.0f}ms")
 
         self._apply_agent_runtime_config(private_config)
         self.defer_agent_init = False
@@ -1126,7 +1170,39 @@ class ConnectionHandler:
         # 初始化 prompt 与上报线程
         self._init_prompt_enhancement()
         self._init_report_threads()
+        
+        total_elapsed = time.time() * 1000 - init_start_time
+        self.logger.bind(tag=TAG).info(f"✅ [后台初始化] 完成: {total_elapsed:.0f}ms")
         return True
+    
+    async def wait_agent_ready(self, timeout: float = 5.0) -> bool:
+        """
+        等待 agent 初始化完成。
+        
+        Args:
+            timeout: 超时时间（秒）
+            
+        Returns:
+            True: 初始化成功
+            False: 初始化失败或超时
+        """
+        # 如果不需要延迟初始化，直接返回成功
+        if not getattr(self, "defer_agent_init", False) and self._agent_ready_event.is_set():
+            return self._agent_init_error is None
+        
+        # 如果 event 已经 set，直接返回
+        if self._agent_ready_event.is_set():
+            return self._agent_init_error is None
+        
+        try:
+            await asyncio.wait_for(self._agent_ready_event.wait(), timeout=timeout)
+            if self._agent_init_error:
+                self.logger.bind(tag=TAG).error(f"Agent init failed: {self._agent_init_error}")
+                return False
+            return True
+        except asyncio.TimeoutError:
+            self.logger.bind(tag=TAG).error(f"wait_agent_ready timeout after {timeout}s")
+            return False
 
     def change_system_prompt(self, prompt):
         self.prompt = prompt
