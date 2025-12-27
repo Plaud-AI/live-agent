@@ -523,8 +523,14 @@ TTS:
     rate: 44100
     sample_rate: 16000
     api_key: ${FISH_API_KEY}
-    # 降低软标点(逗号)切分的最小字符限制，避免长句合成首包延迟过高(默认25对于中文太长)
-    soft_punct_min_chars: 10
+    # 软标点(逗号)切分的最小字符限制
+    # 设置较大值（50）减少句子分段，避免句子之间的音频间隙
+    # 代价是首句延迟略增，但整体流畅度更好
+    soft_punct_min_chars: 50
+    # 硬标点(句号)分段的最大字符数，超过此长度强制分段
+    segment_max_chars: 200
+    # 首句分段最大字符数（首句可以更短以降低首包延迟）
+    first_segment_max_chars: 20
   MinimaxTTSHTTPStream:
   # Minimax流式语音合成服务
     type: minimax_httpstream
