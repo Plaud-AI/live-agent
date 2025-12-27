@@ -152,14 +152,12 @@ async def _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence):
 async def _send_audio_with_header(conn, audios, message_tag=MessageTag.NORMAL):
     if audios is None or len(audios) == 0:
         return
-    # Device-end: send raw opus data without header
-    if conn.conn_from_device:
-        conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(audios)} bytes (raw opus)")
-        await conn.websocket.send(audios)
-    else:
-        complete_packet = pack_opus_with_header(audios, message_tag)
-        conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(complete_packet)} bytes (with header)")
-        await conn.websocket.send(complete_packet)
+    # 统一发送带 16 字节头部的音频包
+    # 非官方服务器的设备端（is_official_server_=false）期望带头部的数据
+    # 头部格式：type(1) + message_tag(1) + payload_size(4, big-endian) + reserved(10) = 16 bytes
+    complete_packet = pack_opus_with_header(audios, message_tag)
+    conn.logger.bind(tag=TAG).debug(f"📤 发送音频包: {len(complete_packet)} bytes (opus={len(audios)}, with header)")
+    await conn.websocket.send(complete_packet)
 
 
 # 播放音频
