@@ -159,7 +159,6 @@ class TTSProvider(TTSProviderBase):
                         self.conn.client_is_speaking = True
                         # 重置流控状态
                         if hasattr(self.conn, "audio_flow_control"):
-                            import time
                             self.conn.audio_flow_control["start_time"] = time.perf_counter()
                             self.conn.audio_flow_control["packet_count"] = 0
                             self.conn.audio_flow_control["last_send_time"] = 0
