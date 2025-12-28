@@ -648,14 +648,20 @@ class ConnectionHandler:
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
 
-    def _init_prompt_enhancement(self):
-        """初始化并更新系统提示词"""
+    def _init_prompt_enhancement(self, skip_persona: bool = False):
+        """初始化并更新系统提示词
+        
+        Args:
+            skip_persona: 是否跳过用户画像加载（用于异步并行加载场景）
+                - True: 立即返回基础 prompt，用户画像后台加载
+                - False: 同步加载用户画像（默认行为，兼容现有调用）
+        """
         # 更新上下文信息
         self.prompt_manager.update_context_info(self, self.client_ip)
         
-        # 获取用户画像（如果 Memory 模块已初始化）
+        # 获取用户画像（如果 Memory 模块已初始化且未跳过）
         user_persona = None
-        if self.memory and hasattr(self.memory, 'get_user_persona'):
+        if not skip_persona and self.memory and hasattr(self.memory, 'get_user_persona'):
             try:
                 user_persona = self.memory.get_user_persona(client_timezone=self.client_timezone)
                 if user_persona:
@@ -695,6 +701,83 @@ class ConnectionHandler:
             )
             self.change_system_prompt(initial_prompt)
             self.logger.bind(tag=TAG).info("system prompt loaded")
+
+    async def _load_user_persona_async(self):
+        """后台异步加载用户画像
+        
+        在唤醒流程中启动，不阻塞唤醒响应。
+        加载完成后自动更新 system prompt。
+        """
+        if not self.memory or not hasattr(self.memory, 'get_user_persona_async'):
+            return
+        
+        # 防止重复加载
+        if getattr(self, '_persona_loading', False):
+            return
+        
+        self._persona_loading = True
+        load_start = time.time() * 1000
+        
+        try:
+            persona = await self.memory.get_user_persona_async(
+                client_timezone=self.client_timezone
+            )
+            load_elapsed = time.time() * 1000 - load_start
+            
+            if persona:
+                self._user_persona = persona
+                self._update_system_prompt_with_persona(persona)
+                self.logger.bind(tag=TAG).info(
+                    f"✅ [后台] 用户画像加载完成: {load_elapsed:.0f}ms, 长度: {len(persona)}"
+                )
+            else:
+                self.logger.bind(tag=TAG).debug(
+                    f"[后台] 用户画像为空: {load_elapsed:.0f}ms"
+                )
+        except Exception as e:
+            self.logger.bind(tag=TAG).warning(f"[后台] 用户画像加载失败: {e}")
+        finally:
+            self._persona_loading = False
+
+    def _update_system_prompt_with_persona(self, persona: str):
+        """使用用户画像更新 system prompt
+        
+        在后台画像加载完成后调用，将画像注入到 system prompt 中。
+        
+        Args:
+            persona: 用户画像字符串
+        """
+        if not self.base_prompt:
+            self.logger.bind(tag=TAG).warning("base_prompt 未初始化，无法更新用户画像")
+            return
+        
+        # 检查是否有 {user_persona} 占位符
+        if "{user_persona}" in self.base_prompt:
+            # 有占位符，替换它
+            updated_prompt = self.base_prompt.replace("{user_persona}", persona)
+        else:
+            # 没有占位符，追加到末尾（在 {relevant_memory} 占位符之前）
+            # 找到合适的插入位置
+            if "{relevant_memory}" in self.base_prompt:
+                # 在 relevant_memory 占位符之前插入
+                updated_prompt = self.base_prompt.replace(
+                    "{relevant_memory}",
+                    f"\n\n## 用户画像\n{persona}\n\n{{relevant_memory}}"
+                )
+            else:
+                # 追加到末尾
+                updated_prompt = f"{self.base_prompt}\n\n## 用户画像\n{persona}"
+        
+        # 更新 base_prompt（包含画像的版本）
+        self.base_prompt = updated_prompt
+        
+        # 同时更新当前的 system prompt
+        current_prompt = updated_prompt.replace(
+            "{relevant_memory}",
+            "No relevant memories retrieved for this turn."
+        )
+        self.change_system_prompt(current_prompt)
+        self.logger.bind(tag=TAG).debug("system prompt 已更新（注入用户画像）")
 
     def _init_report_threads(self):
         """Initialize chat message report thread for live-agent-api"""
@@ -1201,12 +1284,21 @@ class ConnectionHandler:
             )
             self._initialize_memory()
         
-        # 初始化 prompt 与上报线程
-        self._init_prompt_enhancement()
+        # Phase 6 优化：异步并行加载用户画像
+        # 1. 使用 skip_persona=True 跳过同步画像加载，立即返回基础 prompt
+        # 2. 启动后台任务异步加载用户画像，完成后更新 system prompt
+        # 预期收益：唤醒延迟从 ~3s 降低到 ~500ms
+        self._init_prompt_enhancement(skip_persona=True)
+        
+        # 启动后台任务异步加载用户画像（不阻塞唤醒流程）
+        if self.memory and hasattr(self.memory, 'get_user_persona_async'):
+            asyncio.create_task(self._load_user_persona_async())
+            self.logger.bind(tag=TAG).debug("🚀 [后台] 启动用户画像异步加载任务")
+        
         self._init_report_threads()
         
         total_elapsed = time.time() * 1000 - init_start_time
-        self.logger.bind(tag=TAG).info(f"✅ [后台初始化] 完成: {total_elapsed:.0f}ms")
+        self.logger.bind(tag=TAG).info(f"✅ [后台初始化] 完成: {total_elapsed:.0f}ms (画像后台加载中)")
         return True
     
     async def wait_agent_ready(self, timeout: float = 5.0) -> bool:
