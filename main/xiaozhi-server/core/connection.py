@@ -379,6 +379,24 @@ class ConnectionHandler:
             if self.vad is None or self.asr is None:
                 return
 
+            # 调试日志：确认在 TTS 播放期间是否收到用户音频
+            if self.client_is_speaking:
+                # 每100个包记录一次，避免日志过多
+                if not hasattr(self, '_audio_recv_count_during_tts'):
+                    self._audio_recv_count_during_tts = 0
+                self._audio_recv_count_during_tts += 1
+                if self._audio_recv_count_during_tts % 100 == 1:
+                    self.logger.bind(tag=TAG).debug(
+                        f"📥 [打断调试] TTS播放期间收到音频包: count={self._audio_recv_count_during_tts}, bytes={len(message)}"
+                    )
+            else:
+                # TTS 结束后重置计数
+                if hasattr(self, '_audio_recv_count_during_tts') and self._audio_recv_count_during_tts > 0:
+                    self.logger.bind(tag=TAG).info(
+                        f"📥 [打断调试] TTS播放期间共收到 {self._audio_recv_count_during_tts} 个音频包"
+                    )
+                    self._audio_recv_count_during_tts = 0
+
             # 处理来自MQTT网关的音频包
             if self.conn_from_mqtt_gateway and len(message) >= 16:
                 handled = await self._process_mqtt_audio_message(message)
