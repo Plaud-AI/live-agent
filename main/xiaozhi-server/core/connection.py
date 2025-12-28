@@ -42,6 +42,7 @@ from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from config.live_agent_api_client import (
     get_agent_config_from_api,
+    get_agent_config_cached,
     get_agent_by_wake_from_api,
     extract_user_id_from_jwt,
 )
@@ -978,7 +979,8 @@ class ConnectionHandler:
             self._agent_ready_event.set()
             return
         # self.logger.bind(tag=TAG).info(f"get agent config from live-agent-api for {self.agent_id}")
-        private_config = get_agent_config_from_api(self.agent_id, self.config, self.headers.get("timezone", "UTC+0"))
+        # 使用缓存版本，减少 API 调用延迟
+        private_config = get_agent_config_cached(self.agent_id, self.config, self.headers.get("timezone", "UTC+0"))
         if not private_config:
             self.logger.bind(tag=TAG).error(f"Failed to get agent config for {self.agent_id}")
             return
@@ -1111,9 +1113,10 @@ class ConnectionHandler:
             private_config = resolved.get("agent_config")
 
         if private_config is None:
+            # 使用缓存版本，减少 API 调用延迟
             private_config = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: get_agent_config_from_api(self.agent_id, self.config)
+                lambda: get_agent_config_cached(self.agent_id, self.config)
             )
         if not private_config:
             self.logger.bind(tag=TAG).error(
@@ -1189,6 +1192,14 @@ class ConnectionHandler:
             asyncio.run_coroutine_threadsafe(
                 self.asr.open_audio_channels(self), self.loop
             )
+        
+        # 初始化 Memory（必须在 owner_id 设置后）
+
+        if self.memory and not getattr(self.memory, 'role_id', None):
+            self.logger.bind(tag=TAG).debug(
+                f"Initializing Memory with owner_id={self.owner_id or self.device_id}"
+            )
+            self._initialize_memory()
         
         # 初始化 prompt 与上报线程
         self._init_prompt_enhancement()
