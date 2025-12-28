@@ -151,6 +151,25 @@ class ListenTextMessageHandler(TextMessageHandler):
                     )
                     return
                 else:
+                    # === 非唤醒词文本也需要初始化 agent ===
+                    # 当设备发送的文本不是唤醒词时，也需要确保 agent 初始化完成
+                    # 否则后续 startToChat 会因为 wait_agent_ready 超时而失败
+                    needs_agent_init = (
+                        (getattr(conn, "defer_agent_init", False) or not conn.agent_id)
+                        and getattr(conn, "read_config_from_live_agent_api", False)
+                    )
+                    if needs_agent_init:
+                        init_start = time.time() * 1000
+                        ready = await conn.ensure_agent_ready(filtered_text)
+                        init_elapsed = time.time() * 1000 - init_start
+                        if init_elapsed > 100:
+                            conn.logger.bind(tag=TAG).info(
+                                f"⚡ [非唤醒词] agent 配置加载: {init_elapsed:.0f}ms"
+                            )
+                        if not ready:
+                            conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
+                            return
+                    
                     # check if there are attachments(eg. images, files) in text mode
                     attachments = msg_json.get("attachments", [])
                     # Record timestamp for correct message ordering
