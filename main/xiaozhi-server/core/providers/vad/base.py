@@ -263,6 +263,25 @@ class VADStream(ABC):
         2. Check smart interrupt via conn.check_and_interrupt()
         3. Update _last_speaking_time for turn detection endpoint delay
         """
+        # 调试日志：在 TTS 播放期间检查 VAD 检测结果
+        if conn.client_is_speaking:
+            # 每50帧记录一次
+            if not hasattr(conn, '_vad_frame_count_during_tts'):
+                conn._vad_frame_count_during_tts = 0
+            conn._vad_frame_count_during_tts += 1
+            if conn._vad_frame_count_during_tts % 50 == 1:
+                logger.bind(tag=TAG).info(
+                    f"📊 [打断调试] VAD帧处理: frame={conn._vad_frame_count_during_tts}, "
+                    f"speaking={event.speaking}, prob={event.probability:.2f}, "
+                    f"client_have_voice={conn.client_have_voice}"
+                )
+        else:
+            if hasattr(conn, '_vad_frame_count_during_tts') and conn._vad_frame_count_during_tts > 0:
+                logger.bind(tag=TAG).info(
+                    f"📊 [打断调试] TTS播放期间共处理 {conn._vad_frame_count_during_tts} 个VAD帧"
+                )
+                conn._vad_frame_count_during_tts = 0
+        
         # Only send audio if client is speaking
         if not conn.client_have_voice or not event.speaking:
             return
