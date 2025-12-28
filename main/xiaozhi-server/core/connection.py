@@ -381,21 +381,26 @@ class ConnectionHandler:
 
             # 调试日志：确认在 TTS 播放期间是否收到用户音频
             if self.client_is_speaking:
-                # 每100个包记录一次，避免日志过多
+                # 每50个包记录一次，避免日志过多
                 if not hasattr(self, '_audio_recv_count_during_tts'):
                     self._audio_recv_count_during_tts = 0
+                    self._audio_bytes_during_tts = 0
                 self._audio_recv_count_during_tts += 1
-                if self._audio_recv_count_during_tts % 100 == 1:
-                    self.logger.bind(tag=TAG).debug(
-                        f"📥 [打断调试] TTS播放期间收到音频包: count={self._audio_recv_count_during_tts}, bytes={len(message)}"
+                self._audio_bytes_during_tts += len(message)
+                if self._audio_recv_count_during_tts % 50 == 1:
+                    self.logger.bind(tag=TAG).info(
+                        f"📥 [打断调试] TTS播放期间收到音频包: count={self._audio_recv_count_during_tts}, "
+                        f"this_bytes={len(message)}, total_bytes={self._audio_bytes_during_tts}"
                     )
             else:
                 # TTS 结束后重置计数
                 if hasattr(self, '_audio_recv_count_during_tts') and self._audio_recv_count_during_tts > 0:
                     self.logger.bind(tag=TAG).info(
-                        f"📥 [打断调试] TTS播放期间共收到 {self._audio_recv_count_during_tts} 个音频包"
+                        f"📥 [打断调试] TTS播放期间共收到 {self._audio_recv_count_during_tts} 个音频包, "
+                        f"总字节数={self._audio_bytes_during_tts}"
                     )
                     self._audio_recv_count_during_tts = 0
+                    self._audio_bytes_during_tts = 0
 
             # 处理来自MQTT网关的音频包
             if self.conn_from_mqtt_gateway and len(message) >= 16:
@@ -1768,6 +1773,16 @@ class ConnectionHandler:
         Args:
             speech_duration_ms: Current speech duration in milliseconds
         """
+        # 调试日志：记录打断检测条件
+        if self.client_is_speaking:
+            self.logger.bind(tag=TAG).debug(
+                f"🔍 [打断检测] 条件检查: enable={self.enable_interruption}, "
+                f"speaking={self.client_is_speaking}, mode={self.client_listen_mode}, "
+                f"defer={getattr(self, 'defer_agent_init', False)}, "
+                f"first_done={getattr(self, 'first_dialogue_completed', False)}, "
+                f"speech_ms={speech_duration_ms:.0f}"
+            )
+        
         if not self.enable_interruption:
             return
         if not self.client_is_speaking:
