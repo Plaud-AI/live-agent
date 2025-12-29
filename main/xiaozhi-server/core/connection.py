@@ -977,9 +977,10 @@ class ConnectionHandler:
                          This is the downstream provider's voice identifier, not our voice_id.
         """
         # Provider to TTS module mapping
+        # Use dual stream for better latency when available
         provider_tts_map = {
             "fishspeech": "FishSingleStreamTTS",
-            "minimax": "MinimaxTTSHTTPStream",
+            "minimax": "MinimaxDualStreamTTS",  # WebSocket dual stream (lower latency)
         }
         
         provider_lower = provider.lower()

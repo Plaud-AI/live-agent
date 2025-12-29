@@ -549,6 +549,21 @@ TTS:
     #     voice_id: female-shaonv
     #     weight: 1
     # language_boost: auto
+  MinimaxDualStreamTTS:
+  # Minimax WebSocket双工语音合成服务 (推荐，延迟更低)
+    type: minimax_dual_stream
+    api_key: ${MINIMAX_API_KEY}
+    model: "speech-2.6-turbo"
+    voice_id: "female-shaonv"
+    # voice settings
+    speed: 1
+    vol: 1
+    pitch: 0
+    emotion: "happy"
+    # audio settings
+    sample_rate: 16000
+    format: "pcm"
+    channel: 1
   OpenAITTS:
     # openai官方文本转语音服务，可支持全球大多数语种
     type: openai
