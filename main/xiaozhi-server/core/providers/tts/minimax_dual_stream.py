@@ -148,6 +148,12 @@ class TTSProvider(TTSProviderBase):
         }
 
         last_error = None
+        # Log connection details (mask api_key for security)
+        masked_key = f"{self.api_key[:10]}...{self.api_key[-4:]}" if self.api_key and len(self.api_key) > 14 else "INVALID"
+        logger.bind(tag=TAG).info(
+            f"WebSocket connection config: url={MINIMAX_WS_URL}, api_key={masked_key}"
+        )
+        
         for attempt in range(max_retries + 1):
             try:
                 logger.bind(tag=TAG).info(
@@ -173,9 +179,18 @@ class TTSProvider(TTSProviderBase):
 
             except Exception as e:
                 last_error = e
+                # Log detailed error info
+                error_type = type(e).__name__
                 logger.bind(tag=TAG).warning(
-                    f"WebSocket connection attempt {attempt + 1} failed: {e}"
+                    f"WebSocket connection attempt {attempt + 1} failed: {error_type}: {e}"
                 )
+                # For InvalidStatusCode, log the response body if available
+                if hasattr(e, 'response') and e.response:
+                    try:
+                        body = e.response.body.decode() if hasattr(e.response, 'body') else str(e.response)
+                        logger.bind(tag=TAG).warning(f"Response body: {body[:500]}")
+                    except:
+                        pass
                 if self.ws:
                     try:
                         await self.ws.close()
