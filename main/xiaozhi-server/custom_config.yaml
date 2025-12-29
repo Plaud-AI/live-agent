@@ -553,9 +553,9 @@ TTS:
   # Minimax流式语音合成服务
     type: minimax_httpstream
     output_dir: tmp/
-    group_id: 你的minimax平台groupID
-    api_key: 你的minimax平台接口密钥
-    model: "speech-01-turbo"
+    group_id: ${MINIMAX_GROUP_ID}
+    api_key: ${MINIMAX_API_KEY}
+    model: "speech-2.6-turbo"
     voice_id: "female-shaonv"
     # 以下可不用设置，使用默认设置
     # voice_setting:
@@ -581,6 +581,21 @@ TTS:
     #     voice_id: female-shaonv
     #     weight: 1
     # language_boost: auto
+  MinimaxDualStreamTTS:
+  # Minimax WebSocket双工语音合成服务 (推荐，延迟更低)
+    type: minimax_dual_stream
+    api_key: ${MINIMAX_API_KEY}
+    model: "speech-2.6-turbo"
+    voice_id: "female-shaonv"
+    # voice settings
+    speed: 1
+    vol: 1
+    pitch: 0
+    emotion: "happy"
+    # audio settings
+    sample_rate: 16000
+    format: "pcm"
+    channel: 1
   OpenAITTS:
     # openai官方文本转语音服务，可支持全球大多数语种
     type: openai

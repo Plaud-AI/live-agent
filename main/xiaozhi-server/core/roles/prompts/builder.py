@@ -237,6 +237,6 @@ def build_system_prompt(
         logger.bind(tag=TAG).error(f"Template variable missing: {e}")
         system_prompt = profile_content
     
-    logger.bind(tag=TAG).info(f"Built system prompt: {system_prompt}")
+    logger.bind(tag=TAG).debug(f"Built system prompt: {system_prompt}")
     
     return system_prompt

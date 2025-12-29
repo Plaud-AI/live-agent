@@ -1114,13 +1114,11 @@ class ConnectionHandler:
         if not private_config:
             return
         voice = private_config.get("voice")
-        voice_id = voice.get("reference_id")
-        provider = voice.get("provider")
-        if voice_id:
-            if provider == "fishspeech":
-                self.config["selected_module"]["TTS"] = "FishSingleStreamTTS"
-                self.config["TTS"]["FishSingleStreamTTS"]["reference_id"] = voice_id
-            # TODO: add other TTS providers support(Like minimax, etc.)
+        if voice:
+            reference_id = voice.get("reference_id")  # Provider's voice ID (Fish/MiniMax)
+            provider = voice.get("provider")
+            if reference_id and provider:
+                self._apply_voice_tts_config(provider, reference_id)
         self._instruction = private_config.get("instruction", self._instruction)
         # greeting config
         self._greeting_config["enable_greeting"] = private_config.get("enable_greeting", False)
@@ -1139,6 +1137,59 @@ class ConnectionHandler:
             loaded = self.dialogue.load_history_messages(recent_messages)
             if loaded > 0:
                 self.logger.bind(tag=TAG).info(f"Loaded {loaded} history messages for dialogue context")
+
+    def _apply_voice_tts_config(self, provider: str, reference_id: str):
+        """Apply TTS config based on voice provider
+        
+        Dynamically select TTS module based on voice provider from live-agent-api.
+        
+        Args:
+            provider: TTS provider name (fishspeech, minimax)
+            reference_id: Provider's voice ID (Fish Audio ID, MiniMax voice ID, etc.)
+                         This is the downstream provider's voice identifier, not our voice_id.
+        """
+        # Provider to TTS module mapping
+        # Use dual stream for better latency when available
+        provider_tts_map = {
+            "fishspeech": "FishSingleStreamTTS",
+            "minimax": "MinimaxDualStreamTTS",  # WebSocket dual stream (lower latency)
+        }
+        
+        provider_lower = provider.lower()
+        if provider_lower not in provider_tts_map:
+            self.logger.bind(tag=TAG).warning(
+                f"Unknown TTS provider: {provider}, using default TTS config"
+            )
+            return
+        
+        tts_module = provider_tts_map[provider_lower]
+        
+        # Check if TTS module exists in config
+        if tts_module not in self.config.get("TTS", {}):
+            self.logger.bind(tag=TAG).warning(
+                f"TTS module {tts_module} not defined in config, skipping"
+            )
+            return
+        
+        # Update selected TTS module
+        self.config["selected_module"]["TTS"] = tts_module
+        
+        # Apply reference_id to TTS config based on provider
+        # Note: Each TTS provider reads voice from different config keys:
+        # - FishSpeech: reference_id
+        # - MiniMax: voice_id (then applied to voice_setting internally)
+        if provider_lower == "fishspeech":
+            self.config["TTS"][tts_module]["reference_id"] = reference_id
+        elif provider_lower == "minimax":
+            self.config["TTS"][tts_module]["voice_id"] = reference_id
+        
+        self.logger.bind(tag=TAG).info(
+            f"Applied voice TTS config: provider={provider}, "
+            f"module={tts_module}, reference_id={reference_id[:20]}..."
+        )
+        
+        # Mark that API has set TTS config (prevent role config from overriding)
+        self.config["_api_tts_applied"] = True
 
     # ensure_agent_ready is used to ensure the agent is ready when the wake word is detected
     async def ensure_agent_ready(self, wake_word: str | None = None) -> bool:

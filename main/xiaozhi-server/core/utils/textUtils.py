@@ -131,6 +131,39 @@ def check_emoji(text):
 # Matches: optional whitespace + (word) + optional whitespace
 EMOTION_TAG_PATTERN = re.compile(r'\s*\([a-zA-Z_]+\)\s*')
 
+# Pattern to extract emotion name from tag at start of text
+EMOTION_EXTRACT_PATTERN = re.compile(r'^\s*\(([a-zA-Z_]+)\)')
+
+
+def extract_emotion_tag(text: str) -> tuple[str | None, str]:
+    """
+    Extract emotion tag from text and return (emotion, cleaned_text).
+    
+    Only extracts the first emotion tag at the start of the text.
+    
+    Args:
+        text: Text with potential emotion tag at start
+        
+    Returns:
+        Tuple of (emotion_name, text_without_tag)
+        emotion_name is None if no tag found
+        
+    Examples:
+        "(happy) Hello!" -> ("happy", "Hello!")
+        "(sad) I'm sorry." -> ("sad", "I'm sorry.")
+        "No tag here" -> (None, "No tag here")
+    """
+    if not text:
+        return None, text
+    
+    match = EMOTION_EXTRACT_PATTERN.match(text)
+    if match:
+        emotion = match.group(1).lower()
+        cleaned = text[match.end():].strip()
+        return emotion, cleaned
+    
+    return None, text
+
 
 def strip_emotion_tags(text: str) -> str:
     """
