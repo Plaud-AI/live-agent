@@ -64,33 +64,47 @@ COMMENT ON COLUMN agents.wake_word IS 'Wake word for device binding (required fo
 COMMENT ON COLUMN agents.template_id IS 'Reference to agent template (nullable - not all agents come from templates)';
 
 -- ==================== Table: voices ====================
--- Voice configuration table
+-- Voice configuration table (supports both cloned voices and voice library)
 CREATE TABLE IF NOT EXISTS voices (
     id SERIAL PRIMARY KEY,
     voice_id VARCHAR(50) NOT NULL,
+    reference_id VARCHAR(100),
     owner_id VARCHAR(50) NOT NULL,
+    category VARCHAR(20) NOT NULL DEFAULT 'clone',
+    provider VARCHAR(20) NOT NULL DEFAULT 'fishspeech',
     name VARCHAR(100) NOT NULL,
     "desc" TEXT NOT NULL DEFAULT '',
+    tags JSONB DEFAULT '{}',
     sample_url TEXT,
     sample_text TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     CONSTRAINT fk_voices_owner FOREIGN KEY (owner_id) 
         REFERENCES "user"(user_id) ON DELETE CASCADE,
-    CONSTRAINT uk_voices_owner_voice UNIQUE (voice_id, owner_id)
+    CONSTRAINT uk_voices_voice_id UNIQUE (voice_id),
+    CONSTRAINT chk_voices_category CHECK (category IN ('clone', 'library')),
+    CONSTRAINT chk_voices_provider CHECK (provider IN ('fishspeech', 'minimax'))
 );
 
 -- Indexes for voices table
-CREATE INDEX IF NOT EXISTS idx_voices_voice_id ON voices(voice_id);
 CREATE INDEX IF NOT EXISTS idx_voices_owner_id ON voices(owner_id);
 CREATE INDEX IF NOT EXISTS idx_voices_created_at ON voices(created_at);
+CREATE INDEX IF NOT EXISTS idx_voices_reference_id ON voices(reference_id);
+CREATE INDEX IF NOT EXISTS idx_voices_category ON voices(category);
+CREATE INDEX IF NOT EXISTS idx_voices_provider ON voices(provider);
+CREATE INDEX IF NOT EXISTS idx_voices_tags_gin ON voices USING GIN (tags);
+CREATE INDEX IF NOT EXISTS idx_voices_library_lookup ON voices(category, provider);
 
 -- Comments for voices table
-COMMENT ON TABLE voices IS 'Voice configurations for agents';
-COMMENT ON COLUMN voices.voice_id IS 'Fish Audio voice ID';
+COMMENT ON TABLE voices IS 'Voice configurations for agents (cloned and library voices)';
+COMMENT ON COLUMN voices.voice_id IS 'Primary business key in voice_{ulid} format';
+COMMENT ON COLUMN voices.reference_id IS 'Provider-specific voice ID (Fish Audio ID, MiniMax ID, etc.)';
 COMMENT ON COLUMN voices.owner_id IS 'User ID of voice owner';
+COMMENT ON COLUMN voices.category IS 'Voice category: clone (user cloned) or library (preset voice library)';
+COMMENT ON COLUMN voices.provider IS 'TTS provider: fishspeech or minimax';
 COMMENT ON COLUMN voices.name IS 'Voice display name';
 COMMENT ON COLUMN voices."desc" IS 'Voice description';
+COMMENT ON COLUMN voices.tags IS 'JSONB tags for filtering: {gender, age, language, style, accent, description}';
 COMMENT ON COLUMN voices.sample_url IS 'S3 URL of the original audio sample (for cloned voices)';
 COMMENT ON COLUMN voices.sample_text IS 'Transcription text of the audio sample (for cloned voices)';
 

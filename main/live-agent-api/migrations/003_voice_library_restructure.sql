@@ -39,6 +39,8 @@ ALTER TABLE voices DROP CONSTRAINT IF EXISTS uk_voices_owner_voice;
 DROP INDEX IF EXISTS idx_voices_voice_id;
 
 -- Add new unique constraint on voice_id (now the primary business key)
+-- Use idempotent pattern: DROP IF EXISTS + ADD
+ALTER TABLE voices DROP CONSTRAINT IF EXISTS uk_voices_voice_id;
 ALTER TABLE voices ADD CONSTRAINT uk_voices_voice_id UNIQUE (voice_id);
 
 -- Add index on reference_id for provider lookups
@@ -57,11 +59,13 @@ CREATE INDEX IF NOT EXISTS idx_voices_tags_gin ON voices USING GIN (tags);
 CREATE INDEX IF NOT EXISTS idx_voices_library_lookup ON voices(category, provider);
 
 -- ==================== Step 5: Add constraints ====================
--- Add check constraint for category
+-- Add check constraint for category (idempotent: drop first if exists)
+ALTER TABLE voices DROP CONSTRAINT IF EXISTS chk_voices_category;
 ALTER TABLE voices ADD CONSTRAINT chk_voices_category 
     CHECK (category IN ('clone', 'library'));
 
--- Add check constraint for provider
+-- Add check constraint for provider (idempotent: drop first if exists)
+ALTER TABLE voices DROP CONSTRAINT IF EXISTS chk_voices_provider;
 ALTER TABLE voices ADD CONSTRAINT chk_voices_provider 
     CHECK (provider IN ('fishspeech', 'minimax'));
 
