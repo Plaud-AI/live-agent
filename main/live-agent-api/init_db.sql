@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS agents (
     voice_opening TEXT,
     voice_closing TEXT,
     wake_word VARCHAR(50),
+    template_id VARCHAR(50),
     created_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     CONSTRAINT fk_agents_owner FOREIGN KEY (owner_id) 
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS agents (
 -- Indexes for agents table
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_agent_id ON agents(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agents_owner_id ON agents(owner_id);
+CREATE INDEX IF NOT EXISTS idx_agents_template_id ON agents(template_id);
 
 -- Comments for agents table
 COMMENT ON TABLE agents IS 'AI agent configurations';
@@ -59,6 +61,7 @@ COMMENT ON COLUMN agents.instruction IS 'System prompt/instruction for the agent
 COMMENT ON COLUMN agents.voice_opening IS 'Opening message when conversation starts';
 COMMENT ON COLUMN agents.voice_closing IS 'Closing message when conversation ends';
 COMMENT ON COLUMN agents.wake_word IS 'Wake word for device binding (required for device binding)';
+COMMENT ON COLUMN agents.template_id IS 'Reference to agent template (nullable - not all agents come from templates)';
 
 -- ==================== Table: voices ====================
 -- Voice configuration table

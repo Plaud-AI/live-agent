@@ -17,8 +17,8 @@ class VADEvent:
     Attributes:
         type: Event type (START_OF_SPEECH, INFERENCE_DONE, END_OF_SPEECH)
         probability: Speech probability for current frame (0.0-1.0)
-        speech_duration: Accumulated speech duration in seconds
-        silence_duration: Accumulated silence duration in seconds
+        speech_duration: Accumulated speech duration in milliseconds (ms)
+        silence_duration: Accumulated silence duration in milliseconds (ms)
         speaking: Whether currently speaking
         audio_data: Audio data associated with this event (bytes, PCM 16-bit)
             - START_OF_SPEECH: prefix padding + speech start
@@ -28,8 +28,8 @@ class VADEvent:
     """
     type: VADEventType
     probability: float = 0.0                # speech probability (0.0-1.0)
-    speech_duration: float = 0.0            # accumulated speech duration (seconds)
-    silence_duration: float = 0.0           # accumulated silence duration (seconds)
+    speech_duration: float = 0.0            # accumulated speech duration (milliseconds)
+    silence_duration: float = 0.0           # accumulated silence duration (milliseconds)
     speaking: bool = False                  # currently speaking
     audio_data: bytes = field(default_factory=bytes)  # PCM audio data
     inference_duration: float = 0.0         # inference time (seconds)
@@ -40,8 +40,8 @@ class VADEvent:
             f"VADEvent(type={self.type.value}, "
             f"speaking={self.speaking}, "
             f"prob={self.probability:.2f}, "
-            f"speech={self.speech_duration:.2f}s, "
-            f"silence={self.silence_duration:.2f}s, "
+            f"speech={self.speech_duration:.0f}ms, "
+            f"silence={self.silence_duration:.0f}ms, "
             f"audio={audio_len_ms:.0f}ms)"
         )
 

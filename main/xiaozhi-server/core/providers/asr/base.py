@@ -31,25 +31,38 @@ class ASRProviderBase(ABC):
 
     # 打开音频通道
     async def open_audio_channels(self, conn):
-        # Thread for processing raw audio from WebSocket
-        conn.asr_priority_thread = threading.Thread(
-            target=self._asr_audio_queue_thread, 
-            args=(conn,), 
-            daemon=True
-        )
-        conn.asr_priority_thread.start()
+        """Open ASR-related audio channels for a connection (idempotent).
+        
+        NOTE: This method may be called multiple times (e.g. connection pre-init + ensure_agent_ready()).
+        It must be idempotent to avoid:
+        - Starting duplicate queue-consumer threads
+        - Re-creating VAD event processor tasks (double consumption / race conditions)
+        """
+        # Thread for processing raw audio from WebSocket (idempotent)
+        existing_priority = getattr(conn, "asr_priority_thread", None)
+        if existing_priority is None or not getattr(existing_priority, "is_alive", lambda: False)():
+            conn.asr_priority_thread = threading.Thread(
+                target=self._asr_audio_queue_thread,
+                args=(conn,),
+                daemon=True,
+            )
+            conn.asr_priority_thread.start()
 
         # Start VAD stream and event processor (must be in async context)
         await self._start_vad_stream(conn)
         
-        # Thread for processing ASR input messages from VAD stream
-        conn.asr_input_thread = threading.Thread(
-            target=self._asr_input_queue_thread,
-            args=(conn,),
-            daemon=True
-        )
-        conn.asr_input_thread.start()
-        logger.bind(tag=TAG).info("ASR input queue thread started")
+        # Thread for processing ASR input messages from VAD stream (idempotent)
+        existing_input = getattr(conn, "asr_input_thread", None)
+        if existing_input is None or not getattr(existing_input, "is_alive", lambda: False)():
+            conn.asr_input_thread = threading.Thread(
+                target=self._asr_input_queue_thread,
+                args=(conn,),
+                daemon=True,
+            )
+            conn.asr_input_thread.start()
+            logger.bind(tag=TAG).info("ASR input queue thread started")
+        else:
+            logger.bind(tag=TAG).debug("ASR input queue thread already started, skipping")
 
     async def _start_vad_stream(self, conn):
         """Start VAD stream task and event processor
@@ -60,6 +73,12 @@ class ASRProviderBase(ABC):
         
         if conn.vad_stream is None:
             logger.bind(tag=TAG).warning("VAD stream not initialized, skipping start")
+            return
+        
+        # Idempotency: if the event processor task is already running, don't start again.
+        existing_task = getattr(conn, "_vad_event_task", None)
+        if existing_task is not None and not getattr(existing_task, "done", lambda: True)():
+            logger.bind(tag=TAG).debug("VAD stream event processor already started, skipping")
             return
         
         try:
@@ -129,7 +148,7 @@ class ASRProviderBase(ABC):
                     total_audio_ms = message.audio_duration_ms
                     logger.bind(tag=TAG).info(
                         f"ASR: Speech ended, total_audio={total_audio_ms:.0f}ms, "
-                        f"speech_duration={message.speech_duration:.2f}s"
+                        f"speech_duration={message.speech_duration:.0f}ms"
                     )
                     
                     # Process the complete speech segment (LAST audio only)
@@ -254,11 +273,60 @@ class ASRProviderBase(ABC):
             self.stop_ws_connection()
             
             if text_len > 0:
+                # Option1: suppress wakeup residue ASR to avoid double-trigger (listen/detect + ASR/TD)
+                # If wakeup has just been handled (short reply already played), the same audio segment
+                # is often transcribed into a very short/noisy phrase (e.g. "OK那不"), which then
+                # triggers TurnDetection → on_end_of_turn → second chat after endpoint delay.
+                try:
+                    from core.utils.wakeup_suppression import should_drop_asr_after_wakeup
+                    suppress_until_ms = getattr(conn, "_wakeup_suppress_next_asr_until_ms", 0) or 0
+                    now_ms = int(time.time() * 1000)
+                    if suppress_until_ms and now_ms <= suppress_until_ms:
+                        if should_drop_asr_after_wakeup(
+                            asr_text=raw_text,
+                            wakeup_words=conn.config.get("wakeup_words", []),
+                            max_norm_len=4,
+                        ):
+                            # Consume the suppress window once (avoid affecting later real queries)
+                            conn._wakeup_suppress_next_asr_until_ms = 0
+                            logger.bind(tag=TAG).info(
+                                f"Dropped wakeup residue ASR: '{raw_text}'"
+                            )
+                            return
+                        # Not a wakeup residue (likely wakeup + real query in one breath)
+                        conn._wakeup_suppress_next_asr_until_ms = 0
+                    elif suppress_until_ms and now_ms > suppress_until_ms:
+                        # Expired window
+                        conn._wakeup_suppress_next_asr_until_ms = 0
+                except Exception as e:
+                    logger.bind(tag=TAG).warning(f"Wakeup ASR suppression check failed: {e}")
+
                 # Append to ASR text buffer
                 if conn.asr_text_buffer:
                     conn.asr_text_buffer += " " + raw_text
                 else:
                     conn.asr_text_buffer = raw_text
+
+                # Optimization: after wakeup, bypass TurnDetection ONCE for the first real user query.
+                # This removes TD HTTP RTT + endpoint delay from the critical path (wakeup → first answer).
+                # Note: this must run AFTER wakeup residue suppression, otherwise the skip flag could be
+                # consumed by dropped wakeup-residue ASR.
+                if getattr(conn, "_skip_turn_detection_once", False):
+                    # Consume the flag once
+                    conn._skip_turn_detection_once = False
+
+                    # Align with ConnectionHandler.on_end_of_turn() semantics: clear buffer before chat
+                    # to avoid stale accumulation across turns.
+                    conn.asr_text_buffer = ""
+
+                    enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
+                    asr_report_time = int(time.time())
+                    logger.bind(tag=TAG).info(
+                        "Bypass TurnDetection once after wakeup, triggering startToChat directly"
+                    )
+                    await startToChat(conn, enhanced_text)
+                    enqueue_asr_report(conn, enhanced_text, [], report_time=asr_report_time)
+                    return
                 
                 # Turn Detection: let turn detection handle end of turn
                 if conn.turn_detection:

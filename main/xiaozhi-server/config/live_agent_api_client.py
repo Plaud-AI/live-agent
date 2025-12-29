@@ -6,6 +6,7 @@ Features:
 2. Connection pool reuse for better performance
 3. Thread-safe for concurrent requests
 4. JWT token parsing for user_id extraction
+5. Agent config caching for reduced latency (TTL=60s)
 """
 
 import os
@@ -13,8 +14,13 @@ import httpx
 import jwt
 from config.logger import setup_logging
 from typing import Optional, List, Dict
+from core.utils.cache.manager import cache_manager
+from core.utils.cache.config import CacheType
 
 logger = setup_logging()
+
+# 缓存 TTL 常量（秒）
+AGENT_CONFIG_CACHE_TTL = 600
 
 
 class LiveAgentApiClient:
@@ -79,11 +85,12 @@ def init_live_agent_api(config: dict):
 
 def get_agent_config_from_api(agent_id: str, config: dict = None, timezone: str = "UTC+0") -> Optional[dict]:
     """
-    Get agent configuration from live-agent-api
+    Get agent configuration from live-agent-api (无缓存，直接调用 API)
     
     Args:
         agent_id: Agent ID
         config: System config (optional if client already initialized)
+        timezone: Timezone string
     
     Returns:
         Agent config dict or None if failed
@@ -119,13 +126,55 @@ def get_agent_config_from_api(agent_id: str, config: dict = None, timezone: str 
         return None
 
 
+def get_agent_config_cached(agent_id: str, config: dict = None, timezone: str = "UTC+0") -> Optional[dict]:
+    """
+    Get agent configuration with caching (推荐使用)
+    
+    缓存策略:
+    - TTL: 60秒（配置更新最多延迟 60 秒生效）
+    - 缓存键: agent_id:timezone
+    - API 返回 None 时不缓存（避免缓存穿透）
+    
+    Args:
+        agent_id: Agent ID
+        config: System config (optional if client already initialized)
+        timezone: Timezone string
+    
+    Returns:
+        Agent config dict or None if failed
+    """
+    cache_key = f"{agent_id}:{timezone}"
+    
+    # 尝试从缓存获取
+    cached = cache_manager.get(CacheType.AGENT_CONFIG, cache_key)
+    if cached is not None:
+        logger.debug(f"Agent config cache hit: {cache_key}")
+        return cached
+    
+    # 缓存未命中，调用 API
+    logger.debug(f"Agent config cache miss: {cache_key}")
+    result = get_agent_config_from_api(agent_id, config, timezone)
+    
+    # 只缓存成功的结果（避免缓存穿透）
+    if result is not None:
+        cache_manager.set(
+            CacheType.AGENT_CONFIG, 
+            cache_key, 
+            result, 
+            ttl=AGENT_CONFIG_CACHE_TTL
+        )
+        logger.debug(f"Agent config cached: {cache_key}, TTL={AGENT_CONFIG_CACHE_TTL}s")
+    
+    return result
+
+
 def get_agent_by_wake_from_api(
     device_id: str,
     wake_word: str | None = None,
     config: dict = None,
 ) -> Optional[dict]:
     """
-    Resolve agent for device by wake word; fallback to default binding.
+    Resolve agent for device by wake word; fallback to default binding. (无缓存)
     """
     try:
         if LiveAgentApiClient._instance is None:
@@ -155,6 +204,81 @@ def get_agent_by_wake_from_api(
     except Exception as e:
         logger.error(f"Failed to resolve agent by wake_word for {device_id}: {e}")
         return None
+
+
+def get_agent_by_wake_cached(
+    device_id: str,
+    wake_word: str | None = None,
+    config: dict = None,
+) -> Optional[dict]:
+    """
+    Resolve agent for device by wake word with caching (推荐使用)
+    
+    缓存策略:
+    - TTL: 60秒
+    - 缓存键: wake:{device_id}:{wake_word} 或 wake:{device_id}:__default__
+    
+    Args:
+        device_id: Device ID (MAC address)
+        wake_word: Wake word text (optional)
+        config: System config
+    
+    Returns:
+        Agent binding dict or None if failed
+    """
+    # 构建缓存键
+    wake_key = wake_word if wake_word else "__default__"
+    cache_key = f"wake:{device_id}:{wake_key}"
+    
+    # 尝试从缓存获取
+    cached = cache_manager.get(CacheType.AGENT_CONFIG, cache_key)
+    if cached is not None:
+        logger.debug(f"Agent by wake cache hit: {cache_key}")
+        return cached
+    
+    # 缓存未命中，调用 API
+    logger.debug(f"Agent by wake cache miss: {cache_key}")
+    result = get_agent_by_wake_from_api(device_id, wake_word, config)
+    
+    # 只缓存成功的结果
+    if result is not None:
+        cache_manager.set(
+            CacheType.AGENT_CONFIG, 
+            cache_key, 
+            result, 
+            ttl=AGENT_CONFIG_CACHE_TTL
+        )
+        logger.debug(f"Agent by wake cached: {cache_key}, TTL={AGENT_CONFIG_CACHE_TTL}s")
+    
+    return result
+
+
+def invalidate_agent_config_cache(agent_id: str = None, device_id: str = None) -> int:
+    """
+    手动失效 Agent 配置缓存
+    
+    适用场景：用户在 App 端更新了 Agent 配置后，主动调用此函数清除缓存
+    
+    Args:
+        agent_id: 失效指定 agent 的所有缓存
+        device_id: 失效指定设备的唤醒词绑定缓存
+    
+    Returns:
+        删除的缓存条目数
+    """
+    total_deleted = 0
+    
+    if agent_id:
+        deleted = cache_manager.invalidate_pattern(CacheType.AGENT_CONFIG, agent_id)
+        total_deleted += deleted
+        logger.info(f"Invalidated {deleted} cache entries for agent_id={agent_id}")
+    
+    if device_id:
+        deleted = cache_manager.invalidate_pattern(CacheType.AGENT_CONFIG, f"wake:{device_id}")
+        total_deleted += deleted
+        logger.info(f"Invalidated {deleted} cache entries for device_id={device_id}")
+    
+    return total_deleted
 
 
 def report_chat_message(
