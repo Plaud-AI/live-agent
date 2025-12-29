@@ -42,6 +42,72 @@ def parse_dsn(sqlalchemy_url: str) -> str:
     return re.sub(r'^postgresql\+asyncpg://', 'postgresql://', sqlalchemy_url)
 
 
+async def detect_schema_baseline(conn) -> dict[str, bool]:
+    """
+    检测现有数据库的 schema 状态，返回每个迁移是否已"等效执行"。
+    
+    这允许旧数据库（没有 schema_migrations 表）正确跳过已完成的迁移。
+    """
+    baseline = {}
+    
+    # 检测 001: chat_messages.message_time 列是否存在
+    result = await conn.fetchval('''
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'chat_messages' AND column_name = 'message_time'
+        )
+    ''')
+    baseline['001_add_message_time.sql'] = result
+    
+    # 检测 002: agents.template_id 列是否存在
+    result = await conn.fetchval('''
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'agents' AND column_name = 'template_id'
+        )
+    ''')
+    baseline['002_add_template_id_to_agents.sql'] = result
+    
+    # 检测 003: voices.category 列是否存在（voice library restructure）
+    result = await conn.fetchval('''
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'voices' AND column_name = 'category'
+        )
+    ''')
+    baseline['003_voice_library_restructure.sql'] = result
+    
+    # 检测 004: 检查是否有 minimax 类型的 library voice
+    # 仅在 003 已执行（category/provider 列存在）时才检测
+    if baseline.get('003_voice_library_restructure.sql', False):
+        result = await conn.fetchval('''
+            SELECT EXISTS (
+                SELECT 1 FROM voices 
+                WHERE provider = 'minimax' AND category = 'library'
+                LIMIT 1
+            )
+        ''')
+        baseline['004_insert_minimax_voices.sql'] = result
+    else:
+        baseline['004_insert_minimax_voices.sql'] = False
+    
+    # 检测 005: 检查 clone voices 是否已更新 (有 reference_id 且 voice_id 以 voice_ 开头)
+    # 仅在 003 已执行时才检测
+    if baseline.get('003_voice_library_restructure.sql', False):
+        result = await conn.fetchval('''
+            SELECT EXISTS (
+                SELECT 1 FROM voices 
+                WHERE category = 'clone' AND voice_id LIKE 'voice_%' AND reference_id IS NOT NULL
+                LIMIT 1
+            )
+        ''')
+        baseline['005_update_clone_voices_and_agent_refs.sql'] = result
+    else:
+        baseline['005_update_clone_voices_and_agent_refs.sql'] = False
+    
+    return baseline
+
+
 async def run_migrations():
     """执行数据库迁移"""
     import asyncpg
@@ -66,6 +132,13 @@ async def run_migrations():
     
     try:
         # 1. 确保迁移记录表存在
+        is_new_migration_table = await conn.fetchval('''
+            SELECT NOT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'schema_migrations'
+            )
+        ''')
+        
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 version VARCHAR(255) PRIMARY KEY,
@@ -74,7 +147,16 @@ async def run_migrations():
         ''')
         logger.info("Migration tracking table ready")
         
-        # 2. 获取并排序迁移文件
+        # 2. 如果是首次创建迁移表，检测已有 schema 并标记基线
+        schema_baseline = {}
+        if is_new_migration_table:
+            logger.info("First-time migration setup detected, checking schema baseline...")
+            schema_baseline = await detect_schema_baseline(conn)
+            baseline_count = sum(1 for v in schema_baseline.values() if v)
+            if baseline_count > 0:
+                logger.info(f"Detected {baseline_count} migration(s) already applied to schema")
+        
+        # 3. 获取并排序迁移文件
         if not migration_dir.exists():
             logger.warning(f"Migration directory not found: {migration_dir}")
             return
@@ -87,12 +169,13 @@ async def run_migrations():
         
         logger.info(f"Found {len(files)} migration file(s)")
         
-        # 3. 逐个检查并执行
+        # 4. 逐个检查并执行
         applied = 0
         skipped = 0
+        baselined = 0
         
         for filename in files:
-            # 检查是否已执行
+            # 检查是否已在 schema_migrations 表中记录
             row = await conn.fetchrow(
                 "SELECT version FROM schema_migrations WHERE version = $1",
                 filename
@@ -101,6 +184,17 @@ async def run_migrations():
             if row:
                 logger.info(f"[SKIP] {filename} (already applied)")
                 skipped += 1
+                continue
+            
+            # 检查是否通过基线检测判定为已执行
+            if schema_baseline.get(filename, False):
+                # 直接标记为已执行，不再运行迁移
+                await conn.execute(
+                    "INSERT INTO schema_migrations (version) VALUES ($1)",
+                    filename
+                )
+                logger.info(f"[BASELINE] {filename} (schema already up-to-date, marked as applied)")
+                baselined += 1
                 continue
             
             # 读取 SQL 文件
@@ -130,7 +224,7 @@ async def run_migrations():
                 # 事务会自动回滚
                 raise
         
-        logger.info(f"Migration complete: {applied} applied, {skipped} skipped")
+        logger.info(f"Migration complete: {applied} applied, {skipped} skipped, {baselined} baselined")
         
     finally:
         await conn.close()
