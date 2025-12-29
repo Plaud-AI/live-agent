@@ -521,9 +521,9 @@ TTS:
   # Minimax流式语音合成服务
     type: minimax_httpstream
     output_dir: tmp/
-    group_id: 你的minimax平台groupID
-    api_key: 你的minimax平台接口密钥
-    model: "speech-01-turbo"
+    group_id: ${MINIMAX_GROUP_ID}
+    api_key: ${MINIMAX_API_KEY}
+    model: "speech-2.6-turbo"
     voice_id: "female-shaonv"
     # 以下可不用设置，使用默认设置
     # voice_setting:
