@@ -72,14 +72,22 @@ services:
         echo ">>> OTA_URL: $${OTA_URL}"
         exec python app.py
     volumes:
-      # 持久化目录（Dokploy 里不依赖主机绝对路径）
-      - xiaozhi_data:/opt/xiaozhi-esp32-server/data
-      - xiaozhi_tmp:/opt/xiaozhi-esp32-server/tmp
-      - xiaozhi_logs:/opt/xiaozhi-esp32-server/logs
-      # 配置文件：从仓库相对路径挂载（只读）
-      - ./xiaozhi-server/custom_config.yaml:/opt/xiaozhi-esp32-server/custom_config.yaml:ro
-      # 音乐目录：从仓库相对路径挂载（只读，保留示例音乐）
-      - ./xiaozhi-server/music:/opt/xiaozhi-esp32-server/music:ro
+      # ============================================================================
+      # 持久化目录 (支持两种模式，通过环境变量切换)
+      # - 新 Region (Dokploy): 使用命名卷，设置 USE_NAMED_VOLUMES=true 或留空
+      # - 旧 Region (EC2):     使用主机路径，设置 HOST_DATA_PATH=/home/ubuntu/live-agent/main/xiaozhi-server
+      # ============================================================================
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/data:/opt/xiaozhi-esp32-server/data
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/tmp:/opt/xiaozhi-esp32-server/tmp
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/logs:/opt/xiaozhi-esp32-server/logs
+      # 配置文件
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/custom_config.yaml:/opt/xiaozhi-esp32-server/custom_config.yaml:ro
+      # 模型文件 (ASR/VAD 必需)
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/models/SenseVoiceSmall:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall:ro
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/models/snakers4_silero-vad:/opt/xiaozhi-esp32-server/models/snakers4_silero-vad:ro
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/models/fsmn_vad_onnx:/opt/xiaozhi-esp32-server/models/fsmn_vad_onnx:ro
+      # 音乐目录
+      - ${HOST_DATA_PATH:-./xiaozhi-server}/music:/opt/xiaozhi-esp32-server/music:ro
 
   # ============================================================================
   # live-agent-api Dependencies: Postgres + Minio
@@ -182,11 +190,9 @@ networks:
     driver: bridge
 
 # ============================================================================
-# Volumes (Dokploy 推荐用命名卷做持久化，避免绑定到主机绝对路径)
+# Volumes (仅 live-agent-api 依赖使用命名卷)
+# xiaozhi-server 使用主机路径挂载，通过 HOST_DATA_PATH 环境变量控制
 # ============================================================================
 volumes:
-  xiaozhi_data:
-  xiaozhi_tmp:
-  xiaozhi_logs:
   live_agent_postgres_data:
   live_agent_minio_data:
