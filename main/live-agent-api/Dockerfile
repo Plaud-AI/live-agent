@@ -2,8 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# Install curl for healthcheck and libopus for audio encoding
+RUN apt-get update && apt-get install -y --no-install-recommends curl libopus0 && rm -rf /var/lib/apt/lists/*
 
 # Install uv
 RUN pip install uv
@@ -17,6 +17,8 @@ RUN uv sync --no-dev
 # Expose port
 EXPOSE 8080
 
-# Run the application
-CMD [".venv/bin/python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Make start script executable
+RUN chmod +x start.sh
 
+# Run the application using start script
+CMD ["./start.sh"]

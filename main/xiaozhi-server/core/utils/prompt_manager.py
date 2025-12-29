@@ -115,40 +115,58 @@ class PromptManager:
             return "未知位置"
 
     def _get_weather_info(self, conn, location: str) -> str:
-        """获取天气信息"""
+        """获取天气信息（带超时控制，避免阻塞首次对话）"""
+        import concurrent.futures
+        
         try:
             # 先从缓存获取
             cached_weather = self.cache_manager.get(self.CacheType.WEATHER, location)
             if cached_weather is not None:
                 return cached_weather
 
-            # 缓存未命中，调用get_weather函数获取
+            # 缓存未命中，调用get_weather函数获取（带超时）
             from plugins_func.functions.get_weather import get_weather
             from plugins_func.register import ActionResponse
 
-            # 调用get_weather函数
-            result = get_weather(conn, location=location, lang="zh_CN")
-            if isinstance(result, ActionResponse):
-                weather_report = result.result
-                self.cache_manager.set(self.CacheType.WEATHER, location, weather_report)
-                return weather_report
-            return "天气信息获取失败"
+            def fetch_weather():
+                return get_weather(conn, location=location, lang="zh_CN")
+            
+            # 使用 ThreadPoolExecutor 设置 2 秒超时，避免首次对话延迟
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fetch_weather)
+                try:
+                    result = future.result(timeout=2.0)  # 2秒超时
+                    if isinstance(result, ActionResponse):
+                        weather_report = result.result
+                        self.cache_manager.set(self.CacheType.WEATHER, location, weather_report)
+                        return weather_report
+                except concurrent.futures.TimeoutError:
+                    self.logger.bind(tag=TAG).warning("天气获取超时(>2s)，跳过")
+                    return ""
+            return ""
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"获取天气信息失败: {e}")
-            return "天气信息获取失败"
+            return ""
 
     def update_context_info(self, conn, client_ip: str):
-        """同步更新上下文信息"""
-        try:
-            # 获取位置信息（使用全局缓存）
-            local_address = self._get_location_info(client_ip)
-            # 获取天气信息（使用全局缓存）
-            self._get_weather_info(conn, local_address)
-            self.logger.bind(tag=TAG).info(f"上下文信息更新完成")
-
-        except Exception as e:
-            self.logger.bind(tag=TAG).error(f"更新上下文信息失败: {e}")
+        """异步更新上下文信息（不阻塞首次对话）"""
+        import threading
+        
+        def _async_update():
+            try:
+                # 获取位置信息（使用全局缓存）
+                local_address = self._get_location_info(client_ip)
+                # 获取天气信息（使用全局缓存）- 在后台线程执行
+                self._get_weather_info(conn, local_address)
+                self.logger.bind(tag=TAG).info(f"上下文信息更新完成（后台）")
+            except Exception as e:
+                self.logger.bind(tag=TAG).error(f"更新上下文信息失败: {e}")
+        
+        # 在后台线程执行，不阻塞首次对话
+        thread = threading.Thread(target=_async_update, daemon=True)
+        thread.start()
+        self.logger.bind(tag=TAG).info("上下文信息更新已启动（后台线程）")
 
     def build_enhanced_prompt(
         self,

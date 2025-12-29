@@ -2,6 +2,7 @@
 S3 infrastructure - AWS S3 connection and session management
 """
 import aioboto3
+from botocore.exceptions import ClientError
 
 from config import settings
 
@@ -23,7 +24,7 @@ async def get_s3() :
 
 async def init_s3():
     """
-    Initialize S3 connection and verify bucket access
+    Initialize S3 connection and ensure bucket exists
     (called in lifespan startup)
     """
     global _s3_client
@@ -36,11 +37,20 @@ async def init_s3():
             endpoint_url=settings.S3_ENDPOINT_URL
         ).__aenter__()
         
-        # Verify bucket exists and accessible
-        await _s3_client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
-        print(f"S3 connection verified: bucket '{settings.S3_BUCKET_NAME}'")
+        # Check if bucket exists, create if not
+        try:
+            await _s3_client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+            print(f"S3 connection verified: bucket '{settings.S3_BUCKET_NAME}' exists")
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ('404', 'NoSuchBucket'):
+                print(f"Bucket '{settings.S3_BUCKET_NAME}' not found, creating...")
+                await _s3_client.create_bucket(Bucket=settings.S3_BUCKET_NAME)
+                print(f"Bucket '{settings.S3_BUCKET_NAME}' created successfully")
+            else:
+                raise
     except Exception as e:
-        print(f"Warning: S3 connection verification failed: {e}")
+        print(f"Warning: S3 initialization failed: {e}")
         print("S3 operations may not work properly")
         raise
 

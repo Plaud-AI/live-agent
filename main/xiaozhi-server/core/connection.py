@@ -14,6 +14,7 @@ import websockets
 from core.utils.util import (
     extract_json_from_string,
 )
+from core.utils import textUtils
 from typing import Dict, Any
 from collections import deque
 from core.utils.modules_initialize import (
@@ -41,6 +42,7 @@ from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from config.live_agent_api_client import (
     get_agent_config_from_api,
+    get_agent_config_cached,
     get_agent_by_wake_from_api,
     extract_user_id_from_jwt,
 )
@@ -53,7 +55,7 @@ auto_import_modules("plugins_func.functions")
 class TTSException(RuntimeError):
     pass
 
-
+ 
 class ConnectionHandler:
     def __init__(
         self,
@@ -89,6 +91,8 @@ class ConnectionHandler:
         self.chat_history_conf = 0
         self.audio_format = "opus"
         self.defer_agent_init = False
+        # 首轮对话完成标志，用于禁用首轮对话期间的打断检测
+        self.first_dialogue_completed = False
 
         # 客户端状态相关
         self.client_abort = False
@@ -206,6 +210,12 @@ class ConnectionHandler:
         # memory
         self.relevant_memories_this_turn: str = "No relevant memories retrieved for this turn."
         self._memory_task = None  # Async task for memory prefetch
+        
+        # Agent 初始化就绪信号（用于解耦唤醒回复与初始化）
+        # 唤醒词处理时先播放缓存音频，后台异步初始化 agent
+        # 后续对话前通过此 Event 等待初始化完成
+        self._agent_ready_event: asyncio.Event = asyncio.Event()
+        self._agent_init_error: str | None = None  # 初始化错误信息
 
     async def handle_connection(self, ws):
         try:
@@ -273,15 +283,38 @@ class ConnectionHandler:
             try:
                 async for message in self.websocket:
                     await self._route_message(message)
-            except websockets.exceptions.ConnectionClosed:
-                self.logger.bind(tag=TAG).info("客户端断开连接")
+            except websockets.exceptions.ConnectionClosed as cc:
+                # 详细记录连接关闭信息
+                close_code_desc = {
+                    1000: "正常关闭",
+                    1001: "端点离开",
+                    1002: "协议错误",
+                    1003: "不支持的数据类型",
+                    1005: "未收到关闭码",
+                    1006: "异常关闭（网络问题）",
+                    1007: "数据类型不一致",
+                    1008: "策略违规",
+                    1009: "消息过大",
+                    1011: "服务器意外错误",
+                    1012: "服务重启",
+                    1015: "TLS握手失败",
+                }.get(cc.code, f"未知({cc.code})")
+                
+                self.logger.bind(tag=TAG).info(
+                    f"🔌 [WS断开] Device={self.device_id} | IP={self.client_ip} | "
+                    f"关闭码={cc.code}({close_code_desc}) | 原因={cc.reason or '无'}"
+                )
 
         except AuthenticationError as e:
             self.logger.bind(tag=TAG).error(f"Authentication failed: {str(e)}")
             return
         except Exception as e:
             stack_trace = traceback.format_exc()
-            self.logger.bind(tag=TAG).error(f"Connection error: {str(e)}-{stack_trace}")
+            self.logger.bind(tag=TAG).error(
+                f"❌ [连接错误] Device={self.device_id} | IP={self.client_ip} | "
+                f"异常={type(e).__name__}: {str(e)}"
+            )
+            self.logger.bind(tag=TAG).debug(f"堆栈: {stack_trace}")
             return
         finally:
             try:
@@ -346,6 +379,29 @@ class ConnectionHandler:
         elif isinstance(message, bytes):
             if self.vad is None or self.asr is None:
                 return
+
+            # 调试日志：确认在 TTS 播放期间是否收到用户音频
+            if self.client_is_speaking:
+                # 每50个包记录一次，避免日志过多
+                if not hasattr(self, '_audio_recv_count_during_tts'):
+                    self._audio_recv_count_during_tts = 0
+                    self._audio_bytes_during_tts = 0
+                self._audio_recv_count_during_tts += 1
+                self._audio_bytes_during_tts += len(message)
+                if self._audio_recv_count_during_tts % 50 == 1:
+                    self.logger.bind(tag=TAG).info(
+                        f"📥 [打断调试] TTS播放期间收到音频包: count={self._audio_recv_count_during_tts}, "
+                        f"this_bytes={len(message)}, total_bytes={self._audio_bytes_during_tts}"
+                    )
+            else:
+                # TTS 结束后重置计数
+                if hasattr(self, '_audio_recv_count_during_tts') and self._audio_recv_count_during_tts > 0:
+                    self.logger.bind(tag=TAG).info(
+                        f"📥 [打断调试] TTS播放期间共收到 {self._audio_recv_count_during_tts} 个音频包, "
+                        f"总字节数={self._audio_bytes_during_tts}"
+                    )
+                    self._audio_recv_count_during_tts = 0
+                    self._audio_bytes_during_tts = 0
 
             # 处理来自MQTT网关的音频包
             if self.conn_from_mqtt_gateway and len(message) >= 16:
@@ -477,19 +533,38 @@ class ConnectionHandler:
             self.logger = create_connection_logger(self.selected_module_str)
 
             # when missing agent_id, we identify the request is from device-end rather app-side
-            # therefore, we defer the initialization of all components 
+            # 优化：即使没有 agent_id，也预初始化默认模块，减少首次对话延迟
             if self.read_config_from_live_agent_api and not self.agent_id:
                 self.defer_agent_init = True
                 self.logger.bind(tag=TAG).info(
-                    "agent-id missing, defer LLM/TTS init until wake word resolves agent"
+                    "agent-id missing, pre-initializing default modules for faster first response"
                 )
-                # delay initialization until wake word resolves agent
-                return
+                # 预初始化默认的 LLM/TTS/ASR 模块（使用默认配置）
+                try:
+                    modules = initialize_modules(
+                        self.logger,
+                        self.config,
+                        init_vad=False,  # VAD 使用公共实例
+                        init_asr=True,
+                        init_llm=True,
+                        init_tts=True,
+                        init_memory=False,
+                        init_intent=False,
+                    )
+                    if modules.get("tts"):
+                        self.tts = modules["tts"]
+                    if modules.get("llm"):
+                        self.llm = modules["llm"]
+                    if modules.get("asr"):
+                        self.asr = modules["asr"]
+                    self.logger.bind(tag=TAG).info("Pre-initialized LLM/TTS/ASR modules successfully")
+                except Exception as e:
+                    self.logger.bind(tag=TAG).warning(f"Pre-initialization failed: {e}, will init on wake")
             else:
                 self._initialize_agent_config()
             
-            init_llm = not self.defer_agent_init
-            init_tts = not self.defer_agent_init
+            init_llm = True
+            init_tts = True
             init_memory = not self.defer_agent_init
             init_intent = not self.defer_agent_init
 
@@ -501,6 +576,14 @@ class ConnectionHandler:
                 open_tts_audio_future.result(timeout=2)
 
                 self.logger.bind(tag=TAG).info("TTS audio channels opened")
+                # 预热唤醒词短回复缓存：确保首唤醒尽可能命中本地 wav（同音色、低时延）
+                try:
+                    from core.handle.helloHandle import prewarm_wakeup_reply_cache
+                    asyncio.run_coroutine_threadsafe(
+                        prewarm_wakeup_reply_cache(self), self.loop
+                    )
+                except Exception as e:
+                    self.logger.bind(tag=TAG).debug(f"wakeup prewarm schedule failed: {e}")
                 # once tts ready, we can initialize the report threads
                 self._init_report_threads()
 
@@ -565,14 +648,20 @@ class ConnectionHandler:
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
 
-    def _init_prompt_enhancement(self):
-        """初始化并更新系统提示词"""
+    def _init_prompt_enhancement(self, skip_persona: bool = False):
+        """初始化并更新系统提示词
+        
+        Args:
+            skip_persona: 是否跳过用户画像加载（用于异步并行加载场景）
+                - True: 立即返回基础 prompt，用户画像后台加载
+                - False: 同步加载用户画像（默认行为，兼容现有调用）
+        """
         # 更新上下文信息
         self.prompt_manager.update_context_info(self, self.client_ip)
         
-        # 获取用户画像（如果 Memory 模块已初始化）
+        # 获取用户画像（如果 Memory 模块已初始化且未跳过）
         user_persona = None
-        if self.memory and hasattr(self.memory, 'get_user_persona'):
+        if not skip_persona and self.memory and hasattr(self.memory, 'get_user_persona'):
             try:
                 user_persona = self.memory.get_user_persona(client_timezone=self.client_timezone)
                 if user_persona:
@@ -612,6 +701,83 @@ class ConnectionHandler:
             )
             self.change_system_prompt(initial_prompt)
             self.logger.bind(tag=TAG).info("system prompt loaded")
+
+    async def _load_user_persona_async(self):
+        """后台异步加载用户画像
+        
+        在唤醒流程中启动，不阻塞唤醒响应。
+        加载完成后自动更新 system prompt。
+        """
+        if not self.memory or not hasattr(self.memory, 'get_user_persona_async'):
+            return
+        
+        # 防止重复加载
+        if getattr(self, '_persona_loading', False):
+            return
+        
+        self._persona_loading = True
+        load_start = time.time() * 1000
+        
+        try:
+            persona = await self.memory.get_user_persona_async(
+                client_timezone=self.client_timezone
+            )
+            load_elapsed = time.time() * 1000 - load_start
+            
+            if persona:
+                self._user_persona = persona
+                self._update_system_prompt_with_persona(persona)
+                self.logger.bind(tag=TAG).info(
+                    f"✅ [后台] 用户画像加载完成: {load_elapsed:.0f}ms, 长度: {len(persona)}"
+                )
+            else:
+                self.logger.bind(tag=TAG).debug(
+                    f"[后台] 用户画像为空: {load_elapsed:.0f}ms"
+                )
+        except Exception as e:
+            self.logger.bind(tag=TAG).warning(f"[后台] 用户画像加载失败: {e}")
+        finally:
+            self._persona_loading = False
+
+    def _update_system_prompt_with_persona(self, persona: str):
+        """使用用户画像更新 system prompt
+        
+        在后台画像加载完成后调用，将画像注入到 system prompt 中。
+        
+        Args:
+            persona: 用户画像字符串
+        """
+        if not self.base_prompt:
+            self.logger.bind(tag=TAG).warning("base_prompt 未初始化，无法更新用户画像")
+            return
+        
+        # 检查是否有 {user_persona} 占位符
+        if "{user_persona}" in self.base_prompt:
+            # 有占位符，替换它
+            updated_prompt = self.base_prompt.replace("{user_persona}", persona)
+        else:
+            # 没有占位符，追加到末尾（在 {relevant_memory} 占位符之前）
+            # 找到合适的插入位置
+            if "{relevant_memory}" in self.base_prompt:
+                # 在 relevant_memory 占位符之前插入
+                updated_prompt = self.base_prompt.replace(
+                    "{relevant_memory}",
+                    f"\n\n## 用户画像\n{persona}\n\n{{relevant_memory}}"
+                )
+            else:
+                # 追加到末尾
+                updated_prompt = f"{self.base_prompt}\n\n## 用户画像\n{persona}"
+        
+        # 更新 base_prompt（包含画像的版本）
+        self.base_prompt = updated_prompt
+        
+        # 同时更新当前的 system prompt
+        current_prompt = updated_prompt.replace(
+            "{relevant_memory}",
+            "No relevant memories retrieved for this turn."
+        )
+        self.change_system_prompt(current_prompt)
+        self.logger.bind(tag=TAG).debug("system prompt 已更新（注入用户画像）")
 
     def _init_report_threads(self):
         """Initialize chat message report thread for live-agent-api"""
@@ -892,9 +1058,12 @@ class ConnectionHandler:
     def _initialize_agent_config(self):
         """initialize agent config from live-agent-api"""
         if not self.read_config_from_live_agent_api:
+            # 非 live-agent-api 模式，直接标记 agent 就绪
+            self._agent_ready_event.set()
             return
         # self.logger.bind(tag=TAG).info(f"get agent config from live-agent-api for {self.agent_id}")
-        private_config = get_agent_config_from_api(self.agent_id, self.config, self.headers.get("timezone", "UTC+0"))
+        # 使用缓存版本，减少 API 调用延迟
+        private_config = get_agent_config_cached(self.agent_id, self.config, self.headers.get("timezone", "UTC+0"))
         if not private_config:
             self.logger.bind(tag=TAG).error(f"Failed to get agent config for {self.agent_id}")
             return
@@ -936,6 +1105,9 @@ class ConnectionHandler:
             self.intent = modules["intent"]
         if modules.get("memory", None) is not None:
             self.memory = modules["memory"]
+        
+        # 同步初始化完成，标记 agent 就绪
+        self._agent_ready_event.set()
 
     def _apply_agent_runtime_config(self, private_config: dict):
         """Apply agent-specific runtime config to connection"""
@@ -1022,17 +1194,45 @@ class ConnectionHandler:
     # ensure_agent_ready is used to ensure the agent is ready when the wake word is detected
     async def ensure_agent_ready(self, wake_word: str | None = None) -> bool:
         """
-        Resolve agent when missing and initialize LLM/TTS lazily.
+        Resolve agent when missing and apply agent config.
+        模块已在连接时预初始化，这里只需要解析 agent 并应用配置。
+        
+        注意：此方法完成后会 set _agent_ready_event，供 startToChat 等待。
+        """
+        try:
+            result = await self._do_ensure_agent_ready(wake_word)
+            if result:
+                self._agent_ready_event.set()
+            else:
+                self._agent_init_error = "Agent initialization failed"
+                self._agent_ready_event.set()  # 即使失败也要 set，避免死锁
+            return result
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"ensure_agent_ready exception: {e}")
+            self._agent_init_error = str(e)
+            self._agent_ready_event.set()  # 异常时也要 set，避免死锁
+            return False
+
+    async def _do_ensure_agent_ready(self, wake_word: str | None = None) -> bool:
+        """
+        实际执行 agent 初始化的内部方法。
+        从 ensure_agent_ready 分离出来，便于错误处理和事件管理。
         """
         if not self.read_config_from_live_agent_api:
             return True
         if not self.defer_agent_init and self.tts and self.llm:
             return True
 
+        init_start_time = time.time() * 1000
+        self.logger.bind(tag=TAG).info("🚀 [后台初始化] 开始异步拉取 agent 配置...")
+
         private_config = None
         if not self.agent_id:
-            resolved = get_agent_by_wake_from_api(
-                self.device_id, wake_word=wake_word, config=self.config
+            resolved = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: get_agent_by_wake_from_api(
+                    self.device_id, wake_word=wake_word, config=self.config
+                )
             )
             if not resolved:
                 self.logger.bind(tag=TAG).error(
@@ -1047,48 +1247,139 @@ class ConnectionHandler:
             private_config = resolved.get("agent_config")
 
         if private_config is None:
-            private_config = get_agent_config_from_api(self.agent_id, self.config)
+            # 使用缓存版本，减少 API 调用延迟
+            private_config = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: get_agent_config_cached(self.agent_id, self.config)
+            )
         if not private_config:
             self.logger.bind(tag=TAG).error(
                 f"Failed to get agent config for {self.agent_id}"
             )
             return False
 
+        api_elapsed = time.time() * 1000 - init_start_time
+        self.logger.bind(tag=TAG).info(f"⚡ [后台初始化] API 调用完成: {api_elapsed:.0f}ms")
+
         self._apply_agent_runtime_config(private_config)
         self.defer_agent_init = False
 
-        try:
-            modules = initialize_modules(
-                self.logger,
-                self.config,
-                False,
-                False,
-                True,
-                True,
-                False,
-                False,
-            )
-        except Exception as e:
-            self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
-            modules = {}
-        if modules.get("llm", None) is not None:
-            self.llm = modules["llm"]
-            if isinstance(self.llm, LLMProviderBase):
-                self.llm.prewarm()
-        if modules.get("tts", None) is not None:
-            self.tts = modules["tts"]
-            asyncio.run_coroutine_threadsafe(
-                self.tts.open_audio_channels(self), self.loop
-            )
-        if modules.get("intent", None) is not None:
-            self.intent = modules["intent"]
-        if modules.get("memory", None) is not None:
-            self.memory = modules["memory"]
+        # 更新已预初始化的 TTS 实例的 reference_id（voice_id）
+        # 因为预初始化时还没有 agent 配置，reference_id 为 null
+        # voice_id 可能在顶层或嵌套在 voice 对象中
+        voice_id = private_config.get("voice_id")
+        if not voice_id:
+            voice_config = private_config.get("voice", {})
+            voice_id = voice_config.get("voice_id") or voice_config.get("reference_id")
+        if voice_id and self.tts and hasattr(self.tts, "reference_id"):
+            self.tts.reference_id = voice_id
+            self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
+            # voice 更新后，后台预热唤醒短回复缓存（避免首唤醒回退到固定录音）
+            try:
+                from core.handle.helloHandle import prewarm_wakeup_reply_cache
+                asyncio.create_task(prewarm_wakeup_reply_cache(self))
+            except Exception as e:
+                self.logger.bind(tag=TAG).debug(f"wakeup prewarm(schedule after voice update) failed: {e}")
 
-        # 初始化 prompt 与上报线程
-        self._init_prompt_enhancement()
+        # 模块已在连接时预初始化，这里只需要确保 ASR 和 VAD stream 就绪
+        # 只有在模块未初始化时才重新初始化（正常情况下不会进入）
+        if not self.llm or not self.tts:
+            self.logger.bind(tag=TAG).warning("Modules not pre-initialized, initializing now...")
+            try:
+                modules = initialize_modules(
+                    self.logger,
+                    self.config,
+                    init_vad=False,  # VAD 使用公共实例
+                    init_asr=True,   # ASR 需要初始化！
+                    init_llm=True,
+                    init_tts=True,
+                    init_memory=False,
+                    init_intent=False,
+                )
+            except Exception as e:
+                self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
+                modules = {}
+            if modules.get("llm", None) is not None:
+                self.llm = modules["llm"]
+                if isinstance(self.llm, LLMProviderBase):
+                    self.llm.prewarm()
+            if modules.get("tts", None) is not None:
+                self.tts = modules["tts"]
+                asyncio.run_coroutine_threadsafe(
+                    self.tts.open_audio_channels(self), self.loop
+                )
+            if modules.get("asr", None) is not None:
+                self.asr = modules["asr"]
+            if modules.get("intent", None) is not None:
+                self.intent = modules["intent"]
+            if modules.get("memory", None) is not None:
+                self.memory = modules["memory"]
+
+        # 初始化 VAD stream（使用公共 VAD 实例）
+        if self.vad is None:
+            self.vad = self._vad
+        if self.vad is not None and self.vad_stream is None:
+            self._initialize_vad_stream()
+        
+        # 打开 ASR 音频通道（如果尚未打开）
+        if self.asr is not None:
+            asyncio.run_coroutine_threadsafe(
+                self.asr.open_audio_channels(self), self.loop
+            )
+        
+        # 初始化 Memory（必须在 owner_id 设置后）
+
+        if self.memory and not getattr(self.memory, 'role_id', None):
+            self.logger.bind(tag=TAG).debug(
+                f"Initializing Memory with owner_id={self.owner_id or self.device_id}"
+            )
+            self._initialize_memory()
+        
+        # Phase 6 优化：异步并行加载用户画像
+        # 1. 使用 skip_persona=True 跳过同步画像加载，立即返回基础 prompt
+        # 2. 启动后台任务异步加载用户画像，完成后更新 system prompt
+        # 预期收益：唤醒延迟从 ~3s 降低到 ~500ms
+        self._init_prompt_enhancement(skip_persona=True)
+        
+        # 启动后台任务异步加载用户画像（不阻塞唤醒流程）
+        if self.memory and hasattr(self.memory, 'get_user_persona_async'):
+            asyncio.create_task(self._load_user_persona_async())
+            self.logger.bind(tag=TAG).debug("🚀 [后台] 启动用户画像异步加载任务")
+        
         self._init_report_threads()
+        
+        total_elapsed = time.time() * 1000 - init_start_time
+        self.logger.bind(tag=TAG).info(f"✅ [后台初始化] 完成: {total_elapsed:.0f}ms (画像后台加载中)")
         return True
+    
+    async def wait_agent_ready(self, timeout: float = 5.0) -> bool:
+        """
+        等待 agent 初始化完成。
+        
+        Args:
+            timeout: 超时时间（秒）
+            
+        Returns:
+            True: 初始化成功
+            False: 初始化失败或超时
+        """
+        # 如果不需要延迟初始化，直接返回成功
+        if not getattr(self, "defer_agent_init", False) and self._agent_ready_event.is_set():
+            return self._agent_init_error is None
+        
+        # 如果 event 已经 set，直接返回
+        if self._agent_ready_event.is_set():
+            return self._agent_init_error is None
+        
+        try:
+            await asyncio.wait_for(self._agent_ready_event.wait(), timeout=timeout)
+            if self._agent_init_error:
+                self.logger.bind(tag=TAG).error(f"Agent init failed: {self._agent_init_error}")
+                return False
+            return True
+        except asyncio.TimeoutError:
+            self.logger.bind(tag=TAG).error(f"wait_agent_ready timeout after {timeout}s")
+            return False
 
     def change_system_prompt(self, prompt):
         self.prompt = prompt
@@ -1239,12 +1530,13 @@ class ConnectionHandler:
                 )
 
             # 在llm回复中获取情绪表情，一轮对话只在开头获取一次
-            # if emotion_flag and content is not None and content.strip():
-            #     asyncio.run_coroutine_threadsafe(
-            #         textUtils.get_emotion(self, content),
-            #         self.loop,
-            #     )
-            #     emotion_flag = False
+            # 发送 llm 消息，包含 emoji 和 emotion，用于设备端显示表情
+            if emotion_flag and content is not None and content.strip():
+                asyncio.run_coroutine_threadsafe(
+                    textUtils.get_emotion(self, content),
+                    self.loop,
+                )
+                emotion_flag = False
 
             if content is not None and len(content) > 0:
                 if not tool_call_flag:
@@ -1463,6 +1755,9 @@ class ConnectionHandler:
 
     async def close(self, ws=None):
         """资源清理方法"""
+        self.logger.bind(tag=TAG).info(
+            f"🧹 [开始清理] Device={self.device_id} | IP={self.client_ip} | Session={self.session_id[:8]}..."
+        )
         try:
             # 清理音频缓冲区
             if hasattr(self, "audio_buffer"):
@@ -1632,11 +1927,30 @@ class ConnectionHandler:
         Args:
             speech_duration_ms: Current speech duration in milliseconds
         """
+        # 调试日志：记录打断检测条件
+        if self.client_is_speaking:
+            self.logger.bind(tag=TAG).debug(
+                f"🔍 [打断检测] 条件检查: enable={self.enable_interruption}, "
+                f"speaking={self.client_is_speaking}, mode={self.client_listen_mode}, "
+                f"defer={getattr(self, 'defer_agent_init', False)}, "
+                f"first_done={getattr(self, 'first_dialogue_completed', False)}, "
+                f"speech_ms={speech_duration_ms:.0f}"
+            )
+        
         if not self.enable_interruption:
             return
         if not self.client_is_speaking:
             return
         if self.client_listen_mode == "manual":
+            return
+        # 在 agent 配置加载完成之前禁用打断检测
+        # defer_agent_init=True 表示正在等待 ensure_agent_ready 完成
+        # 这样可以避免在 agent 配置加载期间误触发打断
+        if getattr(self, "defer_agent_init", False):
+            return
+        # 首轮对话完成之前禁用打断检测
+        # 避免唤醒词响应期间设备继续发送音频被误判为打断
+        if not getattr(self, "first_dialogue_completed", False):
             return
         
         # Check speech duration threshold

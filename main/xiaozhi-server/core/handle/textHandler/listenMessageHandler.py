@@ -7,6 +7,8 @@ from core.handle.reportHandle import enqueue_asr_report
 from core.handle.sendAudioHandle import send_stt_message, send_tts_message
 from core.handle.textMessageHandler import TextMessageHandler
 from core.handle.textMessageType import TextMessageType
+from core.handle.helloHandle import checkWakeupWords
+from core.utils.wakeup_suppression import is_wakeup_word
 from core.utils.util import remove_punctuation_and_length
 
 TAG = __name__
@@ -91,7 +93,9 @@ class ListenTextMessageHandler(TextMessageHandler):
                 )
 
                 # 识别是否是唤醒词
-                is_wakeup_words = filtered_text in conn.config.get("wakeup_words")
+                is_wakeup_words = is_wakeup_word(
+                    filtered_text, conn.config.get("wakeup_words", [])
+                )
                 # 是否开启唤醒词回复
                 enable_greeting = conn.config.get("enable_greeting", True)
 
@@ -101,18 +105,71 @@ class ListenTextMessageHandler(TextMessageHandler):
                     await send_tts_message(conn, "stop", None)
                     conn.client_is_speaking = False
                 elif is_wakeup_words:
-                    if (getattr(conn, "defer_agent_init", False) or not conn.agent_id) and getattr(conn, "read_config_from_live_agent_api", False):
+                    # === 唤醒延迟优化：异步化 agent 配置拉取 ===
+                    # 必须保证用 agent 配置的音色播放唤醒回复
+                    # 优化点：将同步 HTTP 调用改为异步，减少阻塞时间
+                    
+                    wakeup_start_time = time.time() * 1000
+                    
+                    # 1. 如果需要初始化 agent，先异步完成（必须等待，保证音色正确）
+                    needs_agent_init = (
+                        (getattr(conn, "defer_agent_init", False) or not conn.agent_id)
+                        and getattr(conn, "read_config_from_live_agent_api", False)
+                    )
+                    if needs_agent_init:
+                        init_start = time.time() * 1000
                         ready = await conn.ensure_agent_ready(filtered_text)
+                        init_elapsed = time.time() * 1000 - init_start
+                        conn.logger.bind(tag=TAG).info(
+                            f"⚡ [唤醒延迟] agent 配置加载: {init_elapsed:.0f}ms"
+                        )
                         if not ready:
                             conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
                             return
-                    conn.just_woken_up = True
+                    
                     # Record timestamp for correct message ordering
                     report_time = int(time.time())
-                    # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
-                    enqueue_asr_report(conn, "嘿，你好呀", [], report_time=report_time)
-                    await startToChat(conn, "嘿，你好呀")
+                    
+                    # 2. 播放缓存的唤醒词短回复（现在已经有正确的 voice_id 了）
+                    wakeup_handled = await checkWakeupWords(conn, filtered_text)
+                    
+                    wakeup_elapsed = time.time() * 1000 - wakeup_start_time
+                    conn.logger.bind(tag=TAG).info(
+                        f"⚡ [唤醒延迟] 唤醒回复总耗时: {wakeup_elapsed:.0f}ms"
+                    )
+                    
+                    if wakeup_handled:
+                        # 成功播放了缓存的短回复，上报唤醒事件后返回
+                        enqueue_asr_report(conn, original_text, [], report_time=report_time)
+                        conn.logger.bind(tag=TAG).info("设备端唤醒词已通过缓存短回复处理")
+                        return
+                    
+                    # 选项1：唤醒不走 LLM。若短回复未能播放（极少见），仅上报唤醒事件后返回。
+                    enqueue_asr_report(conn, original_text, [], report_time=report_time)
+                    conn.logger.bind(tag=TAG).warning(
+                        "唤醒词短回复未播放成功，已跳过 LLM 兜底（Option1）"
+                    )
+                    return
                 else:
+                    # === 非唤醒词文本也需要初始化 agent ===
+                    # 当设备发送的文本不是唤醒词时，也需要确保 agent 初始化完成
+                    # 否则后续 startToChat 会因为 wait_agent_ready 超时而失败
+                    needs_agent_init = (
+                        (getattr(conn, "defer_agent_init", False) or not conn.agent_id)
+                        and getattr(conn, "read_config_from_live_agent_api", False)
+                    )
+                    if needs_agent_init:
+                        init_start = time.time() * 1000
+                        ready = await conn.ensure_agent_ready(filtered_text)
+                        init_elapsed = time.time() * 1000 - init_start
+                        if init_elapsed > 100:
+                            conn.logger.bind(tag=TAG).info(
+                                f"⚡ [非唤醒词] agent 配置加载: {init_elapsed:.0f}ms"
+                            )
+                        if not ready:
+                            conn.logger.bind(tag=TAG).error("未能解析 agent，结束会话")
+                            return
+                    
                     # check if there are attachments(eg. images, files) in text mode
                     attachments = msg_json.get("attachments", [])
                     # Record timestamp for correct message ordering

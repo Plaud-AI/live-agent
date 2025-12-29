@@ -389,6 +389,33 @@ class MemoryProvider(MemoryProviderBase):
             logger.bind(tag=TAG).debug(traceback.format_exc())
             return None
 
+    async def get_user_persona_async(self, client_timezone: str = None) -> Optional[str]:
+        """异步获取用户画像（不阻塞主线程）
+        
+        将同步的 get_user_persona 调用放到线程池中执行，避免阻塞事件循环。
+        
+        Args:
+            client_timezone: 客户端时区字符串 (e.g., 'Asia/Shanghai', 'UTC+8')
+        
+        Returns:
+            格式化后的用户画像字符串，如果获取失败或未启用则返回 None
+        """
+        import asyncio
+        
+        if not self.use_memu:
+            return None
+        
+        try:
+            loop = asyncio.get_event_loop()
+            persona = await loop.run_in_executor(
+                None,  # 使用默认线程池
+                lambda: self.get_user_persona(client_timezone=client_timezone)
+            )
+            return persona
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"异步获取用户画像失败: {str(e)}")
+            return None
+
     # ==================== Memory Item CRUD ====================
 
     @require_memu

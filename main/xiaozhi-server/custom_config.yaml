@@ -52,7 +52,7 @@ log:
   # 设置日志文件输出的格式，时间、日志级别、标签、消息
   log_format_file: "{time:YYYY-MM-DD HH:mm:ss} - {version}_{selected_module} - {name} - {level} - {extra[tag]} - {message}"
   # 设置日志等级：INFO、DEBUG
-  log_level: INFO
+  log_level: DEBUG
   # 设置日志路径
   log_dir: tmp
   # 设置日志文件
@@ -76,15 +76,23 @@ enable_stop_tts_notify: false
 stop_tts_notify_voice: "config/assets/tts_notify.mp3"
 
 # TTS Audio Send Flow Control Configuration
+# tts_start_delay_ms: Delay after sending tts/start before sending audio packets
+#   This gives the device time to switch to SPEAKING state (device uses async Schedule())
+#   Device needs ~134ms to complete state transition (Schedule callback + AudioService operations)
+#   150: 150ms delay (safe for most ESP32 devices)
+#   0: No delay (may cause audio drops on slower devices)
+tts_start_delay_ms: 150
 # tts_audio_send_delay: Control the interval of sending audio packets
-#   < 0: Use exact time control, strictly match the audio frame rate (default, calculated at runtime based on audio frame rate)
-#   > 0: Use fixed delay (milliseconds) to send, e.g.: 60
-tts_audio_send_delay: 0
+#   <= 0: Use time-based flow control (calculate delay based on audio frame rate)
+#   > 0: Use fixed delay (milliseconds) between packets
+#   WARNING: Using fixed delay (>0) may cause WebSocket buffer issues!
+tts_audio_send_delay: -1
 # tts_audio_pre_buffer_count: Number of packets to send quickly at the beginning (pre-buffer phase)
 #   Default: 8 packets (8 * 60ms = 480ms buffer)
 tts_audio_pre_buffer_count: 8
 # tts_audio_speed_multiplier: Send speed multiplier after pre-buffer phase
-#   Default: 1.2 (20% faster than realtime to maintain buffer)
+#   1.0: Real-time speed (safest for unstable network)
+#   1.1: 10% faster (may cause buffer accumulation on slow networks)
 tts_audio_speed_multiplier: 1.0
 
 exit_commands:
@@ -121,6 +129,10 @@ wakeup_words:
   - "喵喵同学"
   - "小滨小滨"
   - "小冰小冰"
+  # 英文唤醒词（listen/detect 会通过 remove_punctuation_and_length 去空格/标点；"okay nabu" => "okaynabu"）
+  - "okaynabu"
+  - "OKAYNABU"
+  - "okay那不"
 # MCP接入点地址，地址格式为：ws://你的mcp接入点ip或者域名:端口号/mcp/?token=你的token
 # 详细教程 https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/mcp-endpoint-integration.md
 mcp_endpoint: 你的接入点 websocket地址
@@ -229,7 +241,7 @@ Intent:
     # 系统默认已经记载"handle_exit_intent(退出识别)"、"play_music(音乐播放)"插件，请勿重复加载
     # 下面是加载查天气、角色切换、加载查新闻的插件示例
     functions:
-      - get_weather
+      - get_weather  # 已优化：后台异步获取，不阻塞首次对话
       - get_news_from_newsnow
       - play_music
   function_call:
@@ -240,7 +252,7 @@ Intent:
     # 下面是加载查天气、角色切换、加载查新闻的插件示例
     functions:
       - change_role
-      - get_weather
+      - get_weather  # 已优化：后台异步获取，不阻塞首次对话
       # - get_news_from_chinanews
       - get_news_from_newsnow
       # play_music是服务器自带的音乐播放，hass_play_music是通过home assistant控制的独立外部程序音乐播放
@@ -364,7 +376,9 @@ TurnDetection:
     timeout: 1              # HTTP request timeout (seconds)
     endpoint: /turn-detect    # API endpoint path
     min_endpoint_delay: 500      # Min time to wait after last speech before forcing end of turn (milliseconds)
-    max_endpoint_delay: 2000      # Max time to wait after last speech before forcing end of turn (milliseconds)
+    # Option1 优化：降低 unfinished/waiting 时的尾部等待，缩短“用户说完→开始回应”的体感延迟
+    # 如出现误截断（用户中途停顿被过早判定结束），可回滚为 2000
+    max_endpoint_delay: 1500      # Max time to wait after last speech before forcing end of turn (milliseconds)
 
 LLM:
   GroqLLM:  
@@ -517,6 +531,24 @@ TTS:
     rate: 44100
     sample_rate: 16000
     api_key: ${FISH_API_KEY}
+    # ========== TTS 预取优化 ==========
+    # 预取并行度：同时进行的 TTS 请求数
+    # 注意：FishSpeech API 可能有并发限制，过多并发会触发限速
+    # 设置为 2 可以平衡预取效果和避免限速
+    # 默认: 2, 最大建议: 2 (避免触发 FishSpeech API 限速)
+    prefetch_depth: 2
+    # ========== 分句策略优化 ==========
+    # 软标点(逗号)切分的最小字符限制
+    # 较小值允许更早分句，降低首句延迟，但可能增加句子间隙
+    # 较大值减少分段，句子更完整，但 TTS 延迟可能更高
+    # 默认: 25, 当前: 30 (平衡首句延迟和流畅度)
+    soft_punct_min_chars: 30
+    # 硬标点(句号)分段的最大字符数，超过此长度强制分段
+    # 较小值避免长句子导致的 TTS 延迟尖峰，但可能打断自然语句
+    # 默认: 160, 当前: 120 (加速 TTS 响应)
+    segment_max_chars: 120
+    # 首句分段最大字符数（首句可以更短以降低首包延迟）
+    first_segment_max_chars: 20
   MinimaxTTSHTTPStream:
   # Minimax流式语音合成服务
     type: minimax_httpstream
@@ -569,7 +601,7 @@ TTS:
     type: openai
     # 你可以在这里获取到 api key
     # https://platform.openai.com/api-keys
-    api_key: 你的openai api key
+    api_key: ${OPENAI_API_KEY}
     # 国内需要使用代理
     api_url: https://api.openai.com/v1/audio/speech
     # 可选tts-1或tts-1-hd，tts-1速度更快tts-1-hd质量更好

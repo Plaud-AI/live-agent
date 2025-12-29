@@ -1,15 +1,17 @@
+# 注意：Dokploy 从 code/ 目录运行 docker compose，但 .env 文件在 code/main/.env
+# 所以需要在 compose 文件中明确指定 env_file
+
 services:
   # ============================================================================
   # xiaozhi-server (Python WebSocket Server)
   # ============================================================================
   xiaozhi-esp32-server:
+    env_file:
+      - .env  # 相对于本 compose 文件的位置
     build:
       context: ./xiaozhi-server/
       dockerfile: Dockerfile
     image: xiaozhi-esp32-server:local
-    container_name: xiaozhi-esp32-server
-    env_file:
-      - .env
     depends_on:
       live-agent-api:
         condition: service_healthy
@@ -24,10 +26,20 @@ services:
     security_opt:
       - seccomp:unconfined
     environment:
-      - TZ=Asia/Shanghai
-      - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=INFO
-      - REGION=LOCAL
+      TZ: Asia/Shanghai
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: INFO
+      REGION: LOCAL
+      # 供 custom_config.yaml 的 ${VAR} 展开使用（由 Dokploy UI / main/.env 提供）
+      SECRET_KEY: ${SECRET_KEY:-}
+      MEMU_API_KEY: ${MEMU_API_KEY:-}
+      MEMU_BASE_URL: ${MEMU_BASE_URL:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      FISH_API_KEY: ${FISH_API_KEY:-}
+      BYTEPLUS_APPID: ${BYTEPLUS_APPID:-}
+      BYTEPLUS_ACCESS_TOKEN: ${BYTEPLUS_ACCESS_TOKEN:-}
     healthcheck:
       disable: true
     # 容器启动时自动获取公网 IP 并设置环境变量（使用 Python，无需 curl）
@@ -50,35 +62,30 @@ services:
         print(get_ip())
         "
         }
-        export PUBLIC_IP=$$(get_public_ip)
-        export WEBSOCKET_URL="ws://$${PUBLIC_IP}:8000/xiaozhi/v1/"
-        export OTA_URL="http://$${PUBLIC_IP}:8003/xiaozhi/ota/"
+        # 如果在 Dokploy 环境变量里已经配置了 PUBLIC_IP/WEBSOCKET_URL/OTA_URL，则不覆盖
+        : "$${PUBLIC_IP:=$$(get_public_ip)}"
+        : "$${WEBSOCKET_URL:=ws://$${PUBLIC_IP}:8000/xiaozhi/v1/}"
+        : "$${OTA_URL:=http://$${PUBLIC_IP}:8003/xiaozhi/ota/}"
+        export PUBLIC_IP WEBSOCKET_URL OTA_URL
         echo ">>> Detected PUBLIC_IP: $${PUBLIC_IP}"
         echo ">>> WEBSOCKET_URL: $${WEBSOCKET_URL}"
         echo ">>> OTA_URL: $${OTA_URL}"
         exec python app.py
     volumes:
-      # Configuration directory
-      - /home/ubuntu/live-agent/main/xiaozhi-server/data:/opt/xiaozhi-esp32-server/data
-      # Custom config (optional override, uncomment if you need to customize)
-      - /home/ubuntu/live-agent/main/xiaozhi-server/custom_config.yaml:/opt/xiaozhi-esp32-server/custom_config.yaml
-      # Model files (important!)
-      - /home/ubuntu/live-agent/main/xiaozhi-server/models/SenseVoiceSmall:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall
-      - /home/ubuntu/live-agent/main/xiaozhi-server/models/snakers4_silero-vad:/opt/xiaozhi-esp32-server/models/snakers4_silero-vad
-      - /home/ubuntu/live-agent/main/xiaozhi-server/models/fsmn_vad_onnx:/opt/xiaozhi-esp32-server/models/fsmn_vad_onnx
-      # Temporary files
-      - /home/ubuntu/live-agent/main/xiaozhi-server/tmp:/opt/xiaozhi-esp32-server/tmp
-      # Music files (optional)
-      - /home/ubuntu/live-agent/main/xiaozhi-server/music:/opt/xiaozhi-esp32-server/music
-      # Logs (optional, for debugging)
-      - /home/ubuntu/live-agent/main/xiaozhi-server/logs:/opt/xiaozhi-esp32-server/logs
+      # 持久化目录（Dokploy 里不依赖主机绝对路径）
+      - xiaozhi_data:/opt/xiaozhi-esp32-server/data
+      - xiaozhi_tmp:/opt/xiaozhi-esp32-server/tmp
+      - xiaozhi_logs:/opt/xiaozhi-esp32-server/logs
+      # 配置文件：从仓库相对路径挂载（只读）
+      - ./xiaozhi-server/custom_config.yaml:/opt/xiaozhi-esp32-server/custom_config.yaml:ro
+      # 音乐目录：从仓库相对路径挂载（只读，保留示例音乐）
+      - ./xiaozhi-server/music:/opt/xiaozhi-esp32-server/music:ro
 
   # ============================================================================
   # live-agent-api Dependencies: Postgres + Minio
   # ============================================================================
   live-agent-postgres:
     image: postgres:16-alpine
-    container_name: live-agent-postgres
     environment:
       POSTGRES_DB: live_agent
       POSTGRES_USER: postgres
@@ -86,8 +93,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /home/ubuntu/live-agent/main/live-agent-api/data/postgres:/var/lib/postgresql/data
-      - /home/ubuntu/live-agent/main/live-agent-api/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+      - live_agent_postgres_data:/var/lib/postgresql/data
+      - ./live-agent-api/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     networks:
       - xiaozhi-network
     healthcheck:
@@ -98,7 +105,6 @@ services:
 
   live-agent-minio:
     image: minio/minio:latest
-    container_name: live-agent-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -107,7 +113,7 @@ services:
       - "19000:9000"
       - "19001:9001"
     volumes:
-      - /home/ubuntu/live-agent/main/live-agent-api/data/minio:/data
+      - live_agent_minio_data:/data
     networks:
       - xiaozhi-network
     healthcheck:
@@ -120,16 +126,39 @@ services:
   # live-agent-api
   # ============================================================================
   live-agent-api:
+    env_file:
+      - .env  # 相对于本 compose 文件的位置
     build:
       context: ./live-agent-api
       dockerfile: Dockerfile
-    container_name: live-agent-api
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@live-agent-postgres:5432/live_agent
-      S3_ENDPOINT_URL: http://live-agent-minio:9000
-      DEBUG: "True"    # 如果是正式生产，可改成 "False"
+      # === Database ===
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@live-agent-postgres:5432/live_agent}
+      # === S3 / MinIO ===
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://live-agent-minio:9000}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL}
+      # === Security ===
+      SECRET_KEY: ${SECRET_KEY}
+      TOKEN_EXPIRE_DAYS: ${TOKEN_EXPIRE_DAYS:-7}
+      # === External Services ===
+      FISH_API_KEY: ${FISH_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      QUICK_PERSONA_MODEL: ${QUICK_PERSONA_MODEL:-google/gemini-2.5-flash}
+      OPTIMIZE_PERSONA_MODEL: ${OPTIMIZE_PERSONA_MODEL:-google/gemini-3-pro-preview}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_STT_MODEL: ${GROQ_STT_MODEL:-whisper-large-v3}
+      MEMU_API_KEY: ${MEMU_API_KEY:-}
+      MEMU_BASE_URL: ${MEMU_BASE_URL:-https://api.memu.so}
+      DEBUG: ${DEBUG:-True}    # 如果是正式生产，可改成 "False"
     ports:
       - "8080:8080"
     networks:
@@ -151,4 +180,13 @@ services:
 networks:
   xiaozhi-network:
     driver: bridge
-    name: xiaozhi-network
+
+# ============================================================================
+# Volumes (Dokploy 推荐用命名卷做持久化，避免绑定到主机绝对路径)
+# ============================================================================
+volumes:
+  xiaozhi_data:
+  xiaozhi_tmp:
+  xiaozhi_logs:
+  live_agent_postgres_data:
+  live_agent_minio_data:
