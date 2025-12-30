@@ -94,6 +94,7 @@ services:
   # ============================================================================
   # turn-detection (Turn Detection Service)
   # 使用预构建镜像: jasonyang1/turn-detection-serve:v1
+  # 需要 GPU 支持 (NVIDIA Container Toolkit)
   # ============================================================================
   turn-detection:
     image: jasonyang1/turn-detection-serve:v1
@@ -108,13 +109,22 @@ services:
     #   - "18000:18000"
     environment:
       TZ: Asia/Shanghai
+      NVIDIA_VISIBLE_DEVICES: all
+    # GPU 配置 - 需要 NVIDIA Container Toolkit
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     healthcheck:
       # 使用 Python 进行健康检查
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:18000/health', timeout=5)"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   # ============================================================================
   # live-agent-api Dependencies: Postgres + Minio
