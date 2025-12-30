@@ -38,6 +38,34 @@ class AgeTag(str, Enum):
     SENIOR = "senior"
 
 
+# ==================== Language Code Mapping ====================
+
+# Map client language codes to database language values
+# Client sends ISO 639-1 codes (en, zh, ja, etc.)
+# Database stores either ISO codes or full names depending on the voice
+LANGUAGE_CODE_MAP = {
+    # Direct mappings (client code -> database value)
+    "zh": "chinese (mandarin)",
+    # Add more mappings as needed
+    # "yue": "cantonese",
+}
+
+def normalize_language_code(code: str) -> str:
+    """
+    Convert client language code to database language value.
+    
+    Args:
+        code: Client language code (ISO 639-1, e.g. 'en', 'zh', 'ja')
+        
+    Returns:
+        Database language value (e.g. 'en', 'chinese (mandarin)')
+    """
+    if not code:
+        return code
+    code_lower = code.lower()
+    return LANGUAGE_CODE_MAP.get(code_lower, code_lower)
+
+
 # System user ID for voice library voices
 SYSTEM_VOICE_LIBRARY_OWNER = "system_voice_library"
 
@@ -212,7 +240,7 @@ class Voice:
             db: Database session
             gender: Filter by gender tag (male/female)
             age: Filter by age tag (youth/young_adult/adult/middle_aged/senior)
-            language: Filter by language tag (en/zh/ja/etc.)
+            language: Filter by language code (en/zh/ja/etc.) - will be normalized
             cursor: voice_id string for pagination (ULID-based, lexicographically sortable)
             limit: Number of items to return
             
@@ -229,7 +257,9 @@ class Voice:
         if age:
             query = query.where(VoiceModel.tags['age'].astext == age)
         if language:
-            query = query.where(VoiceModel.tags['language'].astext == language)
+            # Normalize client language code to database language value
+            db_language = normalize_language_code(language)
+            query = query.where(VoiceModel.tags['language'].astext == db_language)
         
         # Apply cursor filter (voice_id based - lexicographic comparison)
         if cursor:
