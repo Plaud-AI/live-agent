@@ -68,11 +68,17 @@ class TTSProvider(TTSProviderBase):
         # Segmentation tuning (latency vs naturalness)
         # - max chars: hard cap to prevent pathological long segments (reduces TTS first-chunk spikes)
         # - soft punct min chars: avoid over-fragmentation at early commas
+        #
+        # 优化说明 (2024-12-30):
+        # - first_soft_punct_min_chars: 从 0 改为 12，避免 "(calm) Ah," 等过短首句导致吞字
+        # - soft_punct_min_chars: 从 25 改为 30，减少逗号处的过度分割
+        # - 问题场景：LLM 输出 "(calm) Ah, a new presence..." 时
+        #   原逻辑会在 "Ah," 处分割，导致 TTS 片段过短，设备端播放时吞字
         self.first_segment_max_chars = int(config.get("first_segment_max_chars", 120))
         self.segment_max_chars = int(config.get("segment_max_chars", 160))
         self.enable_soft_puncts = str(config.get("enable_soft_puncts", True)).lower() in ("true", "1", "yes")
-        self.first_soft_punct_min_chars = int(config.get("first_soft_punct_min_chars", 0))
-        self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 25))
+        self.first_soft_punct_min_chars = int(config.get("first_soft_punct_min_chars", 12))  # 原值 0，优化为 12（阻止 "Ah," 等过短片段）
+        self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 30))  # 原值 25，优化为 30
 
         # Prefetch configuration - 预加载深度（同时进行的 TTS 请求数）
         # 注意：FishSpeech API 可能有并发限制，建议设为 2 避免限速
