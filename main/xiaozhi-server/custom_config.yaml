@@ -376,9 +376,18 @@ TurnDetection:
     timeout: 1              # HTTP request timeout (seconds)
     endpoint: /turn-detect    # API endpoint path
     min_endpoint_delay: 500      # Min time to wait after last speech before forcing end of turn (milliseconds)
-    # Option1 优化：降低 unfinished/waiting 时的尾部等待，缩短“用户说完→开始回应”的体感延迟
+    # Option1 优化：降低 unfinished/waiting 时的尾部等待，缩短"用户说完→开始回应"的体感延迟
     # 如出现误截断（用户中途停顿被过早判定结束），可回滚为 2000
     max_endpoint_delay: 1500      # Max time to wait after last speech before forcing end of turn (milliseconds)
+    # ========== 本地快速路径优化 ==========
+    # enable_fast_path: 对于明显完整的句子（句末标点、常见结束语），跳过远程调用
+    #   true: 启用快速路径（推荐，可节省 300-600ms）
+    #   false: 所有句子都调用远程服务
+    enable_fast_path: true
+    # enable_phrase_detection: 是否检测常见结束语（如"好的"、"谢谢"、"OK"）
+    #   true: 启用短语检测（推荐）
+    #   false: 仅检测句末标点
+    enable_phrase_detection: true
 
 LLM:
   GroqLLM:  
