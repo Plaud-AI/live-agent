@@ -139,6 +139,10 @@ class TTSProvider(TTSProviderBase):
         """
         while not self.conn.stop_event.is_set():
             try:
+                # 首句流式发送（非阻塞）：即使没有新文本消息，也要持续从队列读取并下发音频
+                # 否则在“短句 + LAST 很快到达”的场景下，首句音频可能已生成但一直不被转发，设备端表现为无声。
+                self._send_first_segment_chunks()
+
                 # 尝试处理已完成的预加载任务（即使没有新消息）
                 self._flush_completed_prefetch()
                 
@@ -543,12 +547,31 @@ class TTSProvider(TTSProviderBase):
         
         在会话结束时调用，确保所有音频都发送完毕
         """
-        # 首先等待首句流式完成（如果还在进行中）
+        # 首句流式完成前，也必须持续 pump 队列，把已生成的音频尽快下发。
+        # 不能先 wait 再 drain：因为 done 信号依赖 drain(None) 才会触发，顺序不当会导致“等自己”的 30s 静音。
         if self._first_segment_streaming:
             logger.bind(tag=TAG).debug("Waiting for first segment streaming to complete...")
-            self._first_segment_done.wait(timeout=30)
-            # 发送首句队列中剩余的 chunk
+            deadline = time.time() + 30
+            while self._first_segment_streaming and time.time() < deadline:
+                self._send_first_segment_chunks()
+                if not self._first_segment_streaming:
+                    break
+                # 避免空转占满 CPU，同时给 worker 一点时间推进
+                time.sleep(0.01)
+
+            # 最后再尝试 drain 一次（处理刚到达的尾包/结束信号）
             self._send_first_segment_chunks()
+
+            # 超时兜底：避免后续段落永久被卡住
+            if self._first_segment_streaming:
+                logger.bind(tag=TAG).warning(
+                    "First segment streaming did not complete within 30s; forcing stop to avoid deadlock"
+                )
+                self._first_segment_streaming = False
+                try:
+                    self._first_segment_done.set()
+                except Exception:
+                    pass
         
         while True:
             with self._prefetch_lock:
