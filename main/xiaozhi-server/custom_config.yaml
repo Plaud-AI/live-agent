@@ -371,7 +371,9 @@ TurnDetection:
     type: noop
   TenTurnDetection:
     type: ten
-    host: 13.212.248.80
+    # Docker 网络内使用服务名访问，无需公网 IP
+    # 本地开发可通过环境变量 TURN_DETECTION_HOST 覆盖
+    host: ${TURN_DETECTION_HOST:-turn-detection}
     port: 18000
     timeout: 1              # HTTP request timeout (seconds)
     endpoint: /turn-detect    # API endpoint path
@@ -406,8 +408,9 @@ LLM:
     model_name: google/gemini-2.5-flash
     base_url: https://openrouter.ai/api/v1
     api_key: ${OPENROUTER_API_KEY}
-    order: vertex-ai-global,google-vertex,google-ai-studio
-    allow_fallbacks: true
+    # Provider 选择：google-vertex/global (Vertex AI 全球节点)
+    order: google-vertex/global
+    allow_fallbacks: false
     reasoning_effort: none
     max_tokens: 2000
 # VLLM配置（视觉语言大模型）
