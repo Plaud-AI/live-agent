@@ -48,7 +48,12 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
             conn.client_is_speaking = True
 
             # 等待设备端完成状态切换（Schedule 异步切换）
-            tts_start_delay = conn.config.get("tts_start_delay_ms", 50) / 1000.0
+            # 硬件约束：设备端需要 ~134ms 完成 Schedule callback + AudioService 操作
+            # 150ms 是经过验证的安全值，不可随意降低
+            tts_start_delay = conn.config.get("tts_start_delay_ms", 150) / 1000.0
+            # 防御性编程：负值 clamp 到 0
+            if tts_start_delay < 0:
+                tts_start_delay = 0
             if tts_start_delay > 0:
                 conn.logger.bind(tag=TAG).debug(f"⏳ 等待设备状态切换: {tts_start_delay*1000:.0f}ms")
                 await asyncio.sleep(tts_start_delay)

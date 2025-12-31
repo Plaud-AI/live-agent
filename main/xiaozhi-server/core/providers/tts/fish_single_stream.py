@@ -68,11 +68,17 @@ class TTSProvider(TTSProviderBase):
         # Segmentation tuning (latency vs naturalness)
         # - max chars: hard cap to prevent pathological long segments (reduces TTS first-chunk spikes)
         # - soft punct min chars: avoid over-fragmentation at early commas
+        #
+        # 优化说明 (2024-12-30):
+        # - first_soft_punct_min_chars: 从 0 改为 12，避免 "(calm) Ah," 等过短首句导致吞字
+        # - soft_punct_min_chars: 从 25 改为 30，减少逗号处的过度分割
+        # - 问题场景：LLM 输出 "(calm) Ah, a new presence..." 时
+        #   原逻辑会在 "Ah," 处分割，导致 TTS 片段过短，设备端播放时吞字
         self.first_segment_max_chars = int(config.get("first_segment_max_chars", 120))
         self.segment_max_chars = int(config.get("segment_max_chars", 160))
         self.enable_soft_puncts = str(config.get("enable_soft_puncts", True)).lower() in ("true", "1", "yes")
-        self.first_soft_punct_min_chars = int(config.get("first_soft_punct_min_chars", 0))
-        self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 25))
+        self.first_soft_punct_min_chars = int(config.get("first_soft_punct_min_chars", 12))  # 原值 0，优化为 12（阻止 "Ah," 等过短片段）
+        self.soft_punct_min_chars = int(config.get("soft_punct_min_chars", 30))  # 原值 25，优化为 30
 
         # Prefetch configuration - 预加载深度（同时进行的 TTS 请求数）
         # 注意：FishSpeech API 可能有并发限制，建议设为 2 避免限速
@@ -99,9 +105,14 @@ class TTSProvider(TTSProviderBase):
         # Prefetch state
         self._prefetch_buffers = {}  # segment_idx -> {"text": str, "audio_chunks": [], "done": Event, "error": Exception}
         self._prefetch_lock = threading.Lock()
-        self._next_send_idx = 1  # 从 1 开始，因为 segment 0 是流式发送
+        self._next_send_idx = 0  # 从 0 开始，所有句子都通过 prefetch 机制处理
         self._segment_idx = 0
         self._tts_executor = None
+        
+        # 首句流式发送状态 (segment 0 使用流式模式，边接收边发送)
+        self._first_segment_streaming = False
+        self._first_segment_audio_queue = queue.Queue()  # 首句音频队列
+        self._first_segment_done = threading.Event()
 
     def _get_tts_executor(self):
         """懒加载 TTS 线程池"""
@@ -128,6 +139,10 @@ class TTSProvider(TTSProviderBase):
         """
         while not self.conn.stop_event.is_set():
             try:
+                # 首句流式发送（非阻塞）：即使没有新文本消息，也要持续从队列读取并下发音频
+                # 否则在“短句 + LAST 很快到达”的场景下，首句音频可能已生成但一直不被转发，设备端表现为无声。
+                self._send_first_segment_chunks()
+
                 # 尝试处理已完成的预加载任务（即使没有新消息）
                 self._flush_completed_prefetch()
                 
@@ -150,11 +165,21 @@ class TTSProvider(TTSProviderBase):
                     self.tts_audio_first_sentence = True
                     
                     # 清理预加载状态
-                    # 注意：_next_send_idx 从 1 开始，因为 segment 0 是流式发送的
+                    # 现在所有句子都通过 prefetch 机制处理，_next_send_idx 从 0 开始
                     with self._prefetch_lock:
                         self._prefetch_buffers.clear()
-                        self._next_send_idx = 1  # 从 1 开始，因为 segment 0 是流式发送
+                        self._next_send_idx = 0  # 从 0 开始
                         self._segment_idx = 0
+                    
+                    # 清理首句流式状态
+                    self._first_segment_streaming = False
+                    self._first_segment_done.clear()
+                    # 清空首句音频队列
+                    while not self._first_segment_audio_queue.empty():
+                        try:
+                            self._first_segment_audio_queue.get_nowait()
+                        except queue.Empty:
+                            break
                     
                     logger.bind(tag=TAG).debug("TTS session initialized (prefetch enabled)")
                     continue
@@ -181,30 +206,26 @@ class TTSProvider(TTSProviderBase):
                     self._text_buffer += message.content_detail
                     
                     # 提取所有可用的句子
-                    segments_to_process = []
                     while True:
                         segment = self._extract_segment()
                         if not segment:
                             break
-                        segments_to_process.append(segment)
-                    
-                    # 处理提取到的句子
-                    for segment in segments_to_process:
+                        
                         # Record TTS first text input time (for latency tracking)
                         if self.conn._latency_tts_first_text_time is None:
                             self.conn._latency_tts_first_text_time = time.time() * 1000
                             logger.bind(tag=TAG).debug("📝 [Latency] TTS received first text")
                         
-                        # 第一个句子直接流式处理（保持低首包延迟）
-                        if self._segment_idx == 0:
-                            self._stream_tts_segment(segment)
-                            self._segment_idx += 1
-                        else:
-                            # 后续句子提交到预加载队列
-                            self._submit_prefetch(segment)
+                        # 【核心优化】所有句子都立即提交到后台线程
+                        # 首句 (segment 0) 使用流式模式，后续句子使用缓冲模式
+                        # 这样消息处理循环永不阻塞，后续句子可以尽早开始 prefetch
+                        self._submit_prefetch_async(segment)
                     
                     # 尝试发送已完成的预加载
                     self._flush_completed_prefetch()
+                    
+                    # 首句流式发送（非阻塞，从队列读取已接收的 chunk）
+                    self._send_first_segment_chunks()
                 
                 # Handle LAST - session end
                 if message.sentence_type == SentenceType.LAST:
@@ -213,11 +234,8 @@ class TTSProvider(TTSProviderBase):
                     if remaining.strip():
                         segment = textUtils.get_string_no_punctuation_or_emoji(remaining)
                         if segment:
-                            if self._segment_idx == 0:
-                                self._stream_tts_segment(segment)
-                                self._segment_idx += 1
-                            else:
-                                self._submit_prefetch(segment)
+                            # 统一使用非阻塞提交
+                            self._submit_prefetch_async(segment)
                     
                     # 等待所有预加载完成并发送
                     self._flush_all_prefetch()
@@ -240,10 +258,16 @@ class TTSProvider(TTSProviderBase):
                     f"TTS text processing failed: {str(e)}, type: {type(e).__name__}, stack: {traceback.format_exc()}"
                 )
 
-    def _submit_prefetch(self, text: str):
-        """提交句子到预加载队列"""
+    def _submit_prefetch_async(self, text: str):
+        """提交句子到后台线程（非阻塞）
+        
+        首句 (segment_idx=0) 使用流式模式，边接收边发送
+        后续句子使用缓冲模式，等待完成后按顺序发送
+        """
         segment_idx = self._segment_idx
         self._segment_idx += 1
+        
+        is_first_segment = (segment_idx == 0)
         
         # 创建预加载缓冲区
         with self._prefetch_lock:
@@ -253,23 +277,97 @@ class TTSProvider(TTSProviderBase):
                 "done": threading.Event(),
                 "error": None,
                 "first_chunk_time": None,
+                "is_streaming": is_first_segment,  # 首句使用流式模式
             }
+        
+        if is_first_segment:
+            self._first_segment_streaming = True
+            self._first_segment_done.clear()
+            logger.bind(tag=TAG).debug(f"🚀 [Stream] Submitted first segment: {text[:30]}...")
+        else:
+            logger.bind(tag=TAG).debug(f"📦 [Prefetch] Submitted segment {segment_idx}: {text[:30]}...")
         
         # 提交到线程池
         executor = self._get_tts_executor()
         executor.submit(self._prefetch_tts_worker, text, segment_idx)
+    
+    def _send_first_segment_chunks(self):
+        """发送首句已接收的音频 chunk（非阻塞）
         
-        logger.bind(tag=TAG).debug(f"📦 [Prefetch] Submitted segment {segment_idx}: {text[:30]}...")
+        从首句音频队列中读取已接收的 chunk 并发送
+        不等待 TTS 完成，只发送当前可用的数据
+        """
+        if not self._first_segment_streaming:
+            return
+        
+        chunks_sent = 0
+        while True:
+            try:
+                item = self._first_segment_audio_queue.get_nowait()
+            except queue.Empty:
+                break
+            
+            if item is None:
+                # None 表示首句流式处理完成
+                self._first_segment_streaming = False
+                self._first_segment_done.set()
+                # 更新 _next_send_idx，准备发送后续句子
+                with self._prefetch_lock:
+                    self._next_send_idx = 1
+                logger.bind(tag=TAG).debug(f"✅ [Stream] First segment streaming completed, sent {chunks_sent} chunks")
+                break
+            
+            # 发送音频 chunk
+            opus_data, text = item
+            if chunks_sent == 0 and text:
+                # 首个 chunk 发送 FIRST（触发 sentence_start）
+                self.tts_audio_queue.put(TTSAudioDTO(
+                    sentence_type=SentenceType.FIRST,
+                    audio_data=None,
+                    text=text,
+                    message_tag=self._message_tag,
+                ))
+                self._session_started = True
+            
+            if opus_data:
+                self.tts_audio_queue.put(TTSAudioDTO(
+                    sentence_type=SentenceType.MIDDLE,
+                    audio_data=opus_data,
+                    text=None,
+                    message_tag=self._message_tag,
+                ))
+                chunks_sent += 1
+    
+    def _submit_prefetch(self, text: str):
+        """提交句子到预加载队列（旧接口，兼容性保留）"""
+        self._submit_prefetch_async(text)
 
     def _prefetch_tts_worker(self, text: str, segment_idx: int):
-        """预加载工作线程：获取 TTS 音频并存入缓冲区
+        """预加载工作线程：获取 TTS 音频
         
         每个线程使用独立的 Opus 编码器实例，避免线程安全问题
-        注意：不再使用基于 segment_idx 的延迟，因为会导致跨会话累积问题。
-        并发控制通过 prefetch_depth (线程池大小) 来实现。
+        
+        首句 (segment_idx=0) 使用流式模式：
+        - 边接收边放入 _first_segment_audio_queue
+        - 消息处理线程从队列读取并发送，实现最低延迟
+        
+        后续句子使用缓冲模式：
+        - 缓冲所有 chunk 到 audio_chunks
+        - 完成后标记 done，等待按顺序发送
         """
+        original_text = text
         text = MarkdownCleaner.clean_markdown(text)
+        
+        # 判断是否为首句流式模式
+        is_streaming = False
+        with self._prefetch_lock:
+            if segment_idx in self._prefetch_buffers:
+                is_streaming = self._prefetch_buffers[segment_idx].get("is_streaming", False)
+        
         if not text.strip():
+            if is_streaming:
+                # 首句为空，发送结束信号
+                self._first_segment_audio_queue.put(None)
             with self._prefetch_lock:
                 if segment_idx in self._prefetch_buffers:
                     self._prefetch_buffers[segment_idx]["done"].set()
@@ -293,10 +391,11 @@ class TTSProvider(TTSProviderBase):
         
         # 使用独立的 PCM 缓冲区
         pcm_buffer = bytearray()
-        audio_chunks = []
+        audio_chunks = []  # 仅用于后续句子的缓冲模式
         
         try:
-            logger.bind(tag=TAG).info(f"🔄 [Prefetch] TTS request: segment={segment_idx}, reference_id={self.reference_id}, text={text[:50]}...")
+            mode_tag = "Stream" if is_streaming else "Prefetch"
+            logger.bind(tag=TAG).info(f"🔄 [{mode_tag}] TTS request: segment={segment_idx}, reference_id={self.reference_id}, text={text[:50]}...")
             
             audio_stream = self._client.tts.stream(
                 text=text,
@@ -311,10 +410,11 @@ class TTSProvider(TTSProviderBase):
             )
             
             first_chunk_logged = False
+            first_opus_sent = False
             
             for chunk in audio_stream:
                 if self.conn.client_abort:
-                    logger.bind(tag=TAG).info(f"🛑 [Prefetch] Abort during prefetch, segment={segment_idx}")
+                    logger.bind(tag=TAG).info(f"🛑 [{mode_tag}] Abort during TTS, segment={segment_idx}")
                     break
                 
                 # 记录首包时间
@@ -322,7 +422,11 @@ class TTSProvider(TTSProviderBase):
                     first_chunk_logged = True
                     first_chunk_time = time.time() * 1000
                     api_latency = (first_chunk_time - start_time) / 1000
-                    logger.bind(tag=TAG).info(f"⚡ [Prefetch] Segment {segment_idx} first chunk: {api_latency:.3f}s")
+                    logger.bind(tag=TAG).info(f"⚡ [{mode_tag}] Segment {segment_idx} first chunk: {api_latency:.3f}s")
+                    
+                    # 更新 conn 的首包时间（用于延迟统计）
+                    if is_streaming:
+                        self.conn.tts_first_chunk_time = first_chunk_time
                     
                     with self._prefetch_lock:
                         if segment_idx in self._prefetch_buffers:
@@ -338,16 +442,32 @@ class TTSProvider(TTSProviderBase):
                     
                     opus_data = self._encode_frame_with_encoder(local_encoder, frame, False)
                     if opus_data:
-                        audio_chunks.append(opus_data)
+                        if is_streaming:
+                            # 首句流式模式：直接放入队列
+                            # 第一个 chunk 同时携带文本（用于触发 sentence_start）
+                            if not first_opus_sent:
+                                self._first_segment_audio_queue.put((opus_data, original_text))
+                                first_opus_sent = True
+                            else:
+                                self._first_segment_audio_queue.put((opus_data, None))
+                        else:
+                            # 后续句子缓冲模式：存入列表
+                            audio_chunks.append(opus_data)
             
             # 处理剩余数据
             if pcm_buffer and not self.conn.client_abort:
                 opus_data = self._encode_frame_with_encoder(local_encoder, bytes(pcm_buffer), True)
                 if opus_data:
-                    audio_chunks.append(opus_data)
+                    if is_streaming:
+                        if not first_opus_sent:
+                            self._first_segment_audio_queue.put((opus_data, original_text))
+                        else:
+                            self._first_segment_audio_queue.put((opus_data, None))
+                    else:
+                        audio_chunks.append(opus_data)
             
             elapsed = (time.time() * 1000 - start_time) / 1000
-            logger.bind(tag=TAG).info(f"✅ [Prefetch] Segment {segment_idx} completed in {elapsed:.3f}s, {len(audio_chunks)} chunks")
+            logger.bind(tag=TAG).info(f"✅ [{mode_tag}] Segment {segment_idx} completed in {elapsed:.3f}s")
             
         except Exception as e:
             logger.bind(tag=TAG).error(f"❌ [Prefetch] Segment {segment_idx} error: {e}")
@@ -361,6 +481,10 @@ class TTSProvider(TTSProviderBase):
                 local_encoder.close()
             except Exception:
                 pass
+            
+            if is_streaming:
+                # 首句流式模式：发送结束信号
+                self._first_segment_audio_queue.put(None)
             
             # 存储结果并标记完成
             with self._prefetch_lock:
@@ -382,14 +506,29 @@ class TTSProvider(TTSProviderBase):
         return result[0] if result else None
 
     def _flush_completed_prefetch(self):
-        """发送已完成的预加载结果（按顺序）"""
+        """发送已完成的预加载结果（按顺序）
+        
+        注意：首句 (segment 0) 通过流式队列处理，这里只处理 segment >= 1
+        必须等待首句流式完成后才开始处理后续句子
+        """
+        # 首句尚未完成，不处理后续句子
+        if self._first_segment_streaming:
+            return
+        
         while True:
             with self._prefetch_lock:
-                # 检查下一个要发送的段落是否就绪
+                # 检查下一个要发送的段落是否就绪（从 segment 1 开始）
                 if self._next_send_idx not in self._prefetch_buffers:
                     break
                 
                 buffer = self._prefetch_buffers[self._next_send_idx]
+                
+                # 跳过首句（已通过流式队列处理）
+                if buffer.get("is_streaming", False):
+                    segment_idx = self._next_send_idx
+                    self._next_send_idx += 1
+                    del self._prefetch_buffers[segment_idx]
+                    continue
                 
                 # 如果还没完成，等待
                 if not buffer["done"].is_set():
@@ -404,13 +543,51 @@ class TTSProvider(TTSProviderBase):
             self._send_prefetch_result(buffer)
 
     def _flush_all_prefetch(self):
-        """等待并发送所有剩余的预加载结果"""
+        """等待并发送所有剩余的预加载结果
+        
+        在会话结束时调用，确保所有音频都发送完毕
+        """
+        # 首句流式完成前，也必须持续 pump 队列，把已生成的音频尽快下发。
+        # 不能先 wait 再 drain：因为 done 信号依赖 drain(None) 才会触发，顺序不当会导致“等自己”的 30s 静音。
+        if self._first_segment_streaming:
+            logger.bind(tag=TAG).debug("Waiting for first segment streaming to complete...")
+            deadline = time.time() + 30
+            while self._first_segment_streaming and time.time() < deadline:
+                self._send_first_segment_chunks()
+                if not self._first_segment_streaming:
+                    break
+                # 避免空转占满 CPU，同时给 worker 一点时间推进
+                time.sleep(0.01)
+
+            # 最后再尝试 drain 一次（处理刚到达的尾包/结束信号）
+            self._send_first_segment_chunks()
+
+            # 超时兜底：避免后续段落永久被卡住
+            if self._first_segment_streaming:
+                logger.bind(tag=TAG).warning(
+                    "First segment streaming did not complete within 30s; forcing stop to avoid deadlock"
+                )
+                self._first_segment_streaming = False
+                try:
+                    self._first_segment_done.set()
+                except Exception:
+                    pass
+        
         while True:
             with self._prefetch_lock:
                 if self._next_send_idx not in self._prefetch_buffers:
                     break
                 
                 buffer = self._prefetch_buffers[self._next_send_idx]
+            
+            # 跳过首句（已通过流式队列处理）
+            if buffer.get("is_streaming", False):
+                with self._prefetch_lock:
+                    segment_idx = self._next_send_idx
+                    self._next_send_idx += 1
+                    if segment_idx in self._prefetch_buffers:
+                        del self._prefetch_buffers[segment_idx]
+                continue
             
             # 等待完成
             buffer["done"].wait(timeout=30)
@@ -461,9 +638,12 @@ class TTSProvider(TTSProviderBase):
         logger.bind(tag=TAG).debug(f"📤 [Prefetch] Sent segment: {text[:30]}... ({len(audio_chunks)} chunks)")
 
     def _stream_tts_segment(self, text: str):
-        """Process a text segment with streaming TTS, sending audio chunks as MIDDLE messages.
+        """[DEPRECATED] 同步阻塞式 TTS streaming.
         
-        This is used for the first segment to minimize latency.
+        此方法已被 _prefetch_tts_worker + _first_segment_audio_queue 机制取代。
+        保留此代码用于参考和回滚。
+        
+        问题：此方法会阻塞消息处理线程，导致后续句子无法并行 prefetch。
         """
         text = MarkdownCleaner.clean_markdown(text)
         if not text.strip():
