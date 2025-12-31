@@ -171,7 +171,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Playful Girl
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTBWFNW8S97THMDKQDEM', 'English_PlayfulGirl', 'system_voice_library', 'library', 'minimax', 'Playful Girl', 'A playful female youth voice with a general American accent, ideal for cartoons and children''s entertainment.', '{"age": "youth", "style": "characters", "accent": "EN-US (General)", "gender": "female", "language": "en", "description": "A playful female youth voice with a general American accent, ideal for cartoons and children's entertainment."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTBWFNW8S97THMDKQDEM.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTBWFNW8S97THMDKQDEM', 'English_PlayfulGirl', 'system_voice_library', 'library', 'minimax', 'Playful Girl', 'A playful female youth voice with a general American accent, ideal for cartoons and children''s entertainment.', '{"age": "youth", "style": "characters", "accent": "EN-US (General)", "gender": "female", "language": "en", "description": "A playful female youth voice with a general American accent, ideal for cartoons and children''s entertainment."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTBWFNW8S97THMDKQDEM.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -881,7 +881,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- ChatterZoe
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTBZ8F67J9MPKW3S2MF0', 'moss_audio_7c7e7ae2-7356-11f0-9540-7ef9b4b62566', 'system_voice_library', 'library', 'minimax', 'ChatterZoe', 'A magnetic young woman''s voice with a hint of urgency.', '{"age": "young_adult", "style": "conversational", "accent": "EN-US (General)", "gender": "female", "language": "en", "description": "A magnetic young woman's voice with a hint of urgency."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTBZ8F67J9MPKW3S2MF0.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTBZ8F67J9MPKW3S2MF0', 'moss_audio_7c7e7ae2-7356-11f0-9540-7ef9b4b62566', 'system_voice_library', 'library', 'minimax', 'ChatterZoe', 'A magnetic young woman''s voice with a hint of urgency.', '{"age": "young_adult", "style": "conversational", "accent": "EN-US (General)", "gender": "female", "language": "en", "description": "A magnetic young woman''s voice with a hint of urgency."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTBZ8F67J9MPKW3S2MF0.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -901,7 +901,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- ChillBestie
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC0ZQWXC7WJVRE9Y6QV', 'moss_audio_ad5baf92-735f-11f0-8263-fe5a2fe98ec8', 'system_voice_library', 'library', 'minimax', 'ChillBestie', 'A young girl with a sweet voice, who sounds like she''s thinking aloud as she talks to a friend.', '{"age": "young_adult", "style": "conversational", "accent": "EN-US (General)", "gender": "female", "language": "en", "description": "A young girl with a sweet voice, who sounds like she's thinking aloud as she talks to a friend."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC0ZQWXC7WJVRE9Y6QV.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC0ZQWXC7WJVRE9Y6QV', 'moss_audio_ad5baf92-735f-11f0-8263-fe5a2fe98ec8', 'system_voice_library', 'library', 'minimax', 'ChillBestie', 'A young girl with a sweet voice, who sounds like she''s thinking aloud as she talks to a friend.', '{"age": "young_adult", "style": "conversational", "accent": "EN-US (General)", "gender": "female", "language": "en", "description": "A young girl with a sweet voice, who sounds like she''s thinking aloud as she talks to a friend."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC0ZQWXC7WJVRE9Y6QV.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1121,7 +1121,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Stubborn Friend
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC0ZQWXC7WJVRE9Y6RH', 'Chinese (Mandarin)_Stubborn_Friend', 'system_voice_library', 'library', 'minimax', 'Stubborn Friend', 'An uninhibited and stubborn adult male friend''s voice in Standard Mandarin.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "chinese (mandarin)", "description": "An uninhibited and stubborn adult male friend's voice in Standard Mandarin."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC0ZQWXC7WJVRE9Y6RH.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC0ZQWXC7WJVRE9Y6RH', 'Chinese (Mandarin)_Stubborn_Friend', 'system_voice_library', 'library', 'minimax', 'Stubborn Friend', 'An uninhibited and stubborn adult male friend''s voice in Standard Mandarin.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "chinese (mandarin)", "description": "An uninhibited and stubborn adult male friend''s voice in Standard Mandarin."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC0ZQWXC7WJVRE9Y6RH.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1441,7 +1441,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise Professor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC21SK2WX0JGPZVVAAM', 'Cantonese_WiselProfessor', 'system_voice_library', 'library', 'minimax', 'Wise Professor', 'A gentle and wise adult male professor''s voice in Cantonese.', '{"age": "adult", "style": "gentle", "accent": "Standard", "gender": "male", "language": "cantonese", "description": "A gentle and wise adult male professor's voice in Cantonese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC21SK2WX0JGPZVVAAM.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC21SK2WX0JGPZVVAAM', 'Cantonese_WiselProfessor', 'system_voice_library', 'library', 'minimax', 'Wise Professor', 'A gentle and wise adult male professor''s voice in Cantonese.', '{"age": "adult", "style": "gentle", "accent": "Standard", "gender": "male", "language": "cantonese", "description": "A gentle and wise adult male professor''s voice in Cantonese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC21SK2WX0JGPZVVAAM.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1471,7 +1471,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Bossy leader
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC21SK2WX0JGPZVVAAQ', 'Dutch_bossy_leader', 'system_voice_library', 'library', 'minimax', 'Bossy leader', 'A serious and bossy adult male leader''s voice in Dutch.', '{"age": "adult", "style": "serious", "accent": "Standard", "gender": "male", "language": "nl", "description": "A serious and bossy adult male leader's voice in Dutch."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC21SK2WX0JGPZVVAAQ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC21SK2WX0JGPZVVAAQ', 'Dutch_bossy_leader', 'system_voice_library', 'library', 'minimax', 'Bossy leader', 'A serious and bossy adult male leader''s voice in Dutch.', '{"age": "adult", "style": "serious", "accent": "Standard", "gender": "male", "language": "nl", "description": "A serious and bossy adult male leader''s voice in Dutch."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC21SK2WX0JGPZVVAAQ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1651,7 +1651,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Bossy Leader
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC34JNC3943CGYFGFN3', 'Indonesian_BossyLeader', 'system_voice_library', 'library', 'minimax', 'Bossy Leader', 'A calm, authoritative, and bossy adult male leader''s voice in Indonesian.', '{"age": "adult", "style": "calm_and_authoritative", "accent": "Standard", "gender": "male", "language": "id", "description": "A calm, authoritative, and bossy adult male leader's voice in Indonesian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC34JNC3943CGYFGFN3.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC34JNC3943CGYFGFN3', 'Indonesian_BossyLeader', 'system_voice_library', 'library', 'minimax', 'Bossy Leader', 'A calm, authoritative, and bossy adult male leader''s voice in Indonesian.', '{"age": "adult", "style": "calm_and_authoritative", "accent": "Standard", "gender": "male", "language": "id", "description": "A calm, authoritative, and bossy adult male leader''s voice in Indonesian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC34JNC3943CGYFGFN3.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1681,7 +1681,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Brave Heroine
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0N', 'Italian_BraveHeroine', 'system_voice_library', 'library', 'minimax', 'Brave Heroine', 'A calm and brave middle-aged female heroine''s voice in Italian.', '{"age": "middle_aged", "style": "calm", "accent": "Standard", "gender": "female", "language": "it", "description": "A calm and brave middle-aged female heroine's voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0N.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0N', 'Italian_BraveHeroine', 'system_voice_library', 'library', 'minimax', 'Brave Heroine', 'A calm and brave middle-aged female heroine''s voice in Italian.', '{"age": "middle_aged", "style": "calm", "accent": "Standard", "gender": "female", "language": "it", "description": "A calm and brave middle-aged female heroine''s voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0N.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1701,7 +1701,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wandering Sorcerer
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0Q', 'Italian_WanderingSorcerer', 'system_voice_library', 'library', 'minimax', 'Wandering Sorcerer', 'A ruthless adult female wandering sorcerer''s voice in Italian.', '{"age": "adult", "style": "ruthless", "accent": "Standard", "gender": "female", "language": "it", "description": "A ruthless adult female wandering sorcerer's voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0Q.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0Q', 'Italian_WanderingSorcerer', 'system_voice_library', 'library', 'minimax', 'Wandering Sorcerer', 'A ruthless adult female wandering sorcerer''s voice in Italian.', '{"age": "adult", "style": "ruthless", "accent": "Standard", "gender": "female", "language": "it", "description": "A ruthless adult female wandering sorcerer''s voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0Q.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1711,7 +1711,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Diligent Leader
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0R', 'Italian_DiligentLeader', 'system_voice_library', 'library', 'minimax', 'Diligent Leader', 'A calm and diligent adult female leader''s voice in Italian.', '{"age": "adult", "style": "calm", "accent": "Standard", "gender": "female", "language": "it", "description": "A calm and diligent adult female leader's voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0R.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0R', 'Italian_DiligentLeader', 'system_voice_library', 'library', 'minimax', 'Diligent Leader', 'A calm and diligent adult female leader''s voice in Italian.', '{"age": "adult", "style": "calm", "accent": "Standard", "gender": "female", "language": "it", "description": "A calm and diligent adult female leader''s voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0R.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1731,7 +1731,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Athletic Student
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0T', 'Italian_AthleticStudent', 'system_voice_library', 'library', 'minimax', 'Athletic Student', 'A charming adult male athletic student''s voice in Italian.', '{"age": "adult", "style": "charming", "accent": "Standard", "gender": "male", "language": "it", "description": "A charming adult male athletic student's voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0T.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0T', 'Italian_AthleticStudent', 'system_voice_library', 'library', 'minimax', 'Athletic Student', 'A charming adult male athletic student''s voice in Italian.', '{"age": "adult", "style": "charming", "accent": "Standard", "gender": "male", "language": "it", "description": "A charming adult male athletic student''s voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0T.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1741,7 +1741,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Arrogant Princess
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0V', 'Italian_ArrogantPrincess', 'system_voice_library', 'library', 'minimax', 'Arrogant Princess', 'A passionate and arrogant young adult princess''s voice in Italian.', '{"age": "young_adult", "style": "passionate", "accent": "Standard", "gender": "female", "language": "it", "description": "A passionate and arrogant young adult princess's voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0V.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0V', 'Italian_ArrogantPrincess', 'system_voice_library', 'library', 'minimax', 'Arrogant Princess', 'A passionate and arrogant young adult princess''s voice in Italian.', '{"age": "young_adult", "style": "passionate", "accent": "Standard", "gender": "female", "language": "it", "description": "A passionate and arrogant young adult princess''s voice in Italian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0V.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1771,7 +1771,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Decisive Princess
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0Y', 'Japanese_DecisivePrincess', 'system_voice_library', 'library', 'minimax', 'Decisive Princess', 'A firm and decisive adult princess''s voice in Japanese.', '{"age": "adult", "style": "firm", "accent": "Standard", "gender": "female", "language": "ja", "description": "A firm and decisive adult princess's voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0Y.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0Y', 'Japanese_DecisivePrincess', 'system_voice_library', 'library', 'minimax', 'Decisive Princess', 'A firm and decisive adult princess''s voice in Japanese.', '{"age": "adult", "style": "firm", "accent": "Standard", "gender": "female", "language": "ja", "description": "A firm and decisive adult princess''s voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0Y.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1781,7 +1781,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Loyal Knight
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0Z', 'Japanese_LoyalKnight', 'system_voice_library', 'library', 'minimax', 'Loyal Knight', 'A youthful and loyal adult male knight''s voice in Japanese.', '{"age": "adult", "style": "youthful", "accent": "Standard", "gender": "male", "language": "ja", "description": "A youthful and loyal adult male knight's voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0Z.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y0Z', 'Japanese_LoyalKnight', 'system_voice_library', 'library', 'minimax', 'Loyal Knight', 'A youthful and loyal adult male knight''s voice in Japanese.', '{"age": "adult", "style": "youthful", "accent": "Standard", "gender": "male", "language": "ja", "description": "A youthful and loyal adult male knight''s voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y0Z.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1801,7 +1801,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Serious Commander
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y11', 'Japanese_SeriousCommander', 'system_voice_library', 'library', 'minimax', 'Serious Commander', 'A serious and reliable adult male commander''s voice in Japanese.', '{"age": "adult", "style": "reliable", "accent": "Standard", "gender": "male", "language": "ja", "description": "A serious and reliable adult male commander's voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y11.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y11', 'Japanese_SeriousCommander', 'system_voice_library', 'library', 'minimax', 'Serious Commander', 'A serious and reliable adult male commander''s voice in Japanese.', '{"age": "adult", "style": "reliable", "accent": "Standard", "gender": "male", "language": "ja", "description": "A serious and reliable adult male commander''s voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y11.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1811,7 +1811,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Cold Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y12', 'Japanese_ColdQueen', 'system_voice_library', 'library', 'minimax', 'Cold Queen', 'A distant and cold adult queen''s voice in Japanese.', '{"age": "adult", "style": "distant", "accent": "Standard", "gender": "female", "language": "ja", "description": "A distant and cold adult queen's voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y12.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC48DFNMZA70WC06Y12', 'Japanese_ColdQueen', 'system_voice_library', 'library', 'minimax', 'Cold Queen', 'A distant and cold adult queen''s voice in Japanese.', '{"age": "adult", "style": "distant", "accent": "Standard", "gender": "female", "language": "ja", "description": "A distant and cold adult queen''s voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC48DFNMZA70WC06Y12.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1831,7 +1831,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Gentle Butler
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5P', 'Japanese_GentleButler', 'system_voice_library', 'library', 'minimax', 'Gentle Butler', 'A charming and gentle adult male butler''s voice in Japanese.', '{"age": "adult", "style": "charming", "accent": "Standard", "gender": "male", "language": "ja", "description": "A charming and gentle adult male butler's voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5P.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5P', 'Japanese_GentleButler', 'system_voice_library', 'library', 'minimax', 'Gentle Butler', 'A charming and gentle adult male butler''s voice in Japanese.', '{"age": "adult", "style": "charming", "accent": "Standard", "gender": "male", "language": "ja", "description": "A charming and gentle adult male butler''s voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5P.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1861,7 +1861,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Optimistic Youth
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5S', 'Japanese_OptimisticYouth', 'system_voice_library', 'library', 'minimax', 'Optimistic Youth', 'A cheerful and optimistic adult male youth''s voice in Japanese.', '{"age": "adult", "style": "cheerful", "accent": "Standard", "gender": "male", "language": "ja", "description": "A cheerful and optimistic adult male youth's voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5S.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5S', 'Japanese_OptimisticYouth', 'system_voice_library', 'library', 'minimax', 'Optimistic Youth', 'A cheerful and optimistic adult male youth''s voice in Japanese.', '{"age": "adult", "style": "cheerful", "accent": "Standard", "gender": "male", "language": "ja", "description": "A cheerful and optimistic adult male youth''s voice in Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5S.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1871,7 +1871,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Generous Izakaya Owner
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5T', 'Japanese_GenerousIzakayaOwner', 'system_voice_library', 'library', 'minimax', 'Generous Izakaya Owner', 'A playful and generous middle-aged male izakaya owner''s voice in Standard Japanese.', '{"age": "middle_aged", "style": "playful", "accent": "Standard", "gender": "male", "language": "ja", "description": "A playful and generous middle-aged male izakaya owner's voice in Standard Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5T.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5T', 'Japanese_GenerousIzakayaOwner', 'system_voice_library', 'library', 'minimax', 'Generous Izakaya Owner', 'A playful and generous middle-aged male izakaya owner''s voice in Standard Japanese.', '{"age": "middle_aged", "style": "playful", "accent": "Standard", "gender": "male", "language": "ja", "description": "A playful and generous middle-aged male izakaya owner''s voice in Standard Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5T.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1881,7 +1881,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Sporty Student
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5V', 'Japanese_SportyStudent', 'system_voice_library', 'library', 'minimax', 'Sporty Student', 'An inviting and sporty adult male student''s voice in Standard Japanese.', '{"age": "adult", "style": "inviting", "accent": "Standard", "gender": "male", "language": "ja", "description": "An inviting and sporty adult male student's voice in Standard Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5V.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5V', 'Japanese_SportyStudent', 'system_voice_library', 'library', 'minimax', 'Sporty Student', 'An inviting and sporty adult male student''s voice in Standard Japanese.', '{"age": "adult", "style": "inviting", "accent": "Standard", "gender": "male", "language": "ja", "description": "An inviting and sporty adult male student''s voice in Standard Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5V.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1901,7 +1901,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Graceful Maiden
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5X', 'Japanese_GracefulMaiden', 'system_voice_library', 'library', 'minimax', 'Graceful Maiden', 'A sweet and graceful adult maiden''s voice in Standard Japanese.', '{"age": "adult", "style": "sweet", "accent": "Standard", "gender": "female", "language": "ja", "description": "A sweet and graceful adult maiden's voice in Standard Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5X.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG5X', 'Japanese_GracefulMaiden', 'system_voice_library', 'library', 'minimax', 'Graceful Maiden', 'A sweet and graceful adult maiden''s voice in Standard Japanese.', '{"age": "adult", "style": "sweet", "accent": "Standard", "gender": "female", "language": "ja", "description": "A sweet and graceful adult maiden''s voice in Standard Japanese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG5X.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -1981,7 +1981,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Strict Boss
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG65', 'Korean_StrictBoss', 'system_voice_library', 'library', 'minimax', 'Strict Boss', 'A stern middle-aged male boss''s voice in Standard Korean.', '{"age": "middle_aged", "style": "stern", "accent": "Standard", "gender": "male", "language": "ko", "description": "A stern middle-aged male boss's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG65.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG65', 'Korean_StrictBoss', 'system_voice_library', 'library', 'minimax', 'Strict Boss', 'A stern middle-aged male boss''s voice in Standard Korean.', '{"age": "middle_aged", "style": "stern", "accent": "Standard", "gender": "male", "language": "ko", "description": "A stern middle-aged male boss''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG65.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2031,7 +2031,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Brave Female Warrior
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG6A', 'Korean_BraveFemaleWarrior', 'system_voice_library', 'library', 'minimax', 'Brave Female Warrior', 'A resolute young adult brave female warrior''s voice in Standard Korean.', '{"age": "young_adult", "style": "resolute", "accent": "Standard", "gender": "female", "language": "ko", "description": "A resolute young adult brave female warrior's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG6A.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG6A', 'Korean_BraveFemaleWarrior', 'system_voice_library', 'library', 'minimax', 'Brave Female Warrior', 'A resolute young adult brave female warrior''s voice in Standard Korean.', '{"age": "young_adult", "style": "resolute", "accent": "Standard", "gender": "female", "language": "ko", "description": "A resolute young adult brave female warrior''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG6A.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2041,7 +2041,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Brave Youth
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG6B', 'Korean_BraveYouth', 'system_voice_library', 'library', 'minimax', 'Brave Youth', 'A powerful young adult brave male youth''s voice in Standard Korean.', '{"age": "young_adult", "style": "powerful", "accent": "Standard", "gender": "male", "language": "ko", "description": "A powerful young adult brave male youth's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG6B.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG6B', 'Korean_BraveYouth', 'system_voice_library', 'library', 'minimax', 'Brave Youth', 'A powerful young adult brave male youth''s voice in Standard Korean.', '{"age": "young_adult", "style": "powerful", "accent": "Standard", "gender": "male", "language": "ko", "description": "A powerful young adult brave male youth''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG6B.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2061,7 +2061,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Enthusiastic Teen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG6D', 'Korean_EnthusiasticTeen', 'system_voice_library', 'library', 'minimax', 'Enthusiastic Teen', 'A passionate and lively young adult male teen''s voice in Standard Korean.', '{"age": "young_adult", "style": "passionate_and_lively", "accent": "Standard", "gender": "male", "language": "ko", "description": "A passionate and lively young adult male teen's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG6D.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC5A5SFC2WM2SQ2WG6D', 'Korean_EnthusiasticTeen', 'system_voice_library', 'library', 'minimax', 'Enthusiastic Teen', 'A passionate and lively young adult male teen''s voice in Standard Korean.', '{"age": "young_adult", "style": "passionate_and_lively", "accent": "Standard", "gender": "male", "language": "ko", "description": "A passionate and lively young adult male teen''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC5A5SFC2WM2SQ2WG6D.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2101,7 +2101,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Mature Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZS', 'Korean_MatureLady', 'system_voice_library', 'library', 'minimax', 'Mature Lady', 'A refined and elegant mature middle-aged lady''s voice in Standard Korean.', '{"age": "middle_aged", "style": "refined_and_elegant", "accent": "Standard", "gender": "female", "language": "ko", "description": "A refined and elegant mature middle-aged lady's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZS.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZS', 'Korean_MatureLady', 'system_voice_library', 'library', 'minimax', 'Mature Lady', 'A refined and elegant mature middle-aged lady''s voice in Standard Korean.', '{"age": "middle_aged", "style": "refined_and_elegant", "accent": "Standard", "gender": "female", "language": "ko", "description": "A refined and elegant mature middle-aged lady''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZS.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2131,7 +2131,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Athletic Student
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZW', 'Korean_AthleticStudent', 'system_voice_library', 'library', 'minimax', 'Athletic Student', 'An energetic young adult male athletic student''s voice in Standard Korean.', '{"age": "young_adult", "style": "energetic", "accent": "Standard", "gender": "male", "language": "ko", "description": "An energetic young adult male athletic student's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZW.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZW', 'Korean_AthleticStudent', 'system_voice_library', 'library', 'minimax', 'Athletic Student', 'An energetic young adult male athletic student''s voice in Standard Korean.', '{"age": "young_adult", "style": "energetic", "accent": "Standard", "gender": "male", "language": "ko", "description": "An energetic young adult male athletic student''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZW.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2141,7 +2141,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Brave Adventurer
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZX', 'Korean_BraveAdventurer', 'system_voice_library', 'library', 'minimax', 'Brave Adventurer', 'A playful and adventurous adult female brave adventurer''s voice in Standard Korean.', '{"age": "adult", "style": "playful_and_adventurous", "accent": "Standard", "gender": "female", "language": "ko", "description": "A playful and adventurous adult female brave adventurer's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZX.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZX', 'Korean_BraveAdventurer', 'system_voice_library', 'library', 'minimax', 'Brave Adventurer', 'A playful and adventurous adult female brave adventurer''s voice in Standard Korean.', '{"age": "adult", "style": "playful_and_adventurous", "accent": "Standard", "gender": "female", "language": "ko", "description": "A playful and adventurous adult female brave adventurer''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZX.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2151,7 +2151,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Calm Gentleman
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZY', 'Korean_CalmGentleman', 'system_voice_library', 'library', 'minimax', 'Calm Gentleman', 'A composed and calm middle-aged gentleman''s voice in Standard Korean.', '{"age": "middle_aged", "style": "composed", "accent": "Standard", "gender": "male", "language": "ko", "description": "A composed and calm middle-aged gentleman's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZY.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYXZY', 'Korean_CalmGentleman', 'system_voice_library', 'library', 'minimax', 'Calm Gentleman', 'A composed and calm middle-aged gentleman''s voice in Standard Korean.', '{"age": "middle_aged", "style": "composed", "accent": "Standard", "gender": "male", "language": "ko", "description": "A composed and calm middle-aged gentleman''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYXZY.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2181,7 +2181,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Decisive Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYY01', 'Korean_DecisiveQueen', 'system_voice_library', 'library', 'minimax', 'Decisive Queen', 'A sweet yet resolute young adult decisive queen''s voice in Standard Korean.', '{"age": "young_adult", "style": "sweet_and_resolute", "accent": "Standard", "gender": "female", "language": "ko", "description": "A sweet yet resolute young adult decisive queen's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYY01.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYY01', 'Korean_DecisiveQueen', 'system_voice_library', 'library', 'minimax', 'Decisive Queen', 'A sweet yet resolute young adult decisive queen''s voice in Standard Korean.', '{"age": "young_adult", "style": "sweet_and_resolute", "accent": "Standard", "gender": "female", "language": "ko", "description": "A sweet yet resolute young adult decisive queen''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYY01.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2261,7 +2261,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Reliable Youth
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYY09', 'Korean_ReliableYouth', 'system_voice_library', 'library', 'minimax', 'Reliable Youth', 'A gentle and considerate young adult reliable male youth''s voice in Standard Korean.', '{"age": "young_adult", "style": "gentle_and_considerate", "accent": "Standard", "gender": "male", "language": "ko", "description": "A gentle and considerate young adult reliable male youth's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYY09.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC6V5G6S9WZZTJNYY09', 'Korean_ReliableYouth', 'system_voice_library', 'library', 'minimax', 'Reliable Youth', 'A gentle and considerate young adult reliable male youth''s voice in Standard Korean.', '{"age": "young_adult", "style": "gentle_and_considerate", "accent": "Standard", "gender": "male", "language": "ko", "description": "A gentle and considerate young adult reliable male youth''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC6V5G6S9WZZTJNYY09.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2301,7 +2301,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Haughty Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ388', 'Korean_HaughtyLady', 'system_voice_library', 'library', 'minimax', 'Haughty Lady', 'A cold and distant young adult haughty lady''s voice in Standard Korean.', '{"age": "young_adult", "style": "cold_and_distant", "accent": "Standard", "gender": "female", "language": "ko", "description": "A cold and distant young adult haughty lady's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ388.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ388', 'Korean_HaughtyLady', 'system_voice_library', 'library', 'minimax', 'Haughty Lady', 'A cold and distant young adult haughty lady''s voice in Standard Korean.', '{"age": "young_adult", "style": "cold_and_distant", "accent": "Standard", "gender": "female", "language": "ko", "description": "A cold and distant young adult haughty lady''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ388.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2331,7 +2331,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Caring Woman
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38B', 'Korean_CaringWoman', 'system_voice_library', 'library', 'minimax', 'Caring Woman', 'A lively and vibrant young adult caring woman''s voice in Standard Korean.', '{"age": "young_adult", "style": "lively_and_vibrant", "accent": "Standard", "gender": "female", "language": "ko", "description": "A lively and vibrant young adult caring woman's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38B.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38B', 'Korean_CaringWoman', 'system_voice_library', 'library', 'minimax', 'Caring Woman', 'A lively and vibrant young adult caring woman''s voice in Standard Korean.', '{"age": "young_adult", "style": "lively_and_vibrant", "accent": "Standard", "gender": "female", "language": "ko", "description": "A lively and vibrant young adult caring woman''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38B.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2341,7 +2341,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise Teacher
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38C', 'Korean_WiseTeacher', 'system_voice_library', 'library', 'minimax', 'Wise Teacher', 'A sagacious and wise middle-aged male teacher''s voice in Standard Korean.', '{"age": "middle_aged", "style": "sagacious", "accent": "Standard", "gender": "male", "language": "ko", "description": "A sagacious and wise middle-aged male teacher's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38C.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38C', 'Korean_WiseTeacher', 'system_voice_library', 'library', 'minimax', 'Wise Teacher', 'A sagacious and wise middle-aged male teacher''s voice in Standard Korean.', '{"age": "middle_aged", "style": "sagacious", "accent": "Standard", "gender": "male", "language": "ko", "description": "A sagacious and wise middle-aged male teacher''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38C.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2351,7 +2351,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Confident Boss
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38D', 'Korean_ConfidentBoss', 'system_voice_library', 'library', 'minimax', 'Confident Boss', 'A deep and commanding middle-aged confident boss''s voice in Standard Korean.', '{"age": "middle_aged", "style": "deep_and_commanding", "accent": "Standard", "gender": "male", "language": "ko", "description": "A deep and commanding middle-aged confident boss's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38D.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38D', 'Korean_ConfidentBoss', 'system_voice_library', 'library', 'minimax', 'Confident Boss', 'A deep and commanding middle-aged confident boss''s voice in Standard Korean.', '{"age": "middle_aged", "style": "deep_and_commanding", "accent": "Standard", "gender": "male", "language": "ko", "description": "A deep and commanding middle-aged confident boss''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38D.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2361,7 +2361,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Athletic Girl
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38E', 'Korean_AthleticGirl', 'system_voice_library', 'library', 'minimax', 'Athletic Girl', 'A robust and athletic female youth''s voice in Standard Korean.', '{"age": "youth", "style": "robust_and_athletic", "accent": "Standard", "gender": "female", "language": "ko", "description": "A robust and athletic female youth's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38E.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38E', 'Korean_AthleticGirl', 'system_voice_library', 'library', 'minimax', 'Athletic Girl', 'A robust and athletic female youth''s voice in Standard Korean.', '{"age": "youth", "style": "robust_and_athletic", "accent": "Standard", "gender": "female", "language": "ko", "description": "A robust and athletic female youth''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38E.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2371,7 +2371,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Possessive Man
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38F', 'Korean_PossessiveMan', 'system_voice_library', 'library', 'minimax', 'Possessive Man', 'A powerful and authoritative middle-aged possessive man''s voice in Standard Korean.', '{"age": "middle_aged", "style": "powerful_and_authoritative", "accent": "Standard", "gender": "male", "language": "ko", "description": "A powerful and authoritative middle-aged possessive man's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38F.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38F', 'Korean_PossessiveMan', 'system_voice_library', 'library', 'minimax', 'Possessive Man', 'A powerful and authoritative middle-aged possessive man''s voice in Standard Korean.', '{"age": "middle_aged", "style": "powerful_and_authoritative", "accent": "Standard", "gender": "male", "language": "ko", "description": "A powerful and authoritative middle-aged possessive man''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38F.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2391,7 +2391,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Cocky Guy
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38H', 'Korean_CockyGuy', 'system_voice_library', 'library', 'minimax', 'Cocky Guy', 'A playful and mischievous young adult cocky guy''s voice in Standard Korean.', '{"age": "young_adult", "style": "playful_and_mischievous", "accent": "Standard", "gender": "male", "language": "ko", "description": "A playful and mischievous young adult cocky guy's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38H.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38H', 'Korean_CockyGuy', 'system_voice_library', 'library', 'minimax', 'Cocky Guy', 'A playful and mischievous young adult cocky guy''s voice in Standard Korean.', '{"age": "young_adult", "style": "playful_and_mischievous", "accent": "Standard", "gender": "male", "language": "ko", "description": "A playful and mischievous young adult cocky guy''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38H.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2401,7 +2401,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Thoughtful Woman
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38J', 'Korean_ThoughtfulWoman', 'system_voice_library', 'library', 'minimax', 'Thoughtful Woman', 'A mature and contemplative young adult thoughtful woman''s voice in Standard Korean.', '{"age": "young_adult", "style": "mature_and_contemplative", "accent": "Standard", "gender": "female", "language": "ko", "description": "A mature and contemplative young adult thoughtful woman's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38J.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38J', 'Korean_ThoughtfulWoman', 'system_voice_library', 'library', 'minimax', 'Thoughtful Woman', 'A mature and contemplative young adult thoughtful woman''s voice in Standard Korean.', '{"age": "young_adult", "style": "mature_and_contemplative", "accent": "Standard", "gender": "female", "language": "ko", "description": "A mature and contemplative young adult thoughtful woman''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38J.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2411,7 +2411,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Optimistic Youth
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38K', 'Korean_OptimisticYouth', 'system_voice_library', 'library', 'minimax', 'Optimistic Youth', 'A cheerful and optimistic young adult male youth''s voice in Standard Korean.', '{"age": "young_adult", "style": "cheerful", "accent": "Standard", "gender": "male", "language": "ko", "description": "A cheerful and optimistic young adult male youth's voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38K.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38K', 'Korean_OptimisticYouth', 'system_voice_library', 'library', 'minimax', 'Optimistic Youth', 'A cheerful and optimistic young adult male youth''s voice in Standard Korean.', '{"age": "young_adult", "style": "cheerful", "accent": "Standard", "gender": "male", "language": "ko", "description": "A cheerful and optimistic young adult male youth''s voice in Standard Korean."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38K.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2431,7 +2431,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Mature Researcher
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38N', 'Portuguese_Matureresearcher', 'system_voice_library', 'library', 'minimax', 'Mature Researcher', 'A comforting and mature middle-aged male researcher''s voice in Portuguese.', '{"age": "middle_aged", "style": "comforting", "accent": "Standard", "gender": "male", "language": "pt", "description": "A comforting and mature middle-aged male researcher's voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38N.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38N', 'Portuguese_Matureresearcher', 'system_voice_library', 'library', 'minimax', 'Mature Researcher', 'A comforting and mature middle-aged male researcher''s voice in Portuguese.', '{"age": "middle_aged", "style": "comforting", "accent": "Standard", "gender": "male", "language": "pt", "description": "A comforting and mature middle-aged male researcher''s voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38N.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2451,7 +2451,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Cute Elf
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38Q', 'Portuguese_CuteElf', 'system_voice_library', 'library', 'minimax', 'Cute Elf', 'A lively and cute young adult female elf''s voice in Portuguese.', '{"age": "young_adult", "style": "lively", "accent": "Standard", "gender": "female", "language": "pt", "description": "A lively and cute young adult female elf's voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38Q.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC70XM9R7BNTR1ZZ38Q', 'Portuguese_CuteElf', 'system_voice_library', 'library', 'minimax', 'Cute Elf', 'A lively and cute young adult female elf''s voice in Portuguese.', '{"age": "young_adult", "style": "lively", "accent": "Standard", "gender": "female", "language": "pt", "description": "A lively and cute young adult female elf''s voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC70XM9R7BNTR1ZZ38Q.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2511,7 +2511,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Bossy Leader
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGK', 'Portuguese_BossyLeader', 'system_voice_library', 'library', 'minimax', 'Bossy Leader', 'A calm and formal adult male bossy leader''s voice in Portuguese.', '{"age": "adult", "style": "calm_and_formal", "accent": "Standard", "gender": "male", "language": "pt", "description": "A calm and formal adult male bossy leader's voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGK.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGK', 'Portuguese_BossyLeader', 'system_voice_library', 'library', 'minimax', 'Bossy Leader', 'A calm and formal adult male bossy leader''s voice in Portuguese.', '{"age": "adult", "style": "calm_and_formal", "accent": "Standard", "gender": "male", "language": "pt", "description": "A calm and formal adult male bossy leader''s voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGK.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2521,7 +2521,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGM', 'Portuguese_Wiselady', 'system_voice_library', 'library', 'minimax', 'Wise lady', 'A smooth and wise middle-aged lady''s voice in Portuguese.', '{"age": "middle_aged", "style": "smooth", "accent": "Standard", "gender": "female", "language": "pt", "description": "A smooth and wise middle-aged lady's voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGM.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGM', 'Portuguese_Wiselady', 'system_voice_library', 'library', 'minimax', 'Wise lady', 'A smooth and wise middle-aged lady''s voice in Portuguese.', '{"age": "middle_aged", "style": "smooth", "accent": "Standard", "gender": "female", "language": "pt", "description": "A smooth and wise middle-aged lady''s voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGM.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2561,7 +2561,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Passionate Warrior
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGR', 'Portuguese_PassionateWarrior', 'system_voice_library', 'library', 'minimax', 'Passionate Warrior', 'An energetic and passionate young adult male warrior''s voice in Portuguese.', '{"age": "young_adult", "style": "energetic", "accent": "Standard", "gender": "male", "language": "pt", "description": "An energetic and passionate young adult male warrior's voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGR.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGR', 'Portuguese_PassionateWarrior', 'system_voice_library', 'library', 'minimax', 'Passionate Warrior', 'An energetic and passionate young adult male warrior''s voice in Portuguese.', '{"age": "young_adult", "style": "energetic", "accent": "Standard", "gender": "male", "language": "pt", "description": "An energetic and passionate young adult male warrior''s voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGR.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2581,7 +2581,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Confident Woman
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGT', 'Portuguese_ConfidentWoman', 'system_voice_library', 'library', 'minimax', 'Confident Woman', 'A clear and firm young adult confident woman''s voice in Portuguese.', '{"age": "young_adult", "style": "clear_and_firm", "accent": "Standard", "gender": "female", "language": "pt", "description": "A clear and firm young adult confident woman's voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGT.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGT', 'Portuguese_ConfidentWoman', 'system_voice_library', 'library', 'minimax', 'Confident Woman', 'A clear and firm young adult confident woman''s voice in Portuguese.', '{"age": "young_adult", "style": "clear_and_firm", "accent": "Standard", "gender": "female", "language": "pt", "description": "A clear and firm young adult confident woman''s voice in Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGT.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2601,7 +2601,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Captivating Storyteller
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGW', 'Portuguese_CaptivatingStoryteller', 'system_voice_library', 'library', 'minimax', 'Captivating Storyteller', 'A captivating middle-aged male narrator''s voice in Portuguese, ideal for storytelling.', '{"age": "middle_aged", "style": "narrator", "accent": "Standard", "gender": "male", "language": "pt", "description": "A captivating middle-aged male narrator's voice in Portuguese, ideal for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGW.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGW', 'Portuguese_CaptivatingStoryteller', 'system_voice_library', 'library', 'minimax', 'Captivating Storyteller', 'A captivating middle-aged male narrator''s voice in Portuguese, ideal for storytelling.', '{"age": "middle_aged", "style": "narrator", "accent": "Standard", "gender": "male", "language": "pt", "description": "A captivating middle-aged male narrator''s voice in Portuguese, ideal for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGW.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2631,7 +2631,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Smart Young Girl
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGZ', 'Portuguese_SmartYoungGirl', 'system_voice_library', 'library', 'minimax', 'Smart Young Girl', 'An intelligent young female girl''s voice in Standard Portuguese, sharp and clear.', '{"age": "youth", "style": "inteligente", "accent": "Standard", "gender": "female", "language": "pt", "description": "An intelligent young female girl's voice in Standard Portuguese, sharp and clear."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGZ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC8RR6VQK3JAVN6YEGZ', 'Portuguese_SmartYoungGirl', 'system_voice_library', 'library', 'minimax', 'Smart Young Girl', 'An intelligent young female girl''s voice in Standard Portuguese, sharp and clear.', '{"age": "youth", "style": "inteligente", "accent": "Standard", "gender": "female", "language": "pt", "description": "An intelligent young female girl''s voice in Standard Portuguese, sharp and clear."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC8RR6VQK3JAVN6YEGZ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2671,7 +2671,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Debator
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GH1', 'Portuguese_Debator', 'system_voice_library', 'library', 'minimax', 'Debator', 'A tough middle-aged male debater''s voice in Standard Portuguese, strong and assertive.', '{"age": "middle_aged", "style": "tough", "accent": "Standard", "gender": "male", "language": "pt", "description": "A tough middle-aged male debater's voice in Standard Portuguese, strong and assertive."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GH1.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GH1', 'Portuguese_Debator', 'system_voice_library', 'library', 'minimax', 'Debator', 'A tough middle-aged male debater''s voice in Standard Portuguese, strong and assertive.', '{"age": "middle_aged", "style": "tough", "accent": "Standard", "gender": "male", "language": "pt", "description": "A tough middle-aged male debater''s voice in Standard Portuguese, strong and assertive."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GH1.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2751,7 +2751,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Sad Teen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GH9', 'Portuguese_SadTeen', 'system_voice_library', 'library', 'minimax', 'Sad Teen', 'A frustrated and sad male teen''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "frustrated", "accent": "Standard", "gender": "male", "language": "pt", "description": "A frustrated and sad male teen's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GH9.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GH9', 'Portuguese_SadTeen', 'system_voice_library', 'library', 'minimax', 'Sad Teen', 'A frustrated and sad male teen''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "frustrated", "accent": "Standard", "gender": "male", "language": "pt", "description": "A frustrated and sad male teen''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GH9.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2761,7 +2761,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Mature Partner
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHA', 'Portuguese_MaturePartner', 'system_voice_library', 'library', 'minimax', 'Mature Partner', 'A mature middle-aged male partner''s voice in Standard Portuguese, dependable and warm.', '{"age": "middle_aged", "style": "mature", "accent": "Standard", "gender": "male", "language": "pt", "description": "A mature middle-aged male partner's voice in Standard Portuguese, dependable and warm."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHA.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHA', 'Portuguese_MaturePartner', 'system_voice_library', 'library', 'minimax', 'Mature Partner', 'A mature middle-aged male partner''s voice in Standard Portuguese, dependable and warm.', '{"age": "middle_aged", "style": "mature", "accent": "Standard", "gender": "male", "language": "pt", "description": "A mature middle-aged male partner''s voice in Standard Portuguese, dependable and warm."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHA.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2771,7 +2771,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Comedian
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHB', 'Portuguese_Comedian', 'system_voice_library', 'library', 'minimax', 'Comedian', 'A humorous young adult male comedian''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "humor", "accent": "Standard", "gender": "male", "language": "pt", "description": "A humorous young adult male comedian's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHB.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHB', 'Portuguese_Comedian', 'system_voice_library', 'library', 'minimax', 'Comedian', 'A humorous young adult male comedian''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "humor", "accent": "Standard", "gender": "male", "language": "pt", "description": "A humorous young adult male comedian''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHB.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2781,7 +2781,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Naughty Schoolgirl
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHC', 'Portuguese_NaughtySchoolgirl', 'system_voice_library', 'library', 'minimax', 'Naughty Schoolgirl', 'An inviting and naughty young adult female schoolgirl''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "inviting", "accent": "Standard", "gender": "female", "language": "pt", "description": "An inviting and naughty young adult female schoolgirl's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHC.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHC', 'Portuguese_NaughtySchoolgirl', 'system_voice_library', 'library', 'minimax', 'Naughty Schoolgirl', 'An inviting and naughty young adult female schoolgirl''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "inviting", "accent": "Standard", "gender": "female", "language": "pt", "description": "An inviting and naughty young adult female schoolgirl''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHC.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2791,7 +2791,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Narrator
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHD', 'Portuguese_Narrator', 'system_voice_library', 'library', 'minimax', 'Narrator', 'A middle-aged female narrator''s voice in Standard Portuguese, perfect for storytelling.', '{"age": "middle_aged", "style": "storytelling", "accent": "Standard", "gender": "female", "language": "pt", "description": "A middle-aged female narrator's voice in Standard Portuguese, perfect for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHD.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHD', 'Portuguese_Narrator', 'system_voice_library', 'library', 'minimax', 'Narrator', 'A middle-aged female narrator''s voice in Standard Portuguese, perfect for storytelling.', '{"age": "middle_aged", "style": "storytelling", "accent": "Standard", "gender": "female", "language": "pt", "description": "A middle-aged female narrator''s voice in Standard Portuguese, perfect for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHD.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2801,7 +2801,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Tough Boss
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHE', 'Portuguese_ToughBoss', 'system_voice_library', 'library', 'minimax', 'Tough Boss', 'A mature and tough middle-aged female boss''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "mature", "accent": "Standard", "gender": "female", "language": "pt", "description": "A mature and tough middle-aged female boss's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHE.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHE', 'Portuguese_ToughBoss', 'system_voice_library', 'library', 'minimax', 'Tough Boss', 'A mature and tough middle-aged female boss''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "mature", "accent": "Standard", "gender": "female", "language": "pt", "description": "A mature and tough middle-aged female boss''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHE.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2811,7 +2811,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Fussy hostess
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHF', 'Portuguese_Fussyhostess', 'system_voice_library', 'library', 'minimax', 'Fussy hostess', 'An intense and fussy middle-aged female hostess''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "intense", "accent": "Standard", "gender": "female", "language": "pt", "description": "An intense and fussy middle-aged female hostess's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHF.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHF', 'Portuguese_Fussyhostess', 'system_voice_library', 'library', 'minimax', 'Fussy hostess', 'An intense and fussy middle-aged female hostess''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "intense", "accent": "Standard", "gender": "female", "language": "pt", "description": "An intense and fussy middle-aged female hostess''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHF.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2821,7 +2821,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Dramatist
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHG', 'Portuguese_Dramatist', 'system_voice_library', 'library', 'minimax', 'Dramatist', 'A quirky middle-aged male dramatist''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "quirky", "accent": "Standard", "gender": "male", "language": "pt", "description": "A quirky middle-aged male dramatist's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHG.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHG', 'Portuguese_Dramatist', 'system_voice_library', 'library', 'minimax', 'Dramatist', 'A quirky middle-aged male dramatist''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "quirky", "accent": "Standard", "gender": "male", "language": "pt", "description": "A quirky middle-aged male dramatist''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHG.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2831,7 +2831,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Steady Mentor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHH', 'Portuguese_Steadymentor', 'system_voice_library', 'library', 'minimax', 'Steady Mentor', 'An arrogant yet steady young adult male mentor''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "arrogant", "accent": "Standard", "gender": "male", "language": "pt", "description": "An arrogant yet steady young adult male mentor's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHH.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHH', 'Portuguese_Steadymentor', 'system_voice_library', 'library', 'minimax', 'Steady Mentor', 'An arrogant yet steady young adult male mentor''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "arrogant", "accent": "Standard", "gender": "male", "language": "pt", "description": "An arrogant yet steady young adult male mentor''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHH.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2851,7 +2851,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Charming Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHK', 'Portuguese_CharmingQueen', 'system_voice_library', 'library', 'minimax', 'Charming Queen', 'A bewitching and charming adult queen''s voice in Standard Portuguese.', '{"age": "adult", "style": "bewitching", "accent": "Standard", "gender": "female", "language": "pt", "description": "A bewitching and charming adult queen's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHK.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHK', 'Portuguese_CharmingQueen', 'system_voice_library', 'library', 'minimax', 'Charming Queen', 'A bewitching and charming adult queen''s voice in Standard Portuguese.', '{"age": "adult", "style": "bewitching", "accent": "Standard", "gender": "female", "language": "pt", "description": "A bewitching and charming adult queen''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHK.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2901,7 +2901,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Ghost
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHR', 'Portuguese_Ghost', 'system_voice_library', 'library', 'minimax', 'Ghost', 'A sensual adult male ghost''s voice in Standard Portuguese, mysterious and alluring.', '{"age": "adult", "style": "sensual", "accent": "Standard", "gender": "male", "language": "pt", "description": "A sensual adult male ghost's voice in Standard Portuguese, mysterious and alluring."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHR.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHR', 'Portuguese_Ghost', 'system_voice_library', 'library', 'minimax', 'Ghost', 'A sensual adult male ghost''s voice in Standard Portuguese, mysterious and alluring.', '{"age": "adult", "style": "sensual", "accent": "Standard", "gender": "male", "language": "pt", "description": "A sensual adult male ghost''s voice in Standard Portuguese, mysterious and alluring."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHR.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2911,7 +2911,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Humorous Elder
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHS', 'Portuguese_HumorousElder', 'system_voice_library', 'library', 'minimax', 'Humorous Elder', 'A wacky and humorous middle-aged male elder''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "wacky", "accent": "Standard", "gender": "male", "language": "pt", "description": "A wacky and humorous middle-aged male elder's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHS.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHS', 'Portuguese_HumorousElder', 'system_voice_library', 'library', 'minimax', 'Humorous Elder', 'A wacky and humorous middle-aged male elder''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "wacky", "accent": "Standard", "gender": "male", "language": "pt", "description": "A wacky and humorous middle-aged male elder''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHS.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2921,7 +2921,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Calm Leader
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHT', 'Portuguese_CalmLeader', 'system_voice_library', 'library', 'minimax', 'Calm Leader', 'A composed and calm middle-aged male leader''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "composed", "accent": "Standard", "gender": "male", "language": "pt", "description": "A composed and calm middle-aged male leader's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHT.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHT', 'Portuguese_CalmLeader', 'system_voice_library', 'library', 'minimax', 'Calm Leader', 'A composed and calm middle-aged male leader''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "composed", "accent": "Standard", "gender": "male", "language": "pt", "description": "A composed and calm middle-aged male leader''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHT.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2931,7 +2931,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Gentle Teacher
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHV', 'Portuguese_GentleTeacher', 'system_voice_library', 'library', 'minimax', 'Gentle Teacher', 'A mild and gentle adult male teacher''s voice in Standard Portuguese.', '{"age": "adult", "style": "mild", "accent": "Standard", "gender": "male", "language": "pt", "description": "A mild and gentle adult male teacher's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHV.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTC91MKW5CF0SA0V7GHV', 'Portuguese_GentleTeacher', 'system_voice_library', 'library', 'minimax', 'Gentle Teacher', 'A mild and gentle adult male teacher''s voice in Standard Portuguese.', '{"age": "adult", "style": "mild", "accent": "Standard", "gender": "male", "language": "pt", "description": "A mild and gentle adult male teacher''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTC91MKW5CF0SA0V7GHV.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2961,7 +2961,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Serene Elder
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEB', 'Portuguese_SereneElder', 'system_voice_library', 'library', 'minimax', 'Serene Elder', 'A reflective and serene middle-aged male elder''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "reflective", "accent": "Standard", "gender": "male", "language": "pt", "description": "A reflective and serene middle-aged male elder's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEB.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEB', 'Portuguese_SereneElder', 'system_voice_library', 'library', 'minimax', 'Serene Elder', 'A reflective and serene middle-aged male elder''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "reflective", "accent": "Standard", "gender": "male", "language": "pt", "description": "A reflective and serene middle-aged male elder''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEB.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2971,7 +2971,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Grim Reaper
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEC', 'Portuguese_GrimReaper', 'system_voice_library', 'library', 'minimax', 'Grim Reaper', 'A sinister adult male Grim Reaper''s voice in Standard Portuguese, dark and ominous.', '{"age": "adult", "style": "sinister", "accent": "Standard", "gender": "male", "language": "pt", "description": "A sinister adult male Grim Reaper's voice in Standard Portuguese, dark and ominous."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEC.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEC', 'Portuguese_GrimReaper', 'system_voice_library', 'library', 'minimax', 'Grim Reaper', 'A sinister adult male Grim Reaper''s voice in Standard Portuguese, dark and ominous.', '{"age": "adult", "style": "sinister", "accent": "Standard", "gender": "male", "language": "pt", "description": "A sinister adult male Grim Reaper''s voice in Standard Portuguese, dark and ominous."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEC.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -2981,7 +2981,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Assertive Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFED', 'Portuguese_AssertiveQueen', 'system_voice_library', 'library', 'minimax', 'Assertive Queen', 'A firm and assertive young adult queen''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "firm", "accent": "Standard", "gender": "female", "language": "pt", "description": "A firm and assertive young adult queen's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFED.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFED', 'Portuguese_AssertiveQueen', 'system_voice_library', 'library', 'minimax', 'Assertive Queen', 'A firm and assertive young adult queen''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "firm", "accent": "Standard", "gender": "female", "language": "pt", "description": "A firm and assertive young adult queen''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFED.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3001,7 +3001,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Stressed Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEF', 'Portuguese_StressedLady', 'system_voice_library', 'library', 'minimax', 'Stressed Lady', 'An unsure and stressed middle-aged lady''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "unsure", "accent": "Standard", "gender": "female", "language": "pt", "description": "An unsure and stressed middle-aged lady's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEF.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEF', 'Portuguese_StressedLady', 'system_voice_library', 'library', 'minimax', 'Stressed Lady', 'An unsure and stressed middle-aged lady''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "unsure", "accent": "Standard", "gender": "female", "language": "pt", "description": "An unsure and stressed middle-aged lady''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEF.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3011,7 +3011,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Friendly Neighbor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEG', 'Portuguese_FriendlyNeighbor', 'system_voice_library', 'library', 'minimax', 'Friendly Neighbor', 'An energetic and friendly young adult female neighbor''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "energetic", "accent": "Standard", "gender": "female", "language": "pt", "description": "An energetic and friendly young adult female neighbor's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEG.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEG', 'Portuguese_FriendlyNeighbor', 'system_voice_library', 'library', 'minimax', 'Friendly Neighbor', 'An energetic and friendly young adult female neighbor''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "energetic", "accent": "Standard", "gender": "female", "language": "pt", "description": "An energetic and friendly young adult female neighbor''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEG.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3021,7 +3021,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Caring Girlfriend
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEH', 'Portuguese_CaringGirlfriend', 'system_voice_library', 'library', 'minimax', 'Caring Girlfriend', 'A dreamy middle-aged female caring girlfriend''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "dreamy", "accent": "Standard", "gender": "female", "language": "pt", "description": "A dreamy middle-aged female caring girlfriend's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEH.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEH', 'Portuguese_CaringGirlfriend', 'system_voice_library', 'library', 'minimax', 'Caring Girlfriend', 'A dreamy middle-aged female caring girlfriend''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "dreamy", "accent": "Standard", "gender": "female", "language": "pt", "description": "A dreamy middle-aged female caring girlfriend''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEH.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3031,7 +3031,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Powerful Soldier
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEJ', 'Portuguese_PowerfulSoldier', 'system_voice_library', 'library', 'minimax', 'Powerful Soldier', 'A youthful and bold young adult male powerful soldier''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "youthful_and_bold", "accent": "Standard", "gender": "male", "language": "pt", "description": "A youthful and bold young adult male powerful soldier's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEJ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEJ', 'Portuguese_PowerfulSoldier', 'system_voice_library', 'library', 'minimax', 'Powerful Soldier', 'A youthful and bold young adult male powerful soldier''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "youthful_and_bold", "accent": "Standard", "gender": "male", "language": "pt", "description": "A youthful and bold young adult male powerful soldier''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEJ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3051,7 +3051,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Romantic Husband
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEM', 'Portuguese_RomanticHusband', 'system_voice_library', 'library', 'minimax', 'Romantic Husband', 'An emotional middle-aged male romantic husband''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "emotional", "accent": "Standard", "gender": "male", "language": "pt", "description": "An emotional middle-aged male romantic husband's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEM.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEM', 'Portuguese_RomanticHusband', 'system_voice_library', 'library', 'minimax', 'Romantic Husband', 'An emotional middle-aged male romantic husband''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "emotional", "accent": "Standard", "gender": "male", "language": "pt", "description": "An emotional middle-aged male romantic husband''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEM.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3061,7 +3061,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Strict Boss
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEN', 'Portuguese_StrictBoss', 'system_voice_library', 'library', 'minimax', 'Strict Boss', 'A robotic and strict young adult female boss''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "robotic", "accent": "Standard", "gender": "female", "language": "pt", "description": "A robotic and strict young adult female boss's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEN.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEN', 'Portuguese_StrictBoss', 'system_voice_library', 'library', 'minimax', 'Strict Boss', 'A robotic and strict young adult female boss''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "robotic", "accent": "Standard", "gender": "female", "language": "pt", "description": "A robotic and strict young adult female boss''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEN.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3081,7 +3081,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Playful Spirit
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEQ', 'Portuguese_PlayfulSpirit', 'system_voice_library', 'library', 'minimax', 'Playful Spirit', 'An animated and playful young adult female spirit''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "animated", "accent": "Standard", "gender": "female", "language": "pt", "description": "An animated and playful young adult female spirit's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEQ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCAY999VG35NQY1DFEQ', 'Portuguese_PlayfulSpirit', 'system_voice_library', 'library', 'minimax', 'Playful Spirit', 'An animated and playful young adult female spirit''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "animated", "accent": "Standard", "gender": "female", "language": "pt", "description": "An animated and playful young adult female spirit''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCAY999VG35NQY1DFEQ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3111,7 +3111,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Powerful Veteran
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569T', 'Portuguese_PowerfulVeteran', 'system_voice_library', 'library', 'minimax', 'Powerful Veteran', 'A strong and powerful middle-aged male veteran''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "strong", "accent": "Standard", "gender": "male", "language": "pt", "description": "A strong and powerful middle-aged male veteran's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569T.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569T', 'Portuguese_PowerfulVeteran', 'system_voice_library', 'library', 'minimax', 'Powerful Veteran', 'A strong and powerful middle-aged male veteran''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "strong", "accent": "Standard", "gender": "male", "language": "pt", "description": "A strong and powerful middle-aged male veteran''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569T.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3121,7 +3121,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Sensible Manager
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569V', 'Portuguese_SensibleManager', 'system_voice_library', 'library', 'minimax', 'Sensible Manager', 'A charismatic and sensible middle-aged male manager''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "charismatic", "accent": "Standard", "gender": "male", "language": "pt", "description": "A charismatic and sensible middle-aged male manager's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569V.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569V', 'Portuguese_SensibleManager', 'system_voice_library', 'library', 'minimax', 'Sensible Manager', 'A charismatic and sensible middle-aged male manager''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "charismatic", "accent": "Standard", "gender": "male", "language": "pt", "description": "A charismatic and sensible middle-aged male manager''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569V.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3131,7 +3131,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Thoughtful Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569W', 'Portuguese_ThoughtfulLady', 'system_voice_library', 'library', 'minimax', 'Thoughtful Lady', 'A worried and thoughtful middle-aged lady''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "worried", "accent": "Standard", "gender": "female", "language": "pt", "description": "A worried and thoughtful middle-aged lady's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569W.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569W', 'Portuguese_ThoughtfulLady', 'system_voice_library', 'library', 'minimax', 'Thoughtful Lady', 'A worried and thoughtful middle-aged lady''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "worried", "accent": "Standard", "gender": "female", "language": "pt", "description": "A worried and thoughtful middle-aged lady''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569W.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3141,7 +3141,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Theatrical Actor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569X', 'Portuguese_TheatricalActor', 'system_voice_library', 'library', 'minimax', 'Theatrical Actor', 'An animated middle-aged male theatrical actor''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "animated", "accent": "Standard", "gender": "male", "language": "pt", "description": "An animated middle-aged male theatrical actor's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569X.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC569X', 'Portuguese_TheatricalActor', 'system_voice_library', 'library', 'minimax', 'Theatrical Actor', 'An animated middle-aged male theatrical actor''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "animated", "accent": "Standard", "gender": "male", "language": "pt", "description": "An animated middle-aged male theatrical actor''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC569X.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3171,7 +3171,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Conscientious Instructor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A0', 'Portuguese_Conscientiousinstructor', 'system_voice_library', 'library', 'minimax', 'Conscientious Instructor', 'A youthful and conscientious young adult female instructor''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "youthful", "accent": "Standard", "gender": "female", "language": "pt", "description": "A youthful and conscientious young adult female instructor's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A0.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A0', 'Portuguese_Conscientiousinstructor', 'system_voice_library', 'library', 'minimax', 'Conscientious Instructor', 'A youthful and conscientious young adult female instructor''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "youthful", "accent": "Standard", "gender": "female", "language": "pt", "description": "A youthful and conscientious young adult female instructor''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A0.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3191,7 +3191,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise Scholar
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A2', 'Portuguese_WiseScholar', 'system_voice_library', 'library', 'minimax', 'Wise Scholar', 'A conversational young adult male wise scholar''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "conversational", "accent": "Standard", "gender": "male", "language": "pt", "description": "A conversational young adult male wise scholar's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A2.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A2', 'Portuguese_WiseScholar', 'system_voice_library', 'library', 'minimax', 'Wise Scholar', 'A conversational young adult male wise scholar''s voice in Standard Portuguese.', '{"age": "young_adult", "style": "conversational", "accent": "Standard", "gender": "male", "language": "pt", "description": "A conversational young adult male wise scholar''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A2.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3201,7 +3201,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Frank Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A3', 'Portuguese_FrankLady', 'system_voice_library', 'library', 'minimax', 'Frank Lady', 'An agitated and frank middle-aged lady''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "agitated", "accent": "Standard", "gender": "female", "language": "pt", "description": "An agitated and frank middle-aged lady's voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A3.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A3', 'Portuguese_FrankLady', 'system_voice_library', 'library', 'minimax', 'Frank Lady', 'An agitated and frank middle-aged lady''s voice in Standard Portuguese.', '{"age": "middle_aged", "style": "agitated", "accent": "Standard", "gender": "female", "language": "pt", "description": "An agitated and frank middle-aged lady''s voice in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A3.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3211,7 +3211,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Determined Manager
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A4', 'Portuguese_DeterminedManager', 'system_voice_library', 'library', 'minimax', 'Determined Manager', 'A middle-aged female manager''s voice with attitude and determination in Standard Portuguese.', '{"age": "middle_aged", "style": "attitude", "accent": "Standard", "gender": "female", "language": "pt", "description": "A middle-aged female manager's voice with attitude and determination in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A4.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A4', 'Portuguese_DeterminedManager', 'system_voice_library', 'library', 'minimax', 'Determined Manager', 'A middle-aged female manager''s voice with attitude and determination in Standard Portuguese.', '{"age": "middle_aged", "style": "attitude", "accent": "Standard", "gender": "female", "language": "pt", "description": "A middle-aged female manager''s voice with attitude and determination in Standard Portuguese."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A4.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3231,7 +3231,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Handsome Childhood Friend
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A6', 'Russian_HandsomeChildhoodFriend', 'system_voice_library', 'library', 'minimax', 'Handsome Childhood Friend', 'An aggressive female youth''s voice for a handsome childhood friend character in Standard Russian.', '{"age": "youth", "style": "aggressive", "accent": "Standard", "gender": "female", "language": "ru", "description": "An aggressive female youth's voice for a handsome childhood friend character in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A6.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A6', 'Russian_HandsomeChildhoodFriend', 'system_voice_library', 'library', 'minimax', 'Handsome Childhood Friend', 'An aggressive female youth''s voice for a handsome childhood friend character in Standard Russian.', '{"age": "youth", "style": "aggressive", "accent": "Standard", "gender": "female", "language": "ru", "description": "An aggressive female youth''s voice for a handsome childhood friend character in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A6.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3241,7 +3241,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Bright Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A7', 'Russian_BrightHeroine', 'system_voice_library', 'library', 'minimax', 'Bright Queen', 'An arrogant and bright adult queen''s voice in Standard Russian.', '{"age": "adult", "style": "arrogant", "accent": "Standard", "gender": "female", "language": "ru", "description": "An arrogant and bright adult queen's voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A7.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A7', 'Russian_BrightHeroine', 'system_voice_library', 'library', 'minimax', 'Bright Queen', 'An arrogant and bright adult queen''s voice in Standard Russian.', '{"age": "adult", "style": "arrogant", "accent": "Standard", "gender": "female", "language": "ru", "description": "An arrogant and bright adult queen''s voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A7.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3251,7 +3251,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Ambitious Woman
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A8', 'Russian_AmbitiousWoman', 'system_voice_library', 'library', 'minimax', 'Ambitious Woman', 'A demanding and ambitious adult woman''s voice in Standard Russian.', '{"age": "adult", "style": "demanding", "accent": "Standard", "gender": "female", "language": "ru", "description": "A demanding and ambitious adult woman's voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A8.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A8', 'Russian_AmbitiousWoman', 'system_voice_library', 'library', 'minimax', 'Ambitious Woman', 'A demanding and ambitious adult woman''s voice in Standard Russian.', '{"age": "adult", "style": "demanding", "accent": "Standard", "gender": "female", "language": "ru", "description": "A demanding and ambitious adult woman''s voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A8.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3261,7 +3261,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Reliable Man
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A9', 'Russian_ReliableMan', 'system_voice_library', 'library', 'minimax', 'Reliable Man', 'A steady and reliable middle-aged man''s voice in Standard Russian.', '{"age": "middle_aged", "style": "steady", "accent": "Standard", "gender": "male", "language": "ru", "description": "A steady and reliable middle-aged man's voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A9.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCBXFDJ5MYAXDKC56A9', 'Russian_ReliableMan', 'system_voice_library', 'library', 'minimax', 'Reliable Man', 'A steady and reliable middle-aged man''s voice in Standard Russian.', '{"age": "middle_aged", "style": "steady", "accent": "Standard", "gender": "male", "language": "ru", "description": "A steady and reliable middle-aged man''s voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCBXFDJ5MYAXDKC56A9.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3291,7 +3291,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Attractive Guy
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1R', 'Russian_AttractiveGuy', 'system_voice_library', 'library', 'minimax', 'Attractive Guy', 'A deep-voiced and attractive adult guy''s voice in Standard Russian.', '{"age": "adult", "style": "deep-voiced", "accent": "Standard", "gender": "male", "language": "ru", "description": "A deep-voiced and attractive adult guy's voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1R.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1R', 'Russian_AttractiveGuy', 'system_voice_library', 'library', 'minimax', 'Attractive Guy', 'A deep-voiced and attractive adult guy''s voice in Standard Russian.', '{"age": "adult", "style": "deep-voiced", "accent": "Standard", "gender": "male", "language": "ru", "description": "A deep-voiced and attractive adult guy''s voice in Standard Russian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1R.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3311,7 +3311,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Friendly Neighbor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1T', 'Spanish_FriendlyNeighbor', 'system_voice_library', 'library', 'minimax', 'Friendly Neighbor', 'An energetic young adult female friendly neighbor''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "An energetic young adult female friendly neighbor's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1T.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1T', 'Spanish_FriendlyNeighbor', 'system_voice_library', 'library', 'minimax', 'Friendly Neighbor', 'An energetic young adult female friendly neighbor''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "An energetic young adult female friendly neighbor''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1T.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3321,7 +3321,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Fragile Boy
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1V', 'Spanish_FragileBoy', 'system_voice_library', 'library', 'minimax', 'Fragile Boy', 'A gentle young adult fragile boy''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A gentle young adult fragile boy's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1V.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1V', 'Spanish_FragileBoy', 'system_voice_library', 'library', 'minimax', 'Fragile Boy', 'A gentle young adult fragile boy''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A gentle young adult fragile boy''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1V.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3331,7 +3331,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Upset Girl
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1W', 'Spanish_UpsetGirl', 'system_voice_library', 'library', 'minimax', 'Upset Girl', 'A sad young adult upset girl''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "female", "language": "es", "description": "A sad young adult upset girl's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1W.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1W', 'Spanish_UpsetGirl', 'system_voice_library', 'library', 'minimax', 'Upset Girl', 'A sad young adult upset girl''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "female", "language": "es", "description": "A sad young adult upset girl''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1W.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3341,7 +3341,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Soft-spoken Girl
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1X', 'Spanish_Soft-spokenGirl', 'system_voice_library', 'library', 'minimax', 'Soft-spoken Girl', 'A serene and soft-spoken young adult girl''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "female", "language": "es", "description": "A serene and soft-spoken young adult girl's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1X.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1X', 'Spanish_Soft-spokenGirl', 'system_voice_library', 'library', 'minimax', 'Soft-spoken Girl', 'A serene and soft-spoken young adult girl''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "female", "language": "es", "description": "A serene and soft-spoken young adult girl''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1X.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3351,7 +3351,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Charming Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1Y', 'Spanish_CharmingQueen', 'system_voice_library', 'library', 'minimax', 'Charming Queen', 'A bewitching and charming adult queen''s voice in Standard Spanish.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "female", "language": "es", "description": "A bewitching and charming adult queen's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1Y.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB1Y', 'Spanish_CharmingQueen', 'system_voice_library', 'library', 'minimax', 'Charming Queen', 'A bewitching and charming adult queen''s voice in Standard Spanish.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "female", "language": "es", "description": "A bewitching and charming adult queen''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB1Y.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3401,7 +3401,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Playful Spirit
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB23', 'Spanish_PlayfulSpirit', 'system_voice_library', 'library', 'minimax', 'Playful Spirit', 'An animated and playful young adult female spirit''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "An animated and playful young adult female spirit's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB23.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB23', 'Spanish_PlayfulSpirit', 'system_voice_library', 'library', 'minimax', 'Playful Spirit', 'An animated and playful young adult female spirit''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "An animated and playful young adult female spirit''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB23.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3411,7 +3411,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Theatrical Actor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB24', 'Spanish_TheatricalActor', 'system_voice_library', 'library', 'minimax', 'Theatrical Actor', 'A robust and theatrical middle-aged male actor''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "advertisement", "accent": "Standard", "gender": "male", "language": "es", "description": "A robust and theatrical middle-aged male actor's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB24.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB24', 'Spanish_TheatricalActor', 'system_voice_library', 'library', 'minimax', 'Theatrical Actor', 'A robust and theatrical middle-aged male actor''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "advertisement", "accent": "Standard", "gender": "male", "language": "es", "description": "A robust and theatrical middle-aged male actor''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB24.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3431,7 +3431,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Mature Partner
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB26', 'Spanish_MaturePartner', 'system_voice_library', 'library', 'minimax', 'Mature Partner', 'A warm and mature middle-aged male partner''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "male", "language": "es", "description": "A warm and mature middle-aged male partner's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB26.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB26', 'Spanish_MaturePartner', 'system_voice_library', 'library', 'minimax', 'Mature Partner', 'A warm and mature middle-aged male partner''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "male", "language": "es", "description": "A warm and mature middle-aged male partner''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB26.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3441,7 +3441,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Captivating Storyteller
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB27', 'Spanish_CaptivatingStoryteller', 'system_voice_library', 'library', 'minimax', 'Captivating Storyteller', 'A captivating middle-aged male narrator''s voice in Standard Spanish, perfect for storytelling.', '{"age": "middle_aged", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A captivating middle-aged male narrator's voice in Standard Spanish, perfect for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB27.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB27', 'Spanish_CaptivatingStoryteller', 'system_voice_library', 'library', 'minimax', 'Captivating Storyteller', 'A captivating middle-aged male narrator''s voice in Standard Spanish, perfect for storytelling.', '{"age": "middle_aged", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A captivating middle-aged male narrator''s voice in Standard Spanish, perfect for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB27.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3451,7 +3451,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Narrator
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB28', 'Spanish_Narrator', 'system_voice_library', 'library', 'minimax', 'Narrator', 'A middle-aged female narrator''s voice in Standard Spanish, ideal for storytelling.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A middle-aged female narrator's voice in Standard Spanish, ideal for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB28.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB28', 'Spanish_Narrator', 'system_voice_library', 'library', 'minimax', 'Narrator', 'A middle-aged female narrator''s voice in Standard Spanish, ideal for storytelling.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A middle-aged female narrator''s voice in Standard Spanish, ideal for storytelling."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB28.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3461,7 +3461,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise Scholar
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB29', 'Spanish_WiseScholar', 'system_voice_library', 'library', 'minimax', 'Wise Scholar', 'A conversational young adult male wise scholar''s voice in Standard Spanish.', '{"age": "young_adult", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A conversational young adult male wise scholar's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB29.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB29', 'Spanish_WiseScholar', 'system_voice_library', 'library', 'minimax', 'Wise Scholar', 'A conversational young adult male wise scholar''s voice in Standard Spanish.', '{"age": "young_adult", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A conversational young adult male wise scholar''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB29.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3481,7 +3481,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Determined Manager
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB2B', 'Spanish_DeterminedManager', 'system_voice_library', 'library', 'minimax', 'Determined Manager', 'A businesslike and determined middle-aged female manager''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A businesslike and determined middle-aged female manager's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB2B.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB2B', 'Spanish_DeterminedManager', 'system_voice_library', 'library', 'minimax', 'Determined Manager', 'A businesslike and determined middle-aged female manager''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A businesslike and determined middle-aged female manager''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB2B.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3491,7 +3491,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Bossy Leader
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB2C', 'Spanish_BossyLeader', 'system_voice_library', 'library', 'minimax', 'Bossy Leader', 'A businesslike and bossy adult male leader''s voice in Standard Spanish.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A businesslike and bossy adult male leader's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB2C.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB2C', 'Spanish_BossyLeader', 'system_voice_library', 'library', 'minimax', 'Bossy Leader', 'A businesslike and bossy adult male leader''s voice in Standard Spanish.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A businesslike and bossy adult male leader''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB2C.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3511,7 +3511,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Confident Woman
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB2E', 'Spanish_ConfidentWoman', 'system_voice_library', 'library', 'minimax', 'Confident Woman', 'A clear and firm young adult confident woman''s voice in Standard Spanish.', '{"age": "young_adult", "style": "informative", "accent": "Standard", "gender": "female", "language": "es", "description": "A clear and firm young adult confident woman's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB2E.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCCG1TDRR06AC87BB2E', 'Spanish_ConfidentWoman', 'system_voice_library', 'library', 'minimax', 'Confident Woman', 'A clear and firm young adult confident woman''s voice in Standard Spanish.', '{"age": "young_adult", "style": "informative", "accent": "Standard", "gender": "female", "language": "es", "description": "A clear and firm young adult confident woman''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCCG1TDRR06AC87BB2E.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3541,7 +3541,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Sophisticated Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWS', 'Spanish_SophisticatedLady', 'system_voice_library', 'library', 'minimax', 'Sophisticated Lady', 'A refined and sophisticated adult lady''s voice in Standard Spanish.', '{"age": "adult", "style": "informative", "accent": "Standard", "gender": "female", "language": "es", "description": "A refined and sophisticated adult lady's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWS.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWS', 'Spanish_SophisticatedLady', 'system_voice_library', 'library', 'minimax', 'Sophisticated Lady', 'A refined and sophisticated adult lady''s voice in Standard Spanish.', '{"age": "adult", "style": "informative", "accent": "Standard", "gender": "female", "language": "es", "description": "A refined and sophisticated adult lady''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWS.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3581,7 +3581,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Fussy hostess
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWX', 'Spanish_Fussyhostess', 'system_voice_library', 'library', 'minimax', 'Fussy hostess', 'An intense and fussy middle-aged female hostess''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "An intense and fussy middle-aged female hostess's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWX.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWX', 'Spanish_Fussyhostess', 'system_voice_library', 'library', 'minimax', 'Fussy hostess', 'An intense and fussy middle-aged female hostess''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "An intense and fussy middle-aged female hostess''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWX.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3591,7 +3591,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Sincere Teen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWY', 'Spanish_SincereTeen', 'system_voice_library', 'library', 'minimax', 'Sincere Teen', 'A heartfelt and sincere male teen''s voice in Standard Spanish.', '{"age": "young_adult", "style": "social_media", "accent": "Standard", "gender": "male", "language": "es", "description": "A heartfelt and sincere male teen's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWY.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWY', 'Spanish_SincereTeen', 'system_voice_library', 'library', 'minimax', 'Sincere Teen', 'A heartfelt and sincere male teen''s voice in Standard Spanish.', '{"age": "young_adult", "style": "social_media", "accent": "Standard", "gender": "male", "language": "es", "description": "A heartfelt and sincere male teen''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWY.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3601,7 +3601,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Frank Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWZ', 'Spanish_FrankLady', 'system_voice_library', 'library', 'minimax', 'Frank Lady', 'An agitated and frank adult lady''s voice in Standard Spanish.', '{"age": "adult", "style": "broadcast", "accent": "Standard", "gender": "female", "language": "es", "description": "An agitated and frank adult lady's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWZ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAWZ', 'Spanish_FrankLady', 'system_voice_library', 'library', 'minimax', 'Frank Lady', 'An agitated and frank adult lady''s voice in Standard Spanish.', '{"age": "adult", "style": "broadcast", "accent": "Standard", "gender": "female", "language": "es", "description": "An agitated and frank adult lady''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAWZ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3611,7 +3611,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Comedian
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX0', 'Spanish_Comedian', 'system_voice_library', 'library', 'minimax', 'Comedian', 'A humorous young adult male comedian''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "male", "language": "es", "description": "A humorous young adult male comedian's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX0.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX0', 'Spanish_Comedian', 'system_voice_library', 'library', 'minimax', 'Comedian', 'A humorous young adult male comedian''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "male", "language": "es", "description": "A humorous young adult male comedian''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX0.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3621,7 +3621,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Debator
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX1', 'Spanish_Debator', 'system_voice_library', 'library', 'minimax', 'Debator', 'A tough middle-aged male debater''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A tough middle-aged male debater's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX1.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX1', 'Spanish_Debator', 'system_voice_library', 'library', 'minimax', 'Debator', 'A tough middle-aged male debater''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A tough middle-aged male debater''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX1.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3631,7 +3631,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Tough Boss
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX2', 'Spanish_ToughBoss', 'system_voice_library', 'library', 'minimax', 'Tough Boss', 'A mature and tough middle-aged female boss''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A mature and tough middle-aged female boss's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX2.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX2', 'Spanish_ToughBoss', 'system_voice_library', 'library', 'minimax', 'Tough Boss', 'A mature and tough middle-aged female boss''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A mature and tough middle-aged female boss''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX2.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3641,7 +3641,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX3', 'Spanish_Wiselady', 'system_voice_library', 'library', 'minimax', 'Wise Lady', 'A neutral and wise middle-aged lady''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A neutral and wise middle-aged lady's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX3.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX3', 'Spanish_Wiselady', 'system_voice_library', 'library', 'minimax', 'Wise Lady', 'A neutral and wise middle-aged lady''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A neutral and wise middle-aged lady''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX3.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3651,7 +3651,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Steady Mentor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX4', 'Spanish_Steadymentor', 'system_voice_library', 'library', 'minimax', 'Steady Mentor', 'An arrogant yet steady young adult male mentor''s voice in Standard Spanish.', '{"age": "young_adult", "style": "audiobook", "accent": "Standard", "gender": "male", "language": "es", "description": "An arrogant yet steady young adult male mentor's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX4.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCDHKP1CT8ZR84WKAX4', 'Spanish_Steadymentor', 'system_voice_library', 'library', 'minimax', 'Steady Mentor', 'An arrogant yet steady young adult male mentor''s voice in Standard Spanish.', '{"age": "young_adult", "style": "audiobook", "accent": "Standard", "gender": "male", "language": "es", "description": "An arrogant yet steady young adult male mentor''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCDHKP1CT8ZR84WKAX4.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3711,7 +3711,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Ghost
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQD', 'Spanish_Ghost', 'system_voice_library', 'library', 'minimax', 'Ghost', 'A raspy adult male ghost''s voice in Standard Spanish.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A raspy adult male ghost's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQD.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQD', 'Spanish_Ghost', 'system_voice_library', 'library', 'minimax', 'Ghost', 'A raspy adult male ghost''s voice in Standard Spanish.', '{"age": "adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A raspy adult male ghost''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQD.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3721,7 +3721,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Humorous Elder
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQE', 'Spanish_HumorousElder', 'system_voice_library', 'library', 'minimax', 'Humorous Elder', 'An eccentric and humorous senior male elder''s voice in Standard Spanish.', '{"age": "senior", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "An eccentric and humorous senior male elder's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQE.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQE', 'Spanish_HumorousElder', 'system_voice_library', 'library', 'minimax', 'Humorous Elder', 'An eccentric and humorous senior male elder''s voice in Standard Spanish.', '{"age": "senior", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "An eccentric and humorous senior male elder''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQE.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3751,7 +3751,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Strict Boss
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQH', 'Spanish_StrictBoss', 'system_voice_library', 'library', 'minimax', 'Strict Boss', 'A commanding and strict young adult female boss''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "A commanding and strict young adult female boss's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQH.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQH', 'Spanish_StrictBoss', 'system_voice_library', 'library', 'minimax', 'Strict Boss', 'A commanding and strict young adult female boss''s voice in Standard Spanish.', '{"age": "young_adult", "style": "advertisement", "accent": "Standard", "gender": "female", "language": "es", "description": "A commanding and strict young adult female boss''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQH.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3771,7 +3771,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Serene Elder
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQK', 'Spanish_SereneElder', 'system_voice_library', 'library', 'minimax', 'Serene Elder', 'A reflective and serene senior male elder''s voice in Standard Spanish.', '{"age": "senior", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A reflective and serene senior male elder's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQK.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQK', 'Spanish_SereneElder', 'system_voice_library', 'library', 'minimax', 'Serene Elder', 'A reflective and serene senior male elder''s voice in Standard Spanish.', '{"age": "senior", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "A reflective and serene senior male elder''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQK.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3791,7 +3791,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Assertive Queen
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQN', 'Spanish_AssertiveQueen', 'system_voice_library', 'library', 'minimax', 'Assertive Queen', 'A firm and assertive young adult queen''s voice in Standard Spanish.', '{"age": "young_adult", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A firm and assertive young adult queen's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQN.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQN', 'Spanish_AssertiveQueen', 'system_voice_library', 'library', 'minimax', 'Assertive Queen', 'A firm and assertive young adult queen''s voice in Standard Spanish.', '{"age": "young_adult", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A firm and assertive young adult queen''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQN.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3801,7 +3801,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Caring Girlfriend
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQP', 'Spanish_CaringGirlfriend', 'system_voice_library', 'library', 'minimax', 'Caring Girlfriend', 'A dreamy adult female caring girlfriend''s voice in Standard Spanish.', '{"age": "adult", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A dreamy adult female caring girlfriend's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQP.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQP', 'Spanish_CaringGirlfriend', 'system_voice_library', 'library', 'minimax', 'Caring Girlfriend', 'A dreamy adult female caring girlfriend''s voice in Standard Spanish.', '{"age": "adult", "style": "audiobook", "accent": "Standard", "gender": "female", "language": "es", "description": "A dreamy adult female caring girlfriend''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQP.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3811,7 +3811,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Powerful Soldier
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQQ', 'Spanish_PowerfulSoldier', 'system_voice_library', 'library', 'minimax', 'Powerful Soldier', 'A youthful and bold young adult male powerful soldier''s voice in Standard Spanish.', '{"age": "young_adult", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A youthful and bold young adult male powerful soldier's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQQ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQQ', 'Spanish_PowerfulSoldier', 'system_voice_library', 'library', 'minimax', 'Powerful Soldier', 'A youthful and bold young adult male powerful soldier''s voice in Standard Spanish.', '{"age": "young_adult", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A youthful and bold young adult male powerful soldier''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQQ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3821,7 +3821,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Passionate Warrior
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQR', 'Spanish_PassionateWarrior', 'system_voice_library', 'library', 'minimax', 'Passionate Warrior', 'An energetic and passionate young adult male warrior''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "An energetic and passionate young adult male warrior's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQR.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQR', 'Spanish_PassionateWarrior', 'system_voice_library', 'library', 'minimax', 'Passionate Warrior', 'An energetic and passionate young adult male warrior''s voice in Standard Spanish.', '{"age": "young_adult", "style": "characters", "accent": "Standard", "gender": "male", "language": "es", "description": "An energetic and passionate young adult male warrior''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQR.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3841,7 +3841,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Romantic Husband
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQT', 'Spanish_RomanticHusband', 'system_voice_library', 'library', 'minimax', 'Romantic Husband', 'An emotional middle-aged male romantic husband''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "An emotional middle-aged male romantic husband's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQT.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQT', 'Spanish_RomanticHusband', 'system_voice_library', 'library', 'minimax', 'Romantic Husband', 'An emotional middle-aged male romantic husband''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "An emotional middle-aged male romantic husband''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQT.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3861,7 +3861,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Powerful Veteran
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQW', 'Spanish_PowerfulVeteran', 'system_voice_library', 'library', 'minimax', 'Powerful Veteran', 'A strong and powerful middle-aged male veteran''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A strong and powerful middle-aged male veteran's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQW.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQW', 'Spanish_PowerfulVeteran', 'system_voice_library', 'library', 'minimax', 'Powerful Veteran', 'A strong and powerful middle-aged male veteran''s voice in Standard Spanish.', '{"age": "middle_aged", "style": "informative", "accent": "Standard", "gender": "male", "language": "es", "description": "A strong and powerful middle-aged male veteran''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQW.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3871,7 +3871,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Sensible Manager
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQX', 'Spanish_SensibleManager', 'system_voice_library', 'library', 'minimax', 'Sensible Manager', 'A charismatic and sensible adult male manager''s voice in Standard Spanish.', '{"age": "adult", "style": "audiobook", "accent": "Standard", "gender": "male", "language": "es", "description": "A charismatic and sensible adult male manager's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQX.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQX', 'Spanish_SensibleManager', 'system_voice_library', 'library', 'minimax', 'Sensible Manager', 'A charismatic and sensible adult male manager''s voice in Standard Spanish.', '{"age": "adult", "style": "audiobook", "accent": "Standard", "gender": "male", "language": "es", "description": "A charismatic and sensible adult male manager''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQX.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3881,7 +3881,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Thoughtful Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQY', 'Spanish_ThoughtfulLady', 'system_voice_library', 'library', 'minimax', 'Thoughtful Lady', 'A worried and thoughtful adult lady''s voice in Standard Spanish.', '{"age": "adult", "style": "informative", "accent": "Standard", "gender": "female", "language": "es", "description": "A worried and thoughtful adult lady's voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQY.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCED5FTQZ1NQ0HWYTQY', 'Spanish_ThoughtfulLady', 'system_voice_library', 'library', 'minimax', 'Thoughtful Lady', 'A worried and thoughtful adult lady''s voice in Standard Spanish.', '{"age": "adult", "style": "informative", "accent": "Standard", "gender": "female", "language": "es", "description": "A worried and thoughtful adult lady''s voice in Standard Spanish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCED5FTQZ1NQ0HWYTQY.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -3921,7 +3921,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Wise Scholar
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J98', 'Ukrainian_WiseScholar', 'system_voice_library', 'library', 'minimax', 'Wise Scholar', 'A conversational young adult male wise scholar''s voice in Ukrainian.', '{"age": "young_adult", "style": "conversational", "accent": "Standard", "gender": "male", "language": "ukrainian", "description": "A conversational young adult male wise scholar's voice in Ukrainian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J98.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J98', 'Ukrainian_WiseScholar', 'system_voice_library', 'library', 'minimax', 'Wise Scholar', 'A conversational young adult male wise scholar''s voice in Ukrainian.', '{"age": "young_adult", "style": "conversational", "accent": "Standard", "gender": "male", "language": "ukrainian", "description": "A conversational young adult male wise scholar''s voice in Ukrainian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J98.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4031,7 +4031,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Male Narrator
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9K', 'Polish_male_1_sample4', 'system_voice_library', 'library', 'minimax', 'Male Narrator', 'A mature adult male narrator''s voice in Polish.', '{"age": "adult", "style": "mature", "accent": "Standard", "gender": "male", "language": "pl", "description": "A mature adult male narrator's voice in Polish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9K.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9K', 'Polish_male_1_sample4', 'system_voice_library', 'library', 'minimax', 'Male Narrator', 'A mature adult male narrator''s voice in Polish.', '{"age": "adult", "style": "mature", "accent": "Standard", "gender": "male", "language": "pl", "description": "A mature adult male narrator''s voice in Polish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9K.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4041,7 +4041,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Male Anchor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9M', 'Polish_male_2_sample3', 'system_voice_library', 'library', 'minimax', 'Male Anchor', 'An adult male broadcast anchor''s voice in Polish.', '{"age": "adult", "style": "broadcast", "accent": "Standard", "gender": "male", "language": "pl", "description": "An adult male broadcast anchor's voice in Polish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9M.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9M', 'Polish_male_2_sample3', 'system_voice_library', 'library', 'minimax', 'Male Anchor', 'An adult male broadcast anchor''s voice in Polish.', '{"age": "adult", "style": "broadcast", "accent": "Standard", "gender": "male", "language": "pl", "description": "An adult male broadcast anchor''s voice in Polish."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9M.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4081,7 +4081,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Energetic Youth
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9R', 'Romanian_male_2_sample1', 'system_voice_library', 'library', 'minimax', 'Energetic Youth', 'An energetic adult male youth''s voice in Romanian.', '{"age": "adult", "style": "energetic", "accent": "Standard", "gender": "male", "language": "romanian", "description": "An energetic adult male youth's voice in Romanian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9R.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9R', 'Romanian_male_2_sample1', 'system_voice_library', 'library', 'minimax', 'Energetic Youth', 'An energetic adult male youth''s voice in Romanian.', '{"age": "adult", "style": "energetic", "accent": "Standard", "gender": "male", "language": "romanian", "description": "An energetic adult male youth''s voice in Romanian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9R.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4091,7 +4091,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Optimistic Youth
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9S', 'Romanian_female_1_sample4', 'system_voice_library', 'library', 'minimax', 'Optimistic Youth', 'A cheerful and optimistic adult female youth''s voice in Romanian.', '{"age": "adult", "style": "cheerful", "accent": "Standard", "gender": "female", "language": "romanian", "description": "A cheerful and optimistic adult female youth's voice in Romanian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9S.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCF4CC7ZMM4YPDF4J9S', 'Romanian_female_1_sample4', 'system_voice_library', 'library', 'minimax', 'Optimistic Youth', 'A cheerful and optimistic adult female youth''s voice in Romanian.', '{"age": "adult", "style": "cheerful", "accent": "Standard", "gender": "female", "language": "romanian", "description": "A cheerful and optimistic adult female youth''s voice in Romanian."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCF4CC7ZMM4YPDF4J9S.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4111,7 +4111,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Gentle Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXRZ', 'Greek_female_1_sample1', 'system_voice_library', 'library', 'minimax', 'Gentle Lady', 'A gentle adult lady''s voice in Greek.', '{"age": "adult", "style": "gentle", "accent": "Standard", "gender": "female", "language": "greek", "description": "A gentle adult lady's voice in Greek."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXRZ.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXRZ', 'Greek_female_1_sample1', 'system_voice_library', 'library', 'minimax', 'Gentle Lady', 'A gentle adult lady''s voice in Greek.', '{"age": "adult", "style": "gentle", "accent": "Standard", "gender": "female", "language": "greek", "description": "A gentle adult lady''s voice in Greek."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXRZ.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4121,7 +4121,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Thoughtful Mentor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS0', 'greek_male_1a_v1', 'system_voice_library', 'library', 'minimax', 'Thoughtful Mentor', 'An intellectual and thoughtful adult male mentor''s voice in Greek.', '{"age": "adult", "style": "intellectual", "accent": "Standard", "gender": "male", "language": "greek", "description": "An intellectual and thoughtful adult male mentor's voice in Greek."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS0.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS0', 'greek_male_1a_v1', 'system_voice_library', 'library', 'minimax', 'Thoughtful Mentor', 'An intellectual and thoughtful adult male mentor''s voice in Greek.', '{"age": "adult", "style": "intellectual", "accent": "Standard", "gender": "male", "language": "greek", "description": "An intellectual and thoughtful adult male mentor''s voice in Greek."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS0.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4141,7 +4141,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Assured Presenter
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS2', 'czech_male_1_v1', 'system_voice_library', 'library', 'minimax', 'Assured Presenter', 'A serious and assured young adult male presenter''s voice in Czech.', '{"age": "young_adult", "style": "serious", "accent": "Standard", "gender": "male", "language": "czech", "description": "A serious and assured young adult male presenter's voice in Czech."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS2.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS2', 'czech_male_1_v1', 'system_voice_library', 'library', 'minimax', 'Assured Presenter', 'A serious and assured young adult male presenter''s voice in Czech.', '{"age": "young_adult", "style": "serious", "accent": "Standard", "gender": "male", "language": "czech", "description": "A serious and assured young adult male presenter''s voice in Czech."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS2.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4151,7 +4151,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Steadfast Narrator
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS3', 'czech_female_5_v7', 'system_voice_library', 'library', 'minimax', 'Steadfast Narrator', 'A steadfast adult female broadcast narrator''s voice in Czech.', '{"age": "adult", "style": "broadcast", "accent": "Standard", "gender": "female", "language": "czech", "description": "A steadfast adult female broadcast narrator's voice in Czech."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS3.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS3', 'czech_female_5_v7', 'system_voice_library', 'library', 'minimax', 'Steadfast Narrator', 'A steadfast adult female broadcast narrator''s voice in Czech.', '{"age": "adult", "style": "broadcast", "accent": "Standard", "gender": "female", "language": "czech", "description": "A steadfast adult female broadcast narrator''s voice in Czech."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS3.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4161,7 +4161,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Elegant Lady
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS4', 'czech_female_2_v2', 'system_voice_library', 'library', 'minimax', 'Elegant Lady', 'A graceful and elegant adult lady''s voice in Czech.', '{"age": "adult", "style": "graceful", "accent": "Standard", "gender": "female", "language": "czech", "description": "A graceful and elegant adult lady's voice in Czech."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS4.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS4', 'czech_female_2_v2', 'system_voice_library', 'library', 'minimax', 'Elegant Lady', 'A graceful and elegant adult lady''s voice in Czech.', '{"age": "adult", "style": "graceful", "accent": "Standard", "gender": "female", "language": "czech", "description": "A graceful and elegant adult lady''s voice in Czech."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS4.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4201,7 +4201,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- Trustworthy Advisor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS8', 'hindi_male_1_v2', 'system_voice_library', 'library', 'minimax', 'Trustworthy Advisor', 'A magnetic and trustworthy adult male advisor''s voice in Hindi.', '{"age": "adult", "style": "magnetic", "accent": "Standard", "gender": "male", "language": "hi", "description": "A magnetic and trustworthy adult male advisor's voice in Hindi."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS8.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXS8', 'hindi_male_1_v2', 'system_voice_library', 'library', 'minimax', 'Trustworthy Advisor', 'A magnetic and trustworthy adult male advisor''s voice in Hindi.', '{"age": "adult", "style": "magnetic", "accent": "Standard", "gender": "male", "language": "hi", "description": "A magnetic and trustworthy adult male advisor''s voice in Hindi."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXS8.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
@@ -4221,7 +4221,7 @@ ON CONFLICT (voice_id) DO UPDATE SET
 
 -- News Anchor
 INSERT INTO voices (voice_id, reference_id, owner_id, category, provider, name, "desc", tags, sample_url, sample_text, created_at, updated_at)
-VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXSA', 'hindi_female_1_v2', 'system_voice_library', 'library', 'minimax', 'News Anchor', 'A calm adult female news anchor''s voice in Hindi.', '{"age": "adult", "style": "calm", "accent": "Standard", "gender": "female", "language": "hi", "description": "A calm adult female news anchor's voice in Hindi."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXSA.mp3', NULL, NOW(), NOW())
+VALUES ('voice_01KD4WZTCGT2M0QC2Y0FRYVXSA', 'hindi_female_1_v2', 'system_voice_library', 'library', 'minimax', 'News Anchor', 'A calm adult female news anchor''s voice in Hindi.', '{"age": "adult", "style": "calm", "accent": "Standard", "gender": "female", "language": "hi", "description": "A calm adult female news anchor''s voice in Hindi."}'::jsonb, 'http://10.1.150.226:19000/test-bucket/voice_samples/voice_01KD4WZTCGT2M0QC2Y0FRYVXSA.mp3', NULL, NOW(), NOW())
 ON CONFLICT (voice_id) DO UPDATE SET
     name = EXCLUDED.name,
     "desc" = EXCLUDED."desc",
