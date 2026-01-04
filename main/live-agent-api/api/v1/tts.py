@@ -11,11 +11,11 @@ from typing import Optional, Literal
 from fishaudio.types.tts import TTSConfig
 from infra.fishaudio import get_fish_audio
 from infra.minimax import get_minimax_tts
-from config.logger import setup_logging
+from config.logger import get_logger
 from utils.opus_encoder import pcm_to_opus_stream, pcm_to_opus_raw
 
 TAG = __name__
-logger = setup_logging(TAG)
+logger = get_logger(TAG)
 
 router = APIRouter()
 

@@ -7,10 +7,10 @@ import numpy as np
 from opuslib_next import Encoder
 from opuslib_next import constants
 from typing import List
-from config.logger import setup_logging
+from config.logger import get_logger
 
 TAG = __name__
-logger = setup_logging(TAG)
+logger = get_logger(TAG)
 
 
 class OpusEncoder:

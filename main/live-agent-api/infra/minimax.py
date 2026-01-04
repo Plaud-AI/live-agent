@@ -8,10 +8,10 @@ import httpx
 from typing import Optional, Literal
 
 from config import settings
-from config.logger import setup_logging
+from config.logger import get_logger
 
 TAG = __name__
-logger = setup_logging(TAG)
+logger = get_logger(TAG)
 
 
 class MinimaxTTSClient:
