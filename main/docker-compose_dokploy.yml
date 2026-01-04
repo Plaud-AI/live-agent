@@ -143,7 +143,7 @@ services:
     networks:
       - xiaozhi-network
     healthcheck:
-      # 增强健康检查：不仅检查连接，还验证密码认证
+      # 增强健康检查：验证密码认证是否正确
       test: ["CMD-SHELL", "PGPASSWORD=postgres psql -U postgres -d live_agent -c 'SELECT 1' || exit 1"]
       interval: 5s
       timeout: 5s
