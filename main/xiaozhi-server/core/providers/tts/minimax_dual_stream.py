@@ -578,10 +578,7 @@ class TTSProvider(TTSProviderBase):
                     except asyncio.TimeoutError:
                         continue  # Check abort again
 
-                    logger.bind(tag=TAG).debug(f"Monitor received: {msg[:200]}...")
-
                     response = json.loads(msg)
-                    logger.bind(tag=TAG).debug(f"Monitor received: {str(response)[:200]}...")
 
                     event = response.get("event")
 
