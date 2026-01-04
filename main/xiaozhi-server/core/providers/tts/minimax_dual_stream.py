@@ -103,6 +103,10 @@ class TTSProvider(TTSProviderBase):
         self._session_active = False
         self._task_started = False
         self._monitor_task = None
+        
+        # Connection keeper state (for low-latency preheat)
+        self._connection_keeper_task = None
+        self._preheat_ready = None  # asyncio.Event: set when connection is ready, clear to trigger preheat
 
         # Opus encoder (PCM -> Opus)
         self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
@@ -114,6 +118,7 @@ class TTSProvider(TTSProviderBase):
         self._first_audio_sent = False
         self._session_end = False  # True when all text sent AND ready for final is_final
         self._abort_handled = False  # Prevent repeated abort handling
+        self._first_segment_send_time = None  # For TTS API latency tracking
 
         # Text buffer for segment accumulation (similar to fish_single_stream)
         self._text_buffer = ""
@@ -129,13 +134,87 @@ class TTSProvider(TTSProviderBase):
             logger.bind(tag=TAG).error(model_key_msg)
 
     async def open_audio_channels(self, conn):
-        """Override: establish WebSocket pre-connection"""
+        """Override: establish WebSocket pre-connection and start connection keeper"""
         try:
             await super().open_audio_channels(conn)
+            
+            # Initialize event for connection keeper (clear = need preheat, set = ready)
+            self._preheat_ready = asyncio.Event()
+            
+            # Start connection keeper task
+            self._connection_keeper_task = asyncio.create_task(self._connection_keeper())
+            
+            # Wait for initial preheat to complete (with timeout)
+            try:
+                await asyncio.wait_for(self._preheat_ready.wait(), timeout=5)
+                logger.bind(tag=TAG).info("Initial preheat completed")
+            except asyncio.TimeoutError:
+                logger.bind(tag=TAG).warning("Initial preheat timeout, will retry on first request")
         except Exception as e:
             logger.bind(tag=TAG).error(f"Failed to open audio channels: {e}")
             self.ws = None
             raise
+
+    async def _connection_keeper(self):
+        """
+        Connection keeper coroutine - maintains WebSocket connection ready for low latency.
+        
+        Uses single Event: _preheat_ready
+        - clear = need preheat (triggered by abort or initial state)
+        - set = connection ready
+        
+        Lifecycle:
+        1. Preheat connection (ensure_connection + send_task_start)
+        2. Set _preheat_ready
+        3. Poll until _preheat_ready is cleared (by abort) or connection invalid
+        4. Go back to step 1
+        """
+        while not self.conn.stop_event.is_set():
+            try:
+                # Check if connection is still valid
+                if self._task_started and self.ws and self._session_active:
+                    self._preheat_ready.set()
+                else:
+                    # Preheat new connection
+                    self._preheat_ready.clear()
+                    logger.bind(tag=TAG).info("Connection keeper: preheating...")
+                    await self._ensure_connection()
+                    await self._send_task_start()
+                    self._preheat_ready.set()
+                    logger.bind(tag=TAG).info("Connection keeper: connection ready")
+                
+                # Wait until connection becomes invalid or abort triggers clear
+                while (self._preheat_ready.is_set() and 
+                       self._task_started and self.ws and self._session_active and
+                       not self.conn.stop_event.is_set()):
+                    await asyncio.sleep(0.1)
+                
+            except asyncio.CancelledError:
+                logger.bind(tag=TAG).info("Connection keeper: cancelled")
+                break
+            except Exception as e:
+                logger.bind(tag=TAG).warning(f"Connection keeper error: {e}")
+                self._preheat_ready.set()  # Set anyway to unblock waiters
+                await asyncio.sleep(0.5)  # Back off on error
+
+    async def _send_task_start(self):
+        """Send task_start event and wait for task_started response"""
+        start_event = {
+            "event": "task_start",
+            "model": self.model,
+            "voice_setting": self.voice_setting.copy(),
+            "audio_setting": self.audio_setting,
+        }
+        
+        await self.ws.send(json.dumps(start_event))
+        logger.bind(tag=TAG).info(f"Sent task_start")
+        
+        response = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=2))
+        if response.get("event") == "task_started":
+            logger.bind(tag=TAG).info("MiniMax TTS task started")
+            self._task_started = True
+        else:
+            raise Exception(f"Unexpected task_start response: {response}")
 
     async def _ensure_connection(self, max_retries: int = 2):
         """Ensure WebSocket connection is established with retry logic"""
@@ -148,15 +227,10 @@ class TTSProvider(TTSProviderBase):
         }
 
         last_error = None
-        # Log connection details (mask api_key for security)
-        masked_key = f"{self.api_key[:10]}...{self.api_key[-4:]}" if self.api_key and len(self.api_key) > 14 else "INVALID"
-        logger.bind(tag=TAG).info(
-            f"WebSocket connection config: url={MINIMAX_WS_URL}, api_key={masked_key}"
-        )
         
         for attempt in range(max_retries + 1):
             try:
-                logger.bind(tag=TAG).info(
+                logger.bind(tag=TAG).debug(
                     f"Establishing MiniMax WebSocket connection (attempt {attempt + 1}/{max_retries + 1})..."
                 )
 
@@ -237,6 +311,7 @@ class TTSProvider(TTSProviderBase):
                     # ========== New dialogue round starts ==========
                     self.tts_audio_first_sentence = True
                     self._first_audio_sent = False
+                    self._first_segment_send_time = None
                     self._session_text_buffer = []
                     self._session_end = False
                     self._text_buffer = ""
@@ -439,7 +514,7 @@ class TTSProvider(TTSProviderBase):
                 logger.bind(tag=TAG).warning(f"Final report failed: {e}")
 
     async def _start_task(self):
-        """Start or reuse TTS task"""
+        """Start or reuse TTS task (waits for connection keeper preheat)"""
         logger.bind(tag=TAG).debug(
             f"_start_task: task_started={self._task_started}, "
             f"ws={self.ws is not None}, session_active={self._session_active}"
@@ -449,48 +524,38 @@ class TTSProvider(TTSProviderBase):
         self.opus_encoder.reset_state()
         self._session_text_buffer = []
         self._first_audio_sent = False
+        self._first_segment_send_time = None
         self._session_end = False
         self._text_buffer = ""
         self._processed_idx = 0
         self._sent_continue_count = 0
         self._received_final_count = 0
 
-        # If task already started on this connection, just restart monitor
+        # Wait for connection keeper to preheat (if not already ready)
+        if self._preheat_ready and not self._preheat_ready.is_set():
+            logger.bind(tag=TAG).info("Waiting for connection keeper to preheat...")
+            try:
+                await asyncio.wait_for(self._preheat_ready.wait(), timeout=3)
+            except asyncio.TimeoutError:
+                logger.bind(tag=TAG).warning("Preheat wait timeout, will establish connection directly")
+
+        # If task already started (preheated), just restart monitor
         if self._task_started and self.ws and self._session_active:
-            logger.bind(tag=TAG).info("Reusing existing task, starting monitor")
+            logger.bind(tag=TAG).info("Using preheated connection, starting monitor")
             if self._monitor_task is None or self._monitor_task.done():
                 self._monitor_task = asyncio.create_task(self._monitor_ws_response())
                 await asyncio.sleep(0)
             return
 
-        # Need to start new task
+        # Fallback: keeper failed or not running, establish connection directly
+        logger.bind(tag=TAG).info("No preheated connection, establishing directly...")
         try:
-            # Ensure connection
             await self._ensure_connection()
-
-            # Send task_start event
-            start_event = {
-                "event": "task_start",
-                "model": self.model,
-                "voice_setting": self.voice_setting.copy(),
-                "audio_setting": self.audio_setting,
-            }
-
-            await self.ws.send(json.dumps(start_event))
-            logger.bind(tag=TAG).info(f"Sent task_start: {json.dumps(start_event, ensure_ascii=False)}")
-
-            # Wait for task_started response
-            response = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=2))
-            if response.get("event") == "task_started":
-                logger.bind(tag=TAG).info("MiniMax TTS task started")
-                self._task_started = True
-
-                # Start monitor task
-                self._monitor_task = asyncio.create_task(self._monitor_ws_response())
-                await asyncio.sleep(0)
-            else:
-                raise Exception(f"Unexpected task_start response: {response}")
-
+            await self._send_task_start()
+            
+            # Start monitor task
+            self._monitor_task = asyncio.create_task(self._monitor_ws_response())
+            await asyncio.sleep(0)
         except Exception as e:
             logger.bind(tag=TAG).error(f"Failed to start task: {e}")
             raise
@@ -557,7 +622,12 @@ class TTSProvider(TTSProviderBase):
 
         await self.ws.send(json.dumps(continue_event))
         self._sent_continue_count += 1
-        logger.bind(tag=TAG).info(f"task_continue sent, event {continue_event} count: {self._sent_continue_count}")
+        
+        # Record first segment send time for latency tracking
+        if self._first_segment_send_time is None:
+            self._first_segment_send_time = time.time() * 1000
+        
+        logger.bind(tag=TAG).info(f"task_continue sent, count: {self._sent_continue_count}")
 
     async def _monitor_ws_response(self):
         """Monitor WebSocket responses for audio data"""
@@ -610,6 +680,12 @@ class TTSProvider(TTSProviderBase):
                                 self._first_audio_sent = True
                                 self._message_report_time = int(time.time())
                                 report_text = "".join(self._session_text_buffer) if self._session_text_buffer else None
+
+                                # Log TTS API first chunk latency
+                                if self._first_segment_send_time:
+                                    first_chunk_time = time.time() * 1000
+                                    api_latency = (first_chunk_time - self._first_segment_send_time) / 1000
+                                    logger.bind(tag=TAG).info(f"[Latency] TTS API first chunk: {api_latency:.3f}s")
 
                                 self.tts_audio_queue.put(
                                     TTSAudioDTO(
@@ -731,11 +807,16 @@ class TTSProvider(TTSProviderBase):
 
         # Close WebSocket (will create new one for next utterance)
         await self._close_websocket()
+        
+        # Signal connection keeper to preheat next connection (clear = need preheat)
+        if self._preheat_ready:
+            self._preheat_ready.clear()
 
     async def _cleanup_session(self):
         """Clean up session state without closing WebSocket"""
         self._task_started = False
         self._first_audio_sent = False
+        self._first_segment_send_time = None
         self._session_end = False
         self._text_buffer = ""
         self._processed_idx = 0
@@ -774,7 +855,17 @@ class TTSProvider(TTSProviderBase):
         self._task_started = False
 
     async def close(self):
-        """Clean up WebSocket resources"""
+        """Clean up WebSocket resources and connection keeper"""
+        # Cancel connection keeper task
+        if self._connection_keeper_task and not self._connection_keeper_task.done():
+            self._connection_keeper_task.cancel()
+            try:
+                await self._connection_keeper_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._connection_keeper_task = None
+        
         await self._close_websocket()
         await super().close()
 
