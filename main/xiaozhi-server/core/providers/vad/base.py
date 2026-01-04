@@ -302,7 +302,8 @@ class VADStream(ABC):
         conn.last_activity_time = time.time() * 1000
         
         # Check if meeting interruption strategies
-        conn._interrupt_by_audio(event.speech_duration)
+        # 传递 probability 用于「连续高概率帧确认」机制
+        conn._interrupt_by_audio(event.speech_duration, event.probability)
 
     async def _handle_speech_end(
         self,

@@ -1930,30 +1930,40 @@ class ConnectionHandler:
         #     self.vad.reset_filter()
         self.logger.bind(tag=TAG).debug("VAD states reset.")
 
-    def _interrupt_by_audio(self, speech_duration_ms: float) -> None:
+    def _interrupt_by_audio(self, speech_duration_ms: float, probability: float = 1.0) -> None:
         """Check interruption conditions and trigger interrupt if met
         
-        Interruption strategy:
-        1. Interruption must be enabled
-        2. TTS must be speaking (client_is_speaking = True)
-        3. Not in manual listen mode
-        4. Speech duration >= min_interrupt_speech_duration_ms
-        5. For streaming ASR: text buffer length >= min_interrupt_text_length
-           For non-streaming ASR: skip text check (not available during speech)
+        行业最佳实践：连续高概率帧确认机制（Consecutive High-Confidence Frame Confirmation）
+        
+        设计原理：
+        1. 单帧 VAD 检测可能因回声、噪音、瞬时干扰而误报
+        2. 真正的用户打断会产生连续的高概率语音帧
+        3. 通过要求连续 N 帧高概率语音来过滤误触发
+        
+        打断触发条件：
+        1. 打断功能已启用
+        2. TTS 正在播放（client_is_speaking = True）
+        3. 非手动拾音模式
+        4. 首轮对话已完成
+        5. 累计语音时长 >= 阈值（默认 500ms）
+        6. **连续高概率帧数 >= 阈值**（本次新增，行业最佳实践）
+        7. 对于流式 ASR：文本长度 >= 阈值
         
         Args:
             speech_duration_ms: Current speech duration in milliseconds
+            probability: VAD probability for current frame (0.0-1.0)
         """
-        # 调试日志：记录打断检测条件
-        if self.client_is_speaking:
-            self.logger.bind(tag=TAG).debug(
-                f"🔍 [打断检测] 条件检查: enable={self.enable_interruption}, "
-                f"speaking={self.client_is_speaking}, mode={self.client_listen_mode}, "
-                f"defer={getattr(self, 'defer_agent_init', False)}, "
-                f"first_done={getattr(self, 'first_dialogue_completed', False)}, "
-                f"speech_ms={speech_duration_ms:.0f}"
-            )
+        # ============== 打断检测配置（行业最佳实践参数） ==============
+        # 高概率阈值：低于此值的帧被认为是噪音/回声，不计入连续帧
+        # Silero VAD 默认激活阈值是 0.5，这里使用 0.45 略低于激活阈值
+        MIN_INTERRUPT_PROBABILITY = 0.45
         
+        # 连续高概率帧数阈值：需要连续 N 帧高概率才触发打断
+        # 假设 VAD 帧率约 30fps（每帧 ~33ms），3 帧约 100ms
+        # 这个时长足以过滤回声和瞬时噪音，同时保持打断响应速度
+        MIN_CONSECUTIVE_HIGH_PROB_FRAMES = 3
+        
+        # ============== 基础条件检查 ==============
         if not self.enable_interruption:
             return
         if not self.client_is_speaking:
@@ -1961,22 +1971,49 @@ class ConnectionHandler:
         if self.client_listen_mode == "manual":
             return
         # 在 agent 配置加载完成之前禁用打断检测
-        # defer_agent_init=True 表示正在等待 ensure_agent_ready 完成
-        # 这样可以避免在 agent 配置加载期间误触发打断
         if getattr(self, "defer_agent_init", False):
             return
         # 首轮对话完成之前禁用打断检测
-        # 避免唤醒词响应期间设备继续发送音频被误判为打断
         if not getattr(self, "first_dialogue_completed", False):
             return
         
-        # Check speech duration threshold
+        # ============== 连续高概率帧确认机制 ==============
+        # 初始化连续帧计数器（懒加载）
+        if not hasattr(self, '_interrupt_consecutive_high_prob_frames'):
+            self._interrupt_consecutive_high_prob_frames = 0
+        
+        # 更新连续帧计数
+        if probability >= MIN_INTERRUPT_PROBABILITY:
+            self._interrupt_consecutive_high_prob_frames += 1
+        else:
+            # 低概率帧打断连续计数，重新开始
+            if self._interrupt_consecutive_high_prob_frames > 0:
+                self.logger.bind(tag=TAG).debug(
+                    f"🔍 [打断检测] 连续帧中断: prob={probability:.2f} < {MIN_INTERRUPT_PROBABILITY}, "
+                    f"连续帧数={self._interrupt_consecutive_high_prob_frames} 重置为 0"
+                )
+            self._interrupt_consecutive_high_prob_frames = 0
+            return  # 低概率帧，跳过后续检查
+        
+        # 调试日志
+        self.logger.bind(tag=TAG).debug(
+            f"🔍 [打断检测] 条件检查: enable={self.enable_interruption}, "
+            f"speaking={self.client_is_speaking}, mode={self.client_listen_mode}, "
+            f"first_done={getattr(self, 'first_dialogue_completed', False)}, "
+            f"speech_ms={speech_duration_ms:.0f}, prob={probability:.2f}, "
+            f"consecutive_frames={self._interrupt_consecutive_high_prob_frames}"
+        )
+        
+        # 检查连续帧数是否达到阈值
+        if self._interrupt_consecutive_high_prob_frames < MIN_CONSECUTIVE_HIGH_PROB_FRAMES:
+            return  # 连续帧数不足，等待更多帧
+        
+        # ============== 语音时长检查 ==============
         speech_ok = speech_duration_ms >= self.min_interrupt_speech_duration_ms
         if not speech_ok:
             return
         
-        # Check text length threshold (only for streaming ASR)
-        # Non-streaming ASR doesn't have real-time text during speech
+        # ============== 流式 ASR 文本长度检查 ==============
         from core.providers.asr.dto import InterfaceType
         is_streaming_asr = (
             self.asr is not None 
@@ -1997,14 +2034,20 @@ class ConnectionHandler:
                 return
             log_msg = (
                 f"Interrupt triggered (streaming): speech={speech_duration_ms:.0f}ms, "
-                f"text_len={asr_text_len} >= {self.min_interrupt_text_length}"
+                f"text_len={asr_text_len}, consecutive_high_prob_frames={self._interrupt_consecutive_high_prob_frames}"
             )
         else:
-            log_msg = f"Interrupt triggered (non-streaming): speech={speech_duration_ms:.0f}ms >= {self.min_interrupt_speech_duration_ms:.0f}ms"
+            log_msg = (
+                f"Interrupt triggered (non-streaming): speech={speech_duration_ms:.0f}ms, "
+                f"prob={probability:.2f}, consecutive_high_prob_frames={self._interrupt_consecutive_high_prob_frames}"
+            )
         
         self.logger.bind(tag=TAG).info(log_msg)
         
-        # Trigger interrupt
+        # ============== 触发打断 ==============
+        # 重置连续帧计数器
+        self._interrupt_consecutive_high_prob_frames = 0
+        
         self.client_abort = True
         self.clear_queues()
         # Send stop message to client

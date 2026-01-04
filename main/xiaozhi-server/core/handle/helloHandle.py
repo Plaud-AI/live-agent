@@ -184,9 +184,12 @@ async def checkWakeupWords(conn, text):
         return False
     # 注意：sendAudioMessage 也可能会在首句补发 tts/start。
     # 这里既然显式发送了 tts/start，就必须同步更新 client_is_speaking，
-    # 否则会出现你日志里看到的 “tts/start 发送两次”，设备端可能会重置播放状态导致无声/卡顿。
+    # 否则会出现你日志里看到的 "tts/start 发送两次"，设备端可能会重置播放状态导致无声/卡顿。
     await send_tts_message(conn, "start")
     conn.client_is_speaking = True
+    
+    # 重置打断检测的连续帧计数器（行业最佳实践）
+    conn._interrupt_consecutive_high_prob_frames = 0
 
     # 获取当前音色标识（用于唤醒缓存分桶）
     voice_key = get_tts_voice_key(conn.tts)
