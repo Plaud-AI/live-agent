@@ -167,6 +167,13 @@ async def checkWakeupWords(conn, text):
     # and endpoint delay from the critical path.
     conn._skip_turn_detection_once = True
 
+    # Drop the first ASR result after wakeup unconditionally.
+    # The wakeup word audio is sent to ASR and transcribed (e.g., "Okinaabu", "OK南部"),
+    # but it's not a real user query - just discard it.
+    # CRITICAL: Set this BEFORE any await point to avoid race condition with ASR processing.
+    conn._drop_first_asr_after_wakeup = True
+    conn.just_woken_up = True
+
     # 等待tts初始化，最多等待3秒
     start_time = time.time()
     while time.time() - start_time < 3:
@@ -175,11 +182,6 @@ async def checkWakeupWords(conn, text):
         await asyncio.sleep(0.1)
     else:
         return False
-
-    conn.just_woken_up = True
-    # 抑制“唤醒词残留音频”被 ASR/TurnDetection 再次触发一轮 chat（double-trigger）
-    # 只在短窗口内生效，避免误伤后续真实提问。
-    conn._wakeup_suppress_next_asr_until_ms = int(time.time() * 1000) + 5000
     # 注意：sendAudioMessage 也可能会在首句补发 tts/start。
     # 这里既然显式发送了 tts/start，就必须同步更新 client_is_speaking，
     # 否则会出现你日志里看到的 “tts/start 发送两次”，设备端可能会重置播放状态导致无声/卡顿。

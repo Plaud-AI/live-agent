@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def normalize_for_wakeup(text: str) -> str:
     """Normalize text for wakeup matching / suppression decisions.
 
@@ -36,37 +37,6 @@ def normalize_for_wakeup(text: str) -> str:
     return (normalized or "").lower()
 
 
-def should_drop_asr_after_wakeup(
-    *,
-    asr_text: str,
-    wakeup_words: list[str] | None,
-    max_norm_len: int = 4,
-) -> bool:
-    """Decide whether an ASR result should be dropped as "wakeup residue".
-
-    This is used to suppress the common double-trigger pattern:
-    - device sends listen/detect wakeup text (fast short reply)
-    - the same audio is also transcribed by ASR (often as a short, noisy phrase)
-      then TurnDetection triggers a second chat after endpoint delay.
-
-    Strategy (conservative):
-    1) If ASR text matches any wakeup word after normalization: drop
-    2) Else, if normalized length is very short (<= max_norm_len): drop
-
-    Notes:
-    - max_norm_len is intentionally small to avoid dropping real user queries.
-    """
-    norm = normalize_for_wakeup(asr_text)
-    if not norm:
-        return True
-
-    wakeup_set = {normalize_for_wakeup(w) for w in (wakeup_words or []) if w}
-    if norm in wakeup_set:
-        return True
-
-    return len(norm) <= max_norm_len
-
-
 def is_wakeup_word(text: str, wakeup_words: list[str] | None) -> bool:
     """Return True if `text` should be treated as a wakeup word.
 
@@ -93,5 +63,3 @@ def is_wakeup_word(text: str, wakeup_words: list[str] | None) -> bool:
             return True
 
     return False
-
-
