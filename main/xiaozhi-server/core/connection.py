@@ -1123,6 +1123,7 @@ class ConnectionHandler:
         # greeting config
         self._greeting_config["enable_greeting"] = private_config.get("enable_greeting", False)
         self._greeting_config["greeting"] = private_config.get("greeting", None)
+        self._greeting_config["voice_opening"] = private_config.get("voice_opening", None)  # For wakeup greeting
         self._voice_closing = private_config.get("voice_closing", self._voice_closing)
         self._language = private_config.get("language", self._language)
 

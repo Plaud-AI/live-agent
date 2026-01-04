@@ -45,18 +45,14 @@ _wakeup_response_lock = asyncio.Lock()
 
 def _get_agent_greeting(conn) -> str | None:
     """
-    获取 agent 配置的唤醒词回复（greeting）。
-    
-    优先级：
-    1. conn._greeting_config["greeting"] - agent 自定义 greeting
-    2. None - 回退到默认配置
+    获取 agent 配置的唤醒词回复（voice_opening）。
     
     Returns:
-        agent 配置的 greeting 文本，或 None
+        agent 配置的 voice_opening 文本，或 None
     """
     greeting_config = getattr(conn, "_greeting_config", None)
-    if greeting_config and greeting_config.get("greeting"):
-        return greeting_config["greeting"]
+    if greeting_config:
+        return greeting_config.get("voice_opening")
     return None
 
 
@@ -121,7 +117,7 @@ async def prewarm_wakeup_reply_cache(conn) -> None:
         if existing and existing.get("file_path"):
             return
 
-        # 预热唤醒词回复缓存（使用 agent 配置的 greeting）
+        # 预热唤醒词回复缓存（使用 agent 配置的 voice_opening）
         if not _wakeup_response_lock.locked():
             asyncio.create_task(wakeupWordsResponse(conn))
     except Exception as e:
@@ -180,11 +176,6 @@ async def checkWakeupWords(conn, text):
     else:
         return False
 
-    if not enable_wakeup_words_response_cache:
-        # 选项1：即使关闭“缓存唤醒回复”，也不走 LLM，而是播放默认的短回复音频
-        # 这样能保证唤醒“秒回”，且避免进入对话生成链路。
-        pass
-
     conn.just_woken_up = True
     # 抑制“唤醒词残留音频”被 ASR/TurnDetection 再次触发一轮 chat（double-trigger）
     # 只在短窗口内生效，避免误伤后续真实提问。
@@ -203,21 +194,21 @@ async def checkWakeupWords(conn, text):
     if enable_wakeup_words_response_cache:
         response = wakeup_words_config.get_wakeup_response(voice_key)
 
-    # 缓存缺失：优先走 TTS 管线播报短句（同音色），并后台补齐缓存
-    # 注意：此时 ensure_agent_ready 已经在 listenMessageHandler 中完成
-    # voice_id 已经是正确的 agent 配置音色
-    if enable_wakeup_words_response_cache and (not response or not response.get("file_path")):
-        # 优先使用 agent 配置的 greeting，回退到默认配置
+    # 缓存命中：直接播放缓存的音频
+    # 缓存未命中或缓存关闭：走 TTS 管线播放 voice_opening
+    if not response or not response.get("file_path"):
+        # 优先使用 agent 配置的 voice_opening，回退到默认配置
         wakeup_text = _get_agent_greeting(conn) or WAKEUP_CONFIG.get("default_text", "我在这里哦！")
-        try:
-            # 后台生成本地 wav 缓存（下次唤醒可直接秒回）
-            if not _wakeup_response_lock.locked():
-                asyncio.create_task(wakeupWordsResponse(conn))
+        
+        # 尝试走 TTS 管线播放（使用正确的 agent 配置音色）
+        if hasattr(conn.tts, "tts_text_queue"):
+            try:
+                # 后台生成本地 wav 缓存（下次唤醒可直接秒回）
+                if enable_wakeup_words_response_cache and not _wakeup_response_lock.locked():
+                    asyncio.create_task(wakeupWordsResponse(conn))
 
-            # 直接走 TTS 管线播放（使用正确的 agent 配置音色）
-            if hasattr(conn.tts, "tts_text_queue"):
                 conn.logger.bind(tag=TAG).info(
-                    f"唤醒词缓存未命中(voice_key={voice_key}), 使用TTS短句播报(正确音色)"
+                    f"唤醒词缓存未命中(voice_key={voice_key}), 使用TTS播放voice_opening"
                 )
                 conn.client_abort = False
                 wakeup_sentence_id = str(uuid.uuid4().hex)
@@ -250,19 +241,15 @@ async def checkWakeupWords(conn, text):
                 # 补充对话（用于上报/上下文一致性）
                 conn.dialogue.put(Message(role="assistant", content=wakeup_text))
                 return True
-        except Exception as e:
-            conn.logger.bind(tag=TAG).warning(f"TTS唤醒短句播报失败，回退到固定录音: {e}")
-            response = None
-
-    # 若缓存关闭或 TTS 播报失败：回退到固定本地录音（最快，但可能与自定义音色不一致）
-    if not response or not response.get("file_path"):
-        # 优先使用 agent 配置的 greeting
-        fallback_text = _get_agent_greeting(conn) or WAKEUP_CONFIG.get("default_text", "我在这里哦！")
+            except Exception as e:
+                conn.logger.bind(tag=TAG).warning(f"TTS唤醒短句播报失败，回退到固定录音: {e}")
+        
+        # TTS 不可用时回退到固定录音
         response = {
             "voice": "default",
             "file_path": "config/assets/wakeup_words_short.wav",
             "time": 0,
-            "text": fallback_text,
+            "text": wakeup_text,
         }
 
     try:
@@ -304,7 +291,7 @@ async def wakeupWordsResponse(conn):
     生成唤醒词回复的 TTS 缓存。
     
     优先级：
-    1. Agent 配置的 greeting
+    1. Agent 配置的 voice_opening
     2. 从默认回复列表随机选择
     """
     if not conn.tts:
@@ -319,7 +306,7 @@ async def wakeupWordsResponse(conn):
         if hasattr(conn.tts, "reference_id") and not getattr(conn.tts, "reference_id", None):
             return
 
-        # 优先使用 agent 配置的 greeting，回退到随机默认回复
+        # 优先使用 agent 配置的 voice_opening，回退到随机默认回复
         result = _get_agent_greeting(conn) or random.choice(WAKEUP_CONFIG["responses"])
         if not result or len(result) == 0:
             return
