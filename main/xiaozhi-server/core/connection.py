@@ -1734,13 +1734,29 @@ class ConnectionHandler:
         
         Handles:
         1. Get text from asr_text_buffer
-        2. Clear the buffer
-        3. Start chat with the accumulated text
-        4. Report ASR message
+        2. Check for exit intent first (bypass min_interrupt_text_length for exit)
+        3. Clear the buffer
+        4. Start chat with the accumulated text
+        5. Report ASR message
         """
         from core.handle.receiveAudioHandle import startToChat
+        from core.handle.intentHandler import check_direct_exit
+        from core.utils.util import remove_punctuation_and_length
         
         full_text = self.asr_text_buffer
+        if not full_text or not full_text.strip():
+            return
+        
+        # 优先检查退出意图（不受 min_interrupt_text_length 限制）
+        # 这确保 "goodbye"、"bye"、"再见" 等短文本也能正确触发退出
+        _, filtered_text = remove_punctuation_and_length(full_text)
+        is_exit = await check_direct_exit(self, filtered_text)
+        if is_exit:
+            # 退出意图已处理，清空 buffer 并返回
+            self.asr_text_buffer = ""
+            return
+        
+        # 非退出意图：检查最小文本长度
         if len(tokenize.split_words(full_text, ignore_punctuation=True, split_character=True)) < self.min_interrupt_text_length:
             return
         
