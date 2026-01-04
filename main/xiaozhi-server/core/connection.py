@@ -178,6 +178,8 @@ class ConnectionHandler:
 
         # 是否在聊天结束后关闭连接
         self.close_after_chat = False
+        # 防止重复关闭的标志
+        self._closing = False
         self.load_function_plugin = False
         self.intent_type = "nointent"
 
@@ -1771,11 +1773,32 @@ class ConnectionHandler:
         enqueue_asr_report(self, full_text, [], report_time=asr_report_time)
 
     async def close(self, ws=None):
-        """资源清理方法"""
+        """资源清理方法
+        
+        Args:
+            ws: 可选的 WebSocket 对象，如果不传则使用 self.websocket
+        """
+        # 防止重复关闭：使用原子标志确保只执行一次
+        if getattr(self, "_closing", False):
+            self.logger.bind(tag=TAG).debug(
+                f"跳过重复的 close() 调用 (Device={self.device_id})"
+            )
+            return
+        self._closing = True
+        
         self.logger.bind(tag=TAG).info(
             f"🧹 [开始清理] Device={self.device_id} | IP={self.client_ip} | Session={self.session_id[:8]}..."
         )
+        
+        # 确定要关闭的 WebSocket 对象
+        ws_to_close = ws or self.websocket
+        
         try:
+            # ========== 第一步：优先关闭 WebSocket（确保发送 close 帧）==========
+            # 必须在清理其他资源之前发送 close 帧，否则客户端会收到 1006（异常关闭）
+            await self._close_websocket_gracefully(ws_to_close)
+            
+            # ========== 第二步：清理其他资源 ==========
             # 清理音频缓冲区
             if hasattr(self, "audio_buffer"):
                 self.audio_buffer.clear()
@@ -1839,42 +1862,6 @@ class ConnectionHandler:
                 except Exception as e:
                     self.logger.bind(tag=TAG).warning(f"waiting for report queue timeout or failed: {e}")
 
-            # 关闭WebSocket连接
-            try:
-                if ws:
-                    # 安全地检查WebSocket状态并关闭
-                    try:
-                        if hasattr(ws, "closed") and not ws.closed:
-                            await ws.close()
-                        elif hasattr(ws, "state") and ws.state.name != "CLOSED":
-                            await ws.close()
-                        else:
-                            # 如果没有closed属性，直接尝试关闭
-                            await ws.close()
-                    except Exception:
-                        # 如果关闭失败，忽略错误
-                        pass
-                elif self.websocket:
-                    try:
-                        if (
-                            hasattr(self.websocket, "closed")
-                            and not self.websocket.closed
-                        ):
-                            await self.websocket.close()
-                        elif (
-                            hasattr(self.websocket, "state")
-                            and self.websocket.state.name != "CLOSED"
-                        ):
-                            await self.websocket.close()
-                        else:
-                            # 如果没有closed属性，直接尝试关闭
-                            await self.websocket.close()
-                    except Exception:
-                        # 如果关闭失败，忽略错误
-                        pass
-            except Exception as ws_error:
-                self.logger.bind(tag=TAG).error(f"关闭WebSocket连接时出错: {ws_error}")
-
             if self.tts:
                 await self.tts.close()
 
@@ -1895,6 +1882,42 @@ class ConnectionHandler:
             # 确保停止事件被设置
             if self.stop_event:
                 self.stop_event.set()
+
+    async def _close_websocket_gracefully(self, ws) -> None:
+        """优雅关闭 WebSocket 连接
+        
+        发送正确的 close 帧（code=1000）确保客户端收到正常关闭信号，
+        而不是 1006（异常关闭）。
+        
+        Args:
+            ws: WebSocket 对象
+        """
+        if not ws:
+            return
+        
+        try:
+            # 检查 WebSocket 状态
+            is_closed = False
+            if hasattr(ws, "closed"):
+                is_closed = ws.closed
+            elif hasattr(ws, "state"):
+                is_closed = ws.state.name == "CLOSED"
+            
+            if is_closed:
+                self.logger.bind(tag=TAG).debug("WebSocket 已关闭，跳过 close() 调用")
+                return
+            
+            # 发送正常关闭帧 (RFC 6455: code=1000 表示正常关闭)
+            self.logger.bind(tag=TAG).info("🔌 [主动关闭] 发送 WebSocket close 帧 (code=1000)")
+            await ws.close(code=1000, reason="Normal closure")
+            self.logger.bind(tag=TAG).info("✅ [关闭成功] WebSocket 已正常关闭")
+            
+        except Exception as e:
+            # 记录关闭失败的原因（帮助调试）
+            error_type = type(e).__name__
+            self.logger.bind(tag=TAG).warning(
+                f"⚠️ [关闭警告] WebSocket close 失败: {error_type}: {e}"
+            )
 
     def clear_queues(self):
         """clear TTS task queues (except report_queue, which is handled by close method)"""
