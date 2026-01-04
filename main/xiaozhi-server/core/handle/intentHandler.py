@@ -4,7 +4,6 @@ import uuid
 import asyncio
 from core.utils.dialogue import Message
 from core.providers.tts.dto.dto import ContentType
-from core.handle.helloHandle import checkWakeupWords
 from plugins_func.register import Action, ActionResponse
 from core.handle.sendAudioHandle import send_stt_message
 from core.utils.util import remove_punctuation_and_length
@@ -27,7 +26,7 @@ EXIT_PHRASES = frozenset({
     "聊完了", "说完了", "没事了", "好了",
     "结束", "结束对话", "结束聊天",
     # 退下/离开
-    "退下", "退下吧", "下去吧",
+    "退下", "退下吧", "退下了", "下去吧",
     
     # ========== 英文 ==========
     # Goodbye phrases
@@ -93,10 +92,6 @@ async def handle_user_intent(conn, text):
     # 检查是否有明确的退出命令
     _, filtered_text = remove_punctuation_and_length(text)
     if await check_direct_exit(conn, filtered_text):
-        return True
-
-    # 检查是否是唤醒词
-    if await checkWakeupWords(conn, filtered_text):
         return True
 
     if conn.intent_type == "function_call":
