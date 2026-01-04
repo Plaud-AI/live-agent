@@ -286,9 +286,6 @@ class TTSProvider(TTSProviderBase):
         while not self.conn.stop_event.is_set():
             try:
                 message = self.tts_text_queue.get(timeout=1)
-                logger.bind(tag=TAG).debug(
-                    f"Received TTS task | {message.sentence_type.name} | {message.content_type.name}"
-                )
 
                 if message.sentence_type == SentenceType.FIRST:
                     self.conn.client_abort = False
@@ -337,22 +334,15 @@ class TTSProvider(TTSProviderBase):
                     if message.content_detail:
                         self._session_text_buffer.append(message.content_detail)
                         self._text_buffer += message.content_detail
-                        logger.bind(tag=TAG).debug(
-                            f"Text buffer updated: +'{message.content_detail}', total len={len(self._text_buffer)}"
-                        )
 
                         # Record TTS first text input time
                         if self.conn._latency_tts_first_text_time is None:
                             self.conn._latency_tts_first_text_time = time.time() * 1000
-                            logger.bind(tag=TAG).debug("📝 [Latency] TTS received first text")
 
                         # Extract and send segments by punctuation
                         while True:
                             segment = self._extract_segment()
                             if not segment:
-                                logger.bind(tag=TAG).debug(
-                                    f"No segment extracted, waiting for punctuation. Buffer: {self._text_buffer[self._processed_idx:][:30]}..."
-                                )
                                 break
                             try:
                                 future = asyncio.run_coroutine_threadsafe(
@@ -605,15 +595,12 @@ class TTSProvider(TTSProviderBase):
         if emotion:
             minimax_emotion = self.EMOTION_MAP.get(emotion)
             if minimax_emotion:
-                logger.bind(tag=TAG).debug(f"Emotion tag mapped: ({emotion}) -> {minimax_emotion}")
                 # Update voice_setting emotion for next request
                 self.voice_setting["emotion"] = minimax_emotion
             text = clean_text
 
         if not text.strip():
             return
-
-        logger.bind(tag=TAG).info(f"Sending text to MiniMax: {text[:50]}...")
 
         continue_event = {
             "event": "task_continue",
@@ -648,10 +635,7 @@ class TTSProvider(TTSProviderBase):
                     except asyncio.TimeoutError:
                         continue  # Check abort again
 
-                    logger.bind(tag=TAG).debug(f"Monitor received: {msg[:200]}...")
-
                     response = json.loads(msg)
-                    logger.bind(tag=TAG).debug(f"Monitor received: {str(response)[:200]}...")
 
                     event = response.get("event")
 
@@ -670,9 +654,6 @@ class TTSProvider(TTSProviderBase):
                     elif "data" in response and "audio" in response["data"]:
                         audio_hex = response["data"]["audio"]
                         is_final = response.get("is_final", False)
-                        logger.bind(tag=TAG).debug(
-                            f"Received audio chunk, len={len(audio_hex) if audio_hex else 0}, is_final={is_final}"
-                        )
 
                         if audio_hex and not self.conn.client_abort:
                             # Send FIRST before first audio
@@ -706,9 +687,6 @@ class TTSProvider(TTSProviderBase):
                         # Check if this is the final audio for current segment
                         if is_final:
                             self._received_final_count += 1
-                            logger.bind(tag=TAG).debug(
-                                f"Received is_final, count: {self._received_final_count}/{self._sent_continue_count}"
-                            )
 
                             # Only send LAST when:
                             # 1. _session_end is True (all text from LLM received)
@@ -747,8 +725,6 @@ class TTSProvider(TTSProviderBase):
                                 self._session_end = False
                                 self._sent_continue_count = 0
                                 self._received_final_count = 0
-                                # Don't reset _task_started - we'll continue the same task
-                                logger.bind(tag=TAG).debug("Round completed, keeping task active for next round")
 
                 except asyncio.TimeoutError:
                     logger.bind(tag=TAG).warning("WebSocket receive timeout")

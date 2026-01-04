@@ -8,13 +8,13 @@ from repositories import VoiceModel, Voice
 from repositories.voice import VoiceCategory, VoiceProvider
 from repositories import FileRepository
 from datetime import datetime, timezone
-from config.logger import setup_logging
+from config.logger import get_logger
 from utils.exceptions import NotFoundException
 from utils.ulid import generate_voice_id
 
 
 TAG = __name__
-logger = setup_logging(TAG)
+logger = get_logger(TAG)
 
 # Default sample text for TTS preview when user doesn't provide text
 DEFAULT_SAMPLE_TEXT = {

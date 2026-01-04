@@ -645,7 +645,8 @@ selected_module:
   LLM: OpenRouterLLM
   VLLM: ChatGLMVLLM
   # TTS: FishDualStreamTTS
-  TTS: FishSingleStreamTTS
+  # TTS: FishSingleStreamTTS
+  TTS: MinimaxDualStreamTTS
   # TODO: temporarily, fish speech doesn't reuse the wesocket connection, need to discuss further.
   # TTS: FishSpeech
   Memory: memu

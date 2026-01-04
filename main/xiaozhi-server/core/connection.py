@@ -178,6 +178,8 @@ class ConnectionHandler:
 
         # 是否在聊天结束后关闭连接
         self.close_after_chat = False
+        # 防止重复关闭的标志
+        self._closing = False
         self.load_function_plugin = False
         self.intent_type = "nointent"
 
@@ -1123,6 +1125,7 @@ class ConnectionHandler:
         # greeting config
         self._greeting_config["enable_greeting"] = private_config.get("enable_greeting", False)
         self._greeting_config["greeting"] = private_config.get("greeting", None)
+        self._greeting_config["voice_opening"] = private_config.get("voice_opening", None)  # For wakeup greeting
         self._voice_closing = private_config.get("voice_closing", self._voice_closing)
         self._language = private_config.get("language", self._language)
 
@@ -1733,13 +1736,29 @@ class ConnectionHandler:
         
         Handles:
         1. Get text from asr_text_buffer
-        2. Clear the buffer
-        3. Start chat with the accumulated text
-        4. Report ASR message
+        2. Check for exit intent first (bypass min_interrupt_text_length for exit)
+        3. Clear the buffer
+        4. Start chat with the accumulated text
+        5. Report ASR message
         """
         from core.handle.receiveAudioHandle import startToChat
+        from core.handle.intentHandler import check_direct_exit
+        from core.utils.util import remove_punctuation_and_length
         
         full_text = self.asr_text_buffer
+        if not full_text or not full_text.strip():
+            return
+        
+        # 优先检查退出意图（不受 min_interrupt_text_length 限制）
+        # 这确保 "goodbye"、"bye"、"再见" 等短文本也能正确触发退出
+        _, filtered_text = remove_punctuation_and_length(full_text)
+        is_exit = await check_direct_exit(self, filtered_text)
+        if is_exit:
+            # 退出意图已处理，清空 buffer 并返回
+            self.asr_text_buffer = ""
+            return
+        
+        # 非退出意图：检查最小文本长度
         if len(tokenize.split_words(full_text, ignore_punctuation=True, split_character=True)) < self.min_interrupt_text_length:
             return
         
@@ -1754,11 +1773,32 @@ class ConnectionHandler:
         enqueue_asr_report(self, full_text, [], report_time=asr_report_time)
 
     async def close(self, ws=None):
-        """资源清理方法"""
+        """资源清理方法
+        
+        Args:
+            ws: 可选的 WebSocket 对象，如果不传则使用 self.websocket
+        """
+        # 防止重复关闭：使用原子标志确保只执行一次
+        if getattr(self, "_closing", False):
+            self.logger.bind(tag=TAG).debug(
+                f"跳过重复的 close() 调用 (Device={self.device_id})"
+            )
+            return
+        self._closing = True
+        
         self.logger.bind(tag=TAG).info(
             f"🧹 [开始清理] Device={self.device_id} | IP={self.client_ip} | Session={self.session_id[:8]}..."
         )
+        
+        # 确定要关闭的 WebSocket 对象
+        ws_to_close = ws or self.websocket
+        
         try:
+            # ========== 第一步：优先关闭 WebSocket（确保发送 close 帧）==========
+            # 必须在清理其他资源之前发送 close 帧，否则客户端会收到 1006（异常关闭）
+            await self._close_websocket_gracefully(ws_to_close)
+            
+            # ========== 第二步：清理其他资源 ==========
             # 清理音频缓冲区
             if hasattr(self, "audio_buffer"):
                 self.audio_buffer.clear()
@@ -1822,42 +1862,6 @@ class ConnectionHandler:
                 except Exception as e:
                     self.logger.bind(tag=TAG).warning(f"waiting for report queue timeout or failed: {e}")
 
-            # 关闭WebSocket连接
-            try:
-                if ws:
-                    # 安全地检查WebSocket状态并关闭
-                    try:
-                        if hasattr(ws, "closed") and not ws.closed:
-                            await ws.close()
-                        elif hasattr(ws, "state") and ws.state.name != "CLOSED":
-                            await ws.close()
-                        else:
-                            # 如果没有closed属性，直接尝试关闭
-                            await ws.close()
-                    except Exception:
-                        # 如果关闭失败，忽略错误
-                        pass
-                elif self.websocket:
-                    try:
-                        if (
-                            hasattr(self.websocket, "closed")
-                            and not self.websocket.closed
-                        ):
-                            await self.websocket.close()
-                        elif (
-                            hasattr(self.websocket, "state")
-                            and self.websocket.state.name != "CLOSED"
-                        ):
-                            await self.websocket.close()
-                        else:
-                            # 如果没有closed属性，直接尝试关闭
-                            await self.websocket.close()
-                    except Exception:
-                        # 如果关闭失败，忽略错误
-                        pass
-            except Exception as ws_error:
-                self.logger.bind(tag=TAG).error(f"关闭WebSocket连接时出错: {ws_error}")
-
             if self.tts:
                 await self.tts.close()
 
@@ -1878,6 +1882,42 @@ class ConnectionHandler:
             # 确保停止事件被设置
             if self.stop_event:
                 self.stop_event.set()
+
+    async def _close_websocket_gracefully(self, ws) -> None:
+        """优雅关闭 WebSocket 连接
+        
+        发送正确的 close 帧（code=1000）确保客户端收到正常关闭信号，
+        而不是 1006（异常关闭）。
+        
+        Args:
+            ws: WebSocket 对象
+        """
+        if not ws:
+            return
+        
+        try:
+            # 检查 WebSocket 状态
+            is_closed = False
+            if hasattr(ws, "closed"):
+                is_closed = ws.closed
+            elif hasattr(ws, "state"):
+                is_closed = ws.state.name == "CLOSED"
+            
+            if is_closed:
+                self.logger.bind(tag=TAG).debug("WebSocket 已关闭，跳过 close() 调用")
+                return
+            
+            # 发送正常关闭帧 (RFC 6455: code=1000 表示正常关闭)
+            self.logger.bind(tag=TAG).info("🔌 [主动关闭] 发送 WebSocket close 帧 (code=1000)")
+            await ws.close(code=1000, reason="Normal closure")
+            self.logger.bind(tag=TAG).info("✅ [关闭成功] WebSocket 已正常关闭")
+            
+        except Exception as e:
+            # 记录关闭失败的原因（帮助调试）
+            error_type = type(e).__name__
+            self.logger.bind(tag=TAG).warning(
+                f"⚠️ [关闭警告] WebSocket close 失败: {error_type}: {e}"
+            )
 
     def clear_queues(self):
         """clear TTS task queues (except report_queue, which is handled by close method)"""
@@ -1913,30 +1953,40 @@ class ConnectionHandler:
         #     self.vad.reset_filter()
         self.logger.bind(tag=TAG).debug("VAD states reset.")
 
-    def _interrupt_by_audio(self, speech_duration_ms: float) -> None:
+    def _interrupt_by_audio(self, speech_duration_ms: float, probability: float = 1.0) -> None:
         """Check interruption conditions and trigger interrupt if met
         
-        Interruption strategy:
-        1. Interruption must be enabled
-        2. TTS must be speaking (client_is_speaking = True)
-        3. Not in manual listen mode
-        4. Speech duration >= min_interrupt_speech_duration_ms
-        5. For streaming ASR: text buffer length >= min_interrupt_text_length
-           For non-streaming ASR: skip text check (not available during speech)
+        行业最佳实践：连续高概率帧确认机制（Consecutive High-Confidence Frame Confirmation）
+        
+        设计原理：
+        1. 单帧 VAD 检测可能因回声、噪音、瞬时干扰而误报
+        2. 真正的用户打断会产生连续的高概率语音帧
+        3. 通过要求连续 N 帧高概率语音来过滤误触发
+        
+        打断触发条件：
+        1. 打断功能已启用
+        2. TTS 正在播放（client_is_speaking = True）
+        3. 非手动拾音模式
+        4. 首轮对话已完成
+        5. 累计语音时长 >= 阈值（默认 500ms）
+        6. **连续高概率帧数 >= 阈值**（本次新增，行业最佳实践）
+        7. 对于流式 ASR：文本长度 >= 阈值
         
         Args:
             speech_duration_ms: Current speech duration in milliseconds
+            probability: VAD probability for current frame (0.0-1.0)
         """
-        # 调试日志：记录打断检测条件
-        if self.client_is_speaking:
-            self.logger.bind(tag=TAG).debug(
-                f"🔍 [打断检测] 条件检查: enable={self.enable_interruption}, "
-                f"speaking={self.client_is_speaking}, mode={self.client_listen_mode}, "
-                f"defer={getattr(self, 'defer_agent_init', False)}, "
-                f"first_done={getattr(self, 'first_dialogue_completed', False)}, "
-                f"speech_ms={speech_duration_ms:.0f}"
-            )
+        # ============== 打断检测配置（行业最佳实践参数） ==============
+        # 高概率阈值：低于此值的帧被认为是噪音/回声，不计入连续帧
+        # Silero VAD 默认激活阈值是 0.5，这里使用 0.45 略低于激活阈值
+        MIN_INTERRUPT_PROBABILITY = 0.45
         
+        # 连续高概率帧数阈值：需要连续 N 帧高概率才触发打断
+        # 假设 VAD 帧率约 30fps（每帧 ~33ms），3 帧约 100ms
+        # 这个时长足以过滤回声和瞬时噪音，同时保持打断响应速度
+        MIN_CONSECUTIVE_HIGH_PROB_FRAMES = 3
+        
+        # ============== 基础条件检查 ==============
         if not self.enable_interruption:
             return
         if not self.client_is_speaking:
@@ -1944,22 +1994,49 @@ class ConnectionHandler:
         if self.client_listen_mode == "manual":
             return
         # 在 agent 配置加载完成之前禁用打断检测
-        # defer_agent_init=True 表示正在等待 ensure_agent_ready 完成
-        # 这样可以避免在 agent 配置加载期间误触发打断
         if getattr(self, "defer_agent_init", False):
             return
         # 首轮对话完成之前禁用打断检测
-        # 避免唤醒词响应期间设备继续发送音频被误判为打断
         if not getattr(self, "first_dialogue_completed", False):
             return
         
-        # Check speech duration threshold
+        # ============== 连续高概率帧确认机制 ==============
+        # 初始化连续帧计数器（懒加载）
+        if not hasattr(self, '_interrupt_consecutive_high_prob_frames'):
+            self._interrupt_consecutive_high_prob_frames = 0
+        
+        # 更新连续帧计数
+        if probability >= MIN_INTERRUPT_PROBABILITY:
+            self._interrupt_consecutive_high_prob_frames += 1
+        else:
+            # 低概率帧打断连续计数，重新开始
+            if self._interrupt_consecutive_high_prob_frames > 0:
+                self.logger.bind(tag=TAG).debug(
+                    f"🔍 [打断检测] 连续帧中断: prob={probability:.2f} < {MIN_INTERRUPT_PROBABILITY}, "
+                    f"连续帧数={self._interrupt_consecutive_high_prob_frames} 重置为 0"
+                )
+            self._interrupt_consecutive_high_prob_frames = 0
+            return  # 低概率帧，跳过后续检查
+        
+        # 调试日志
+        self.logger.bind(tag=TAG).debug(
+            f"🔍 [打断检测] 条件检查: enable={self.enable_interruption}, "
+            f"speaking={self.client_is_speaking}, mode={self.client_listen_mode}, "
+            f"first_done={getattr(self, 'first_dialogue_completed', False)}, "
+            f"speech_ms={speech_duration_ms:.0f}, prob={probability:.2f}, "
+            f"consecutive_frames={self._interrupt_consecutive_high_prob_frames}"
+        )
+        
+        # 检查连续帧数是否达到阈值
+        if self._interrupt_consecutive_high_prob_frames < MIN_CONSECUTIVE_HIGH_PROB_FRAMES:
+            return  # 连续帧数不足，等待更多帧
+        
+        # ============== 语音时长检查 ==============
         speech_ok = speech_duration_ms >= self.min_interrupt_speech_duration_ms
         if not speech_ok:
             return
         
-        # Check text length threshold (only for streaming ASR)
-        # Non-streaming ASR doesn't have real-time text during speech
+        # ============== 流式 ASR 文本长度检查 ==============
         from core.providers.asr.dto import InterfaceType
         is_streaming_asr = (
             self.asr is not None 
@@ -1980,14 +2057,20 @@ class ConnectionHandler:
                 return
             log_msg = (
                 f"Interrupt triggered (streaming): speech={speech_duration_ms:.0f}ms, "
-                f"text_len={asr_text_len} >= {self.min_interrupt_text_length}"
+                f"text_len={asr_text_len}, consecutive_high_prob_frames={self._interrupt_consecutive_high_prob_frames}"
             )
         else:
-            log_msg = f"Interrupt triggered (non-streaming): speech={speech_duration_ms:.0f}ms >= {self.min_interrupt_speech_duration_ms:.0f}ms"
+            log_msg = (
+                f"Interrupt triggered (non-streaming): speech={speech_duration_ms:.0f}ms, "
+                f"prob={probability:.2f}, consecutive_high_prob_frames={self._interrupt_consecutive_high_prob_frames}"
+            )
         
         self.logger.bind(tag=TAG).info(log_msg)
         
-        # Trigger interrupt
+        # ============== 触发打断 ==============
+        # 重置连续帧计数器
+        self._interrupt_consecutive_high_prob_frames = 0
+        
         self.client_abort = True
         self.clear_queues()
         # Send stop message to client

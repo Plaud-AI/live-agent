@@ -23,10 +23,10 @@ from schemas.voice import (
 )
 from utils.response import success_response, error_response
 from api.auth import get_current_user_id
-from config.logger import setup_logging
+from config.logger import get_logger
 
 TAG = __name__
-logger = setup_logging(TAG)
+logger = get_logger(TAG)
 router = APIRouter()
 
 

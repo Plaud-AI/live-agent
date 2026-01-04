@@ -164,20 +164,25 @@ class MemoryProvider(MemoryProviderBase):
     async def save_memory(self, msgs, context=None):
         if not self.use_memu:
             return None
-        if len(msgs) < 2:
-            return None
 
         try:
             # Format the conversation as a single text string for memU
-            conversation_text = ""
+            # Filter out system messages first
+            conversation_lines = []
             for message in msgs:
                 if message.role == "system":
                     continue
                 role_name = self.user_name if message.role == "user" else self.agent_name
-                conversation_text += f"{role_name}: {message.content}\n"
+                conversation_lines.append(f"{role_name}: {message.content}")
 
-            if not conversation_text.strip():
+            # Memu API requires at least 3 messages
+            if len(conversation_lines) < 3:
+                logger.bind(tag=TAG).debug(
+                    f"跳过记忆保存：消息数量不足（需要至少3条，当前{len(conversation_lines)}条）"
+                )
                 return None
+
+            conversation_text = "\n".join(conversation_lines)
 
             # 准备session_date参数（MEMu SDK支持的参数）
             import time

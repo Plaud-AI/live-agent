@@ -31,6 +31,11 @@ from .groq import (
     init_groq,
     close_groq,
 )
+from .minimax import (
+    get_minimax_tts,
+    init_minimax_tts,
+    close_minimax_tts,
+)
 
 __all__ = [
     # Database
@@ -57,5 +62,9 @@ __all__ = [
     "get_groq",
     "init_groq",
     "close_groq",
+    # MiniMax
+    "get_minimax_tts",
+    "init_minimax_tts",
+    "close_minimax_tts",
 ]
 

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings, setup_logging, get_logger
-from infra import init_db, close_db, init_s3, close_s3, init_fish_audio, close_fish_audio, init_openai, close_openai, init_groq, close_groq
+from infra import init_db, close_db, init_s3, close_s3, init_fish_audio, close_fish_audio, init_openai, close_openai, init_groq, close_groq, init_minimax_tts, close_minimax_tts
 from api.v1 import api_router
 from utils.exceptions import APIException
 
@@ -46,6 +46,8 @@ async def lifespan(app: FastAPI):
     logger.info("OpenAI client initialized")
     await init_groq()
     logger.info("Groq client initialized")
+    await init_minimax_tts()
+    logger.info("MiniMax TTS client initialized")
     
     yield
     
@@ -61,6 +63,8 @@ async def lifespan(app: FastAPI):
     logger.info("OpenAI client closed")
     await close_groq()
     logger.info("Groq client closed")
+    await close_minimax_tts()
+    logger.info("MiniMax TTS client closed")
 
 
 # Create FastAPI application

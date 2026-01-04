@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_STT_MODEL: str = "whisper-large-v3"
     
+    # MiniMax TTS Configuration
+    MINIMAX_API_KEY: str = ""  # Optional, required for MiniMax TTS
+    MINIMAX_API_URL: str = "https://api.minimax.io/v1/t2a_v2"
+    MINIMAX_MODEL: str = "speech-2.6-turbo"
+    MINIMAX_DEFAULT_VOICE_ID: str = "female-shaonv"
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

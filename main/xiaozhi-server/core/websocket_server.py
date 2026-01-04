@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 
 import websockets
@@ -12,6 +13,11 @@ from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
 
 TAG = __name__
+
+# 抑制 websockets 库的握手失败日志（网络扫描器造成的噪音）
+# 这些请求已在 _http_response 中被正确处理并记录 WARNING
+logging.getLogger("websockets.server").setLevel(logging.ERROR)
+logging.getLogger("websockets.protocol").setLevel(logging.ERROR)
 
 
 # WebSocket 关闭码说明
@@ -201,16 +207,18 @@ class WebSocketServer:
             # 强制关闭连接（如果还没有关闭的话）
             try:
                 # 安全地检查WebSocket状态并关闭
-                if hasattr(websocket, "closed") and not websocket.closed:
-                    await websocket.close()
-                elif hasattr(websocket, "state") and websocket.state.name != "CLOSED":
-                    await websocket.close()
-                else:
-                    # 如果没有closed属性，直接尝试关闭
-                    await websocket.close()
+                is_closed = False
+                if hasattr(websocket, "closed"):
+                    is_closed = websocket.closed
+                elif hasattr(websocket, "state"):
+                    is_closed = websocket.state.name == "CLOSED"
+                
+                if not is_closed:
+                    # 发送正常关闭帧 (RFC 6455: code=1000 表示正常关闭)
+                    await websocket.close(code=1000, reason="Server cleanup")
             except Exception as close_error:
-                self.logger.bind(tag=TAG).error(
-                    f"服务器端强制关闭连接时出错: {close_error}"
+                self.logger.bind(tag=TAG).warning(
+                    f"服务器端关闭连接时出错（可能已关闭）: {close_error}"
                 )
 
     async def _http_response(self, websocket, request_headers):
