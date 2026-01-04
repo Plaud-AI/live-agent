@@ -270,14 +270,14 @@ class VADStream(ABC):
                 conn._vad_frame_count_during_tts = 0
             conn._vad_frame_count_during_tts += 1
             if conn._vad_frame_count_during_tts % 50 == 1:
-                logger.bind(tag=TAG).info(
+                logger.bind(tag=TAG).debug(
                     f"📊 [打断调试] VAD帧处理: frame={conn._vad_frame_count_during_tts}, "
                     f"speaking={event.speaking}, prob={event.probability:.2f}, "
                     f"client_have_voice={conn.client_have_voice}"
                 )
         else:
             if hasattr(conn, '_vad_frame_count_during_tts') and conn._vad_frame_count_during_tts > 0:
-                logger.bind(tag=TAG).info(
+                logger.bind(tag=TAG).debug(
                     f"📊 [打断调试] TTS播放期间共处理 {conn._vad_frame_count_during_tts} 个VAD帧"
                 )
                 conn._vad_frame_count_during_tts = 0
