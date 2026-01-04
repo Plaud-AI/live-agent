@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 
 import websockets
@@ -12,6 +13,11 @@ from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
 
 TAG = __name__
+
+# 抑制 websockets 库的握手失败日志（网络扫描器造成的噪音）
+# 这些请求已在 _http_response 中被正确处理并记录 WARNING
+logging.getLogger("websockets.server").setLevel(logging.ERROR)
+logging.getLogger("websockets.protocol").setLevel(logging.ERROR)
 
 
 # WebSocket 关闭码说明
