@@ -389,14 +389,14 @@ class ConnectionHandler:
                 self._audio_recv_count_during_tts += 1
                 self._audio_bytes_during_tts += len(message)
                 if self._audio_recv_count_during_tts % 50 == 1:
-                    self.logger.bind(tag=TAG).info(
+                    self.logger.bind(tag=TAG).debug(
                         f"📥 [打断调试] TTS播放期间收到音频包: count={self._audio_recv_count_during_tts}, "
                         f"this_bytes={len(message)}, total_bytes={self._audio_bytes_during_tts}"
                     )
             else:
                 # TTS 结束后重置计数
                 if hasattr(self, '_audio_recv_count_during_tts') and self._audio_recv_count_during_tts > 0:
-                    self.logger.bind(tag=TAG).info(
+                    self.logger.bind(tag=TAG).debug(
                         f"📥 [打断调试] TTS播放期间共收到 {self._audio_recv_count_during_tts} 个音频包, "
                         f"总字节数={self._audio_bytes_during_tts}"
                     )
@@ -575,7 +575,7 @@ class ConnectionHandler:
                 # wait for 2 seconds to open the audio channels
                 open_tts_audio_future.result(timeout=2)
 
-                self.logger.bind(tag=TAG).info("TTS audio channels opened")
+                # self.logger.bind(tag=TAG).info("TTS audio channels opened")
                 # 预热唤醒词短回复缓存：确保首唤醒尽可能命中本地 wav（同音色、低时延）
                 try:
                     from core.handle.helloHandle import prewarm_wakeup_reply_cache
