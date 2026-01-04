@@ -143,10 +143,12 @@ services:
     networks:
       - xiaozhi-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # 增强健康检查：不仅检查连接，还验证密码认证
+      test: ["CMD-SHELL", "PGPASSWORD=postgres psql -U postgres -d live_agent -c 'SELECT 1' || exit 1"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   live-agent-minio:
     image: minio/minio:latest
