@@ -135,15 +135,22 @@ services:
       POSTGRES_DB: live_agent
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      # 允许 Docker 网络内的非 SSL 密码认证连接
+      # md5 认证允许非加密连接使用密码（解决 pg_hba.conf "no encryption" 问题）
+      POSTGRES_HOST_AUTH_METHOD: md5
+    # 安全警告：不要将 5432 暴露到公网！
+    # 容器间通过服务名通信，无需暴露端口
+    # 如需从宿主机调试，使用: "127.0.0.1:5432:5432"
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
     volumes:
       - live_agent_postgres_data:/var/lib/postgresql/data
       - ./live-agent-api/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     networks:
       - xiaozhi-network
     healthcheck:
-      # 增强健康检查：验证密码认证是否正确
       test: ["CMD-SHELL", "PGPASSWORD=postgres psql -U postgres -d live_agent -c 'SELECT 1' || exit 1"]
       interval: 5s
       timeout: 5s
