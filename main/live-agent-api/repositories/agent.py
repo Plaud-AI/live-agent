@@ -36,7 +36,7 @@ class AgentModel(Base):
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
     voice_opening: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_closing: Mapped[str | None] = mapped_column(Text, nullable=True)
-    wake_word: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Required for device binding
+    wake_word: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Optional wake word for device
     
     # Template reference (nullable - not all agents come from templates)
     template_id: Mapped[str | None] = mapped_column(String(50), nullable=True)

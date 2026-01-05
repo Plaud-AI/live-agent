@@ -98,10 +98,6 @@ class DeviceService:
         if agent.owner_id != owner_id:
             raise BadRequestException("Agent does not belong to you")
         
-        # Verify agent has wake_word configured (required for device binding)
-        if not agent.wake_word:
-            raise BadRequestException("Agent must have a wake word configured to bind to device")
-        
         # Check if binding already exists
         existing = await AgentDeviceBinding.get_binding(db, device_id, agent_id)
         if existing:
