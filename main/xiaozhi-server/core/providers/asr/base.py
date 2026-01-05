@@ -515,10 +515,17 @@ class ASRProviderBase(ABC):
         pass
 
     def save_audio_to_file(self, pcm_data: List[bytes], session_id: str) -> str:
-        """PCM数据保存为WAV文件"""
+        """
+        PCM数据保存为WAV文件
+        
+
+        """
         module_name = __name__.split(".")[-1]
         file_name = f"asr_{module_name}_{session_id}_{uuid.uuid4()}.wav"
         file_path = os.path.join(self.output_dir, file_name)
+
+ 
+        os.makedirs(os.path.dirname(file_path) or self.output_dir, exist_ok=True)
 
         with wave.open(file_path, "wb") as wf:
             wf.setnchannels(1)

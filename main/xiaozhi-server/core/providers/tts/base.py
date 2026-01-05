@@ -43,6 +43,9 @@ class TTSProviderBase(ABC):
         self.delete_audio_file = delete_audio_file
         self.audio_file_type = "wav"
         self.output_file = config.get("output_dir", "tmp/")
+        
+        self._ensure_output_dir()
+        
         self.tts_text_queue = queue.Queue[TTSMessageDTO]()
         # TODO: for long-term, we need to use TTSAudioDTO instead of tuple[SentenceType, Optional[bytes], Optional[str]]
         self.tts_audio_queue = queue.Queue[TTSAudioDTO | tuple[SentenceType, Optional[bytes], Optional[str]]]()
@@ -80,6 +83,17 @@ class TTSProviderBase(ABC):
         self.tts_stop_request = False
         self.processed_chars = 0
         self.is_first_sentence = True
+
+    def _ensure_output_dir(self) -> None:
+        """
+        确保输出目录存在（防御性编程）
+        
+        符合 SOLID 原则：
+        - SRP: 只负责确保目录存在
+        - OCP: 子类可以覆盖此方法扩展行为
+        """
+        if self.output_file:
+            os.makedirs(self.output_file, exist_ok=True)
 
     def generate_filename(self, extension=".wav"):
         return os.path.join(
