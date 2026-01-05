@@ -1267,16 +1267,51 @@ class ConnectionHandler:
         self._apply_agent_runtime_config(private_config)
         self.defer_agent_init = False
 
+        # 检查是否需要重新初始化 TTS（provider 变化时需要重新创建实例）
+        # 因为不同 provider 的 TTS 实例不兼容（如 MiniMax 用 voice_id，FishSpeech 用 reference_id）
+        need_reinit_tts = False
+        new_tts_module = self.config.get("selected_module", {}).get("TTS", "")
+        
+        if self.tts:
+            # 检测当前 TTS 实例类型与配置是否匹配
+            # TTS 类名都是 TTSProvider，需要通过模块路径推断配置类型
+            current_module = type(self.tts).__module__
+            current_tts_config_type = None
+            if "minimax_dual_stream" in current_module:
+                current_tts_config_type = "MinimaxDualStreamTTS"
+            elif "fish_single_stream" in current_module:
+                current_tts_config_type = "FishSingleStreamTTS"
+            elif "fish_dual_stream" in current_module:
+                current_tts_config_type = "FishDualStreamTTS"
+            elif "fishspeech" in current_module:
+                current_tts_config_type = "FishSpeech"
+            elif "minimax_httpstream" in current_module:
+                current_tts_config_type = "MinimaxTTSHTTPStream"
+            
+            if current_tts_config_type and current_tts_config_type != new_tts_module:
+                self.logger.bind(tag=TAG).info(
+                    f"🔄 TTS provider 变化: {current_tts_config_type} -> {new_tts_module}，需要重新初始化"
+                )
+                need_reinit_tts = True
+        
         # 更新已预初始化的 TTS 实例的 reference_id（voice_id）
-        # 因为预初始化时还没有 agent 配置，reference_id 为 null
-        # voice_id 可能在顶层或嵌套在 voice 对象中
+        # 仅当 TTS provider 未变化时才尝试更新（否则需要重新初始化）
         voice_id = private_config.get("voice_id")
         if not voice_id:
             voice_config = private_config.get("voice", {})
             voice_id = voice_config.get("voice_id") or voice_config.get("reference_id")
-        if voice_id and self.tts and hasattr(self.tts, "reference_id"):
-            self.tts.reference_id = voice_id
-            self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
+        
+        if not need_reinit_tts and voice_id and self.tts:
+            # 根据 TTS 类型更新对应的属性
+            if hasattr(self.tts, "reference_id"):
+                self.tts.reference_id = voice_id
+                self.logger.bind(tag=TAG).info(f"✅ 更新 TTS reference_id: {voice_id[:16]}...")
+            elif hasattr(self.tts, "voice_id"):
+                self.tts.voice_id = voice_id
+                # MiniMax 还需要更新 voice_setting
+                if hasattr(self.tts, "voice_setting"):
+                    self.tts.voice_setting["voice_id"] = voice_id
+                self.logger.bind(tag=TAG).info(f"✅ 更新 TTS voice_id: {voice_id[:16]}...")
             # voice 更新后，后台预热唤醒短回复缓存（避免首唤醒回退到固定录音）
             try:
                 from core.handle.helloHandle import prewarm_wakeup_reply_cache
@@ -1285,9 +1320,10 @@ class ConnectionHandler:
                 self.logger.bind(tag=TAG).debug(f"wakeup prewarm(schedule after voice update) failed: {e}")
 
         # 模块已在连接时预初始化，这里只需要确保 ASR 和 VAD stream 就绪
-        # 只有在模块未初始化时才重新初始化（正常情况下不会进入）
-        if not self.llm or not self.tts:
-            self.logger.bind(tag=TAG).warning("Modules not pre-initialized, initializing now...")
+        # 如果 TTS provider 变化，也需要重新初始化
+        if not self.llm or not self.tts or need_reinit_tts:
+            reason = "TTS provider changed" if need_reinit_tts else "Modules not pre-initialized"
+            self.logger.bind(tag=TAG).info(f"🔄 重新初始化模块: {reason}")
             try:
                 modules = initialize_modules(
                     self.logger,
