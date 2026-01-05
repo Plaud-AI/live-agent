@@ -109,18 +109,21 @@ class WebSocketServer:
             f"当前活动连接数={len(self.active_connections)}"
         )
         
+        # 解析 URL 查询参数，用于补充 Headers 中缺失的字段
+        from urllib.parse import parse_qs, urlparse
+        
+        request_path = websocket.request.path
+        query_params = {}
+        if request_path:
+            parsed_url = urlparse(request_path)
+            query_params = parse_qs(parsed_url.query)
+        
+        # 检查 device-id：优先使用 Headers，其次使用 URL 参数
         if headers.get("device-id", None) is None:
-            # 尝试从 URL 的查询参数中获取 device-id
-            from urllib.parse import parse_qs, urlparse
-
-            # 从 WebSocket 请求中获取路径
-            request_path = websocket.request.path
             if not request_path:
                 self.logger.bind(tag=TAG).error(f"🔴 [连接拒绝] IP={client_ip} | 原因=无法获取请求路径")
                 await websocket.close()
                 return
-            parsed_url = urlparse(request_path)
-            query_params = parse_qs(parsed_url.query)
             if "device-id" not in query_params:
                 self.logger.bind(tag=TAG).warning(
                     f"⚠️ [连接测试] IP={client_ip} | 原因=缺少device-id，可能是端口探测"
@@ -131,17 +134,14 @@ class WebSocketServer:
             else:
                 websocket.request.headers["device-id"] = query_params["device-id"][0]
                 device_id = query_params["device-id"][0]  # 更新设备ID
-            if "client-id" in query_params:
-                websocket.request.headers["client-id"] = query_params["client-id"][0]
-            if "agent-id" in query_params:
-                websocket.request.headers["agent-id"] = query_params["agent-id"][0]
-            if "authorization" in query_params:
-                websocket.request.headers["authorization"] = query_params[
-                    "authorization"
-                ][0]
-            if "timezone" in query_params:
-                self.logger.bind(tag=TAG).info(f"timezone: {query_params['timezone'][0]}")
-                websocket.request.headers["timezone"] = query_params["timezone"][0]
+        
+        # 从 URL 参数补充 Headers 中缺失的字段（不覆盖已存在的 Header）
+        param_header_mapping = ["client-id", "agent-id", "authorization", "timezone"]
+        for param_name in param_header_mapping:
+            if headers.get(param_name) is None and param_name in query_params:
+                websocket.request.headers[param_name] = query_params[param_name][0]
+                if param_name == "timezone":
+                    self.logger.bind(tag=TAG).info(f"timezone: {query_params[param_name][0]}")
 
         """处理新连接，每次创建独立的ConnectionHandler"""
         # 先认证，后建立连接
