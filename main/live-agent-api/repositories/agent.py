@@ -198,22 +198,18 @@ class Agent:
         owner_id: str
     ) -> List[AgentModel]:
         """
-        Get agents that can be bound to device (must have wake_word configured)
+        Get agents that can be bound to device
         
         Args:
             db: Database session
             owner_id: User ID
             
         Returns:
-            List of agents with wake_word configured
+            List of agents owned by user
         """
         result = await db.execute(
             select(AgentModel)
-            .where(
-                AgentModel.owner_id == owner_id,
-                AgentModel.wake_word.isnot(None),
-                AgentModel.wake_word != ''
-            )
+            .where(AgentModel.owner_id == owner_id)
             .order_by(AgentModel.created_at.desc())
         )
         return list(result.scalars().all())

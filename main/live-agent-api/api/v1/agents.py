@@ -54,7 +54,7 @@ async def get_bindable_agents(
     """
     Get agents that can be bound to device.
     
-    Only agents with wake_word configured can be bound to device.
+    Returns all agents owned by the current user.
     """
     agents = await agent_service.get_bindable_agents(db=db, owner_id=current_user_id)
     response = BindableAgentListResponse(

@@ -40,11 +40,11 @@ class AgentResponse(BaseModel):
 
 
 class BindableAgentResponse(BaseModel):
-    """Agent that can be bound to device (has wake_word)"""
+    """Agent that can be bound to device"""
     agent_id: str
     name: str
     avatar_url: Optional[str] = None
-    wake_word: str  # Required for bindable agents
+    wake_word: Optional[str] = None
     
     class Config:
         from_attributes = True
