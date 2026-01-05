@@ -17,6 +17,7 @@ import queue
 import asyncio
 import traceback
 import websockets
+from websockets.protocol import State as WebSocketState
 
 from core.utils.tts import MarkdownCleaner
 from core.utils import opus_encoder_utils, textUtils
@@ -174,7 +175,7 @@ class TTSProvider(TTSProviderBase):
                 connection_valid = (
                     self._task_started and 
                     self.ws and 
-                    self.ws.open and 
+                    self.ws.state == WebSocketState.OPEN and 
                     self._session_active
                 )
                 
@@ -193,7 +194,7 @@ class TTSProvider(TTSProviderBase):
                 while not self.conn.stop_event.is_set():
                     await asyncio.sleep(0.1)
                     # 检查真实连接状态
-                    if not (self.ws and self.ws.open and self._session_active):
+                    if not (self.ws and self.ws.state == WebSocketState.OPEN and self._session_active):
                         break  # 连接失效，跳出重新预热
                     if not self._preheat_ready.is_set():
                         break  # 被 abort 触发
@@ -256,13 +257,13 @@ class TTSProvider(TTSProviderBase):
 
     async def _ensure_connection(self, max_retries: int = 2):
         """Ensure WebSocket connection is established with retry logic"""
-        # 检查连接是否真正活跃（ws.open 才是真实状态）
-        if self.ws and self.ws.open and self._session_active:
+        # 检查连接是否真正活跃（ws.state 才是真实状态）
+        if self.ws and self.ws.state == WebSocketState.OPEN and self._session_active:
             logger.bind(tag=TAG).debug("Using existing WebSocket connection")
             return
         
         # 旧连接已死，重置状态
-        if self.ws and not self.ws.open:
+        if self.ws and self.ws.state != WebSocketState.OPEN:
             logger.bind(tag=TAG).debug("Stale WebSocket detected, resetting state")
             self.ws = None
             self._session_active = False
