@@ -121,10 +121,10 @@ services:
     healthcheck:
       # 使用 Python 进行健康检查
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:18000/health', timeout=5)"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 180s  # GPU 模型加载需要更多时间
 
   # ============================================================================
   # live-agent-api Dependencies: Postgres + Minio
