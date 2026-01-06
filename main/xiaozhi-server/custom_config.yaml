@@ -405,14 +405,17 @@ LLM:
     api_key: ${OPENAI_API_KEY}
   OpenRouterLLM:
     type: openai
-    model_name: google/gemini-2.5-flash
+    model_name: google/gemini-3-flash-preview
     base_url: https://openrouter.ai/api/v1
     api_key: ${OPENROUTER_API_KEY}
-    # Provider 选择：google-vertex/global (Vertex AI 全球节点)
-    order: google-vertex/global
-    allow_fallbacks: false
+    # Fallback chain: Gemini 3.0 Flash -> Gemini 2.5 Flash -> GPT-4o-mini
+    # Format: model:provider to ensure correct routing
+    order: google/gemini-3-flash-preview,google/gemini-2.5-flash,openai/gpt-4o-mini
+    allow_fallbacks: true
     reasoning_effort: none
     max_tokens: 2000
+    timeout: 5  # 5 seconds timeout triggers fallback
+    
 # VLLM配置（视觉语言大模型）
 VLLM:
   ChatGLMVLLM:
