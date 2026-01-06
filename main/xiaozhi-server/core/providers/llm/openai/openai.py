@@ -14,7 +14,7 @@ from core.utils.util import check_model_key
 from core.providers.llm.base import LLMProviderBase
 from types import SimpleNamespace
 import time
-from typing import List
+from typing import List, Optional, Dict, Any
 
 TAG = __name__
 logger = setup_logging()
@@ -28,9 +28,9 @@ class LLMProvider(LLMProviderBase):
             self.base_url = config.get("base_url")
         else:
             self.base_url = config.get("url")
-        # 增加timeout的配置项，单位为秒
-        timeout = config.get("timeout", 5)
-        self.timeout = int(timeout) if timeout else 5
+        # Default timeout for normal requests
+        timeout = config.get("timeout", 10)
+        self.timeout = int(timeout) if timeout else 10
 
         param_defaults = {
             "max_tokens": (1000, int),
@@ -39,18 +39,15 @@ class LLMProvider(LLMProviderBase):
             "frequency_penalty": (0, lambda x: round(float(x), 1)),
         }
 
-        order = config.get("order", None)
-        allow_fallbacks = config.get("allow_fallbacks", False)
         reasoning_effort = config.get("reasoning_effort", "none")
         self._reasoning_effort = reasoning_effort
 
-        self._provider = None
-        if order is not None:
-            orders: List[str] = order.split(",")
-            self._provider = {
-                "order": orders, 
-                "allow_fallbacks": allow_fallbacks
-            }
+        self._provider = config.get("provider", None)
+
+        # Client-side fallback configuration
+        self.fallback_models: List[Dict[str, str]] = config.get("fallback_models", [])
+        self.allow_fallbacks = True if len(self.fallback_models) > 0 else False
+        self.fallback_timeout = int(config.get("fallback_timeout", 3))
 
         for param, (default, converter) in param_defaults.items():
             value = config.get(param)
@@ -63,17 +60,31 @@ class LLMProvider(LLMProviderBase):
             except (ValueError, TypeError):
                 setattr(self, param, default)
 
-        logger.debug(
-            f"意图识别参数初始化: {self.temperature}, {self.max_tokens}, {self.top_p}, {self.frequency_penalty}"
-        )
+
+        if self.fallback_models:
+            logger.bind(tag=TAG).info(
+                f"Fallback models configured: {[m.get('model') for m in self.fallback_models]}, "
+                f"timeout={self.fallback_timeout}s"
+            )
 
         model_key_msg = check_model_key("LLM", self.api_key)
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
         self.client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=httpx.Timeout(self.timeout))
 
-    def prewarm(self):
 
+    def _build_provider_extra_body(self, provider: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Build extra_body with provider config for OpenRouter."""
+        if provider:
+            return {
+                "provider": {
+                    "order": [provider],
+                    "allow_fallbacks": False
+                }
+            }
+        return None
+
+    def prewarm(self):
         self.client.responses.create(
             model=self.model_name,
             input="test",
@@ -84,104 +95,163 @@ class LLMProvider(LLMProviderBase):
             reasoning={
                 "effort": self._reasoning_effort if self._reasoning_effort else "none"
             },
-            extra_body={
-                "provider": self._provider
-            } if self._provider is not None else None
+            extra_body=self._build_provider_extra_body(self._provider)
         )
 
     def response(self, session_id, dialogue, **kwargs):
-        try:
-            responses = self.client.responses.create(
-                model=self.model_name,
-                input=dialogue,
-                stream=True,
-                max_output_tokens=kwargs.get("max_tokens", self.max_tokens),
-                temperature=kwargs.get("temperature", self.temperature),
-                top_p=kwargs.get("top_p", self.top_p),
-                reasoning={
-                    "effort": self._reasoning_effort if self._reasoning_effort else "none"
-                },
-                extra_body={
-                    "provider": self._provider
-                } if self._provider is not None else None
-            )
-
-            for chunk in responses:
-                if isinstance(chunk, ResponseTextDeltaEvent):
-                    yield chunk.delta
-
-        except Exception as e:
+        # Build model list: primary model first, then fallback models
+        models = [(self.model_name, self._provider)]
+        for m in self.fallback_models:
+            models.append((m.get("model"), m.get("provider")))
+        
+        last_error = None
+        for idx, (model_name, provider) in enumerate(models):
+            is_fallback = idx > 0
+            if is_fallback:
+                logger.bind(tag=TAG).info(f"[Fallback] Trying model {idx + 1}/{len(models)}: {model_name}")
+            
+            start_time = time.time()
             try:
-                error_msg = repr(e)
-            except:
-                error_msg = "encoding error"
-            logger.bind(tag=TAG).error(f"Error in response generation: {error_msg}")
+                responses = self.client.responses.create(
+                    model=model_name,
+                    input=dialogue,
+                    stream=True,
+                    max_output_tokens=kwargs.get("max_tokens", self.max_tokens),
+                    temperature=kwargs.get("temperature", self.temperature),
+                    top_p=kwargs.get("top_p", self.top_p),
+                    reasoning={
+                        "effort": self._reasoning_effort if self._reasoning_effort else "none"
+                    },
+                    extra_body=self._build_provider_extra_body(provider),
+                    timeout=self.fallback_timeout if self.allow_fallbacks else None
+                )
+
+                first_chunk = True
+                for chunk in responses:
+                    if isinstance(chunk, ResponseTextDeltaEvent):
+                        if first_chunk and is_fallback:
+                            elapsed = (time.time() - start_time) * 1000
+                            logger.bind(tag=TAG).info(f"[Fallback] Model {model_name} first chunk in {elapsed:.0f}ms")
+                            first_chunk = False
+                        yield chunk.delta
+                return
+
+            except httpx.TimeoutException as e:
+                elapsed = (time.time() - start_time) * 1000
+                prefix = "[Fallback] " if is_fallback else ""
+                logger.bind(tag=TAG).warning(f"{prefix}Model {model_name} timeout after {elapsed:.0f}ms, trying next...")
+                last_error = e
+                
+            except Exception as e:
+                error_msg = repr(e) if e else "unknown error"
+                if self.allow_fallbacks:
+                    prefix = "[Fallback] " if is_fallback else ""
+                    logger.bind(tag=TAG).warning(f"{prefix}Model {model_name} failed: {error_msg}, trying next...")
+                else:
+                    logger.bind(tag=TAG).error(f"Error in response generation: {error_msg}")
+                last_error = e
+
+        if self.allow_fallbacks:
+            logger.bind(tag=TAG).error(f"All {len(models)} models failed. Last error: {last_error}")
 
     def response_with_functions(self, session_id, dialogue, functions=None):
-        tools = None
-        if functions:
-            tools = []
-            for f in functions:
-                if f.get("type") == "function" and "function" in f:
-                    func = f["function"]
-                    tools.append({
-                        "type": "function",
-                        "name": func["name"],
-                        "description": func.get("description", ""),
-                        "parameters": func.get("parameters", {}),
-
-                    })
-                else:
-                    # 已经是 Responses API 格式，移除不支持的字段
-                    tool = {k: v for k, v in f.items() if k != "strict"}
-                    tools.append(tool)
-
-        try:
-            # 构建请求参数
-            request_params = {
-                "model": self.model_name,
-                "input": dialogue,
-                "stream": True,
-                "max_output_tokens": self.max_tokens,
-                "temperature": self.temperature,
-                "top_p": self.top_p,
-                "reasoning": {
-                    "effort": self._reasoning_effort if self._reasoning_effort else "none"
-                },
-                "extra_body": {
-                    "provider": self._provider
-                } if self._provider is not None else None
-            }
-
-            # 只有在有 tools 时才添加 tools 参数
-            if tools:
-                request_params["tools"] = tools
+        tools = self._build_tools(functions)
+        
+        # Build model list: primary model first, then fallback models
+        models = [(self.model_name, self._provider)]
+        for m in self.fallback_models:
+            models.append((m.get("model"), m.get("provider")))
+        
+        last_error = None
+        for idx, (model_name, provider) in enumerate(models):
+            is_fallback = idx > 0
+            if is_fallback:
+                logger.bind(tag=TAG).info(f"[Fallback] Trying model {idx + 1}/{len(models)}: {model_name}")
             
-            stream = self.client.responses.create(**request_params)
-
-            for chunk in stream:
-                if isinstance(chunk, ResponseOutputItemAddedEvent):
-                    if chunk.item.type == "function_call":
-                        yield None, [SimpleNamespace(
-                            id=chunk.item.call_id,
-                            type="function",
-                            function=SimpleNamespace(
-                                name=chunk.item.name,
-                            ),
-                        )]
-                elif isinstance(chunk, ResponseFunctionCallArgumentsDeltaEvent):
-                    yield None, [SimpleNamespace(
-                            function=SimpleNamespace(
-                                arguments=chunk.item.arguments,
-                            ),
-                        )]
-                elif isinstance(chunk, ResponseTextDeltaEvent):
-                    yield chunk.delta, None
-
-        except Exception as e:
+            start_time = time.time()
             try:
-                error_msg = repr(e)
-            except:
-                error_msg = "encoding error"
-            logger.bind(tag=TAG).error(f"Error in function call streaming: {error_msg}")
-            yield "OpenAI service error", None
+                request_params = {
+                    "model": model_name,
+                    "input": dialogue,
+                    "stream": True,
+                    "max_output_tokens": self.max_tokens,
+                    "temperature": self.temperature,
+                    "top_p": self.top_p,
+                    "reasoning": {
+                        "effort": self._reasoning_effort if self._reasoning_effort else "none"
+                    },
+                    "extra_body": self._build_provider_extra_body(provider),
+                    "timeout": self.fallback_timeout if self.allow_fallbacks else None
+                }
+                if tools:
+                    request_params["tools"] = tools
+                
+                stream = self.client.responses.create(**request_params)
+
+                first_chunk = True
+                for chunk in stream:
+                    if first_chunk and is_fallback:
+                        elapsed = (time.time() - start_time) * 1000
+                        logger.bind(tag=TAG).info(f"[Fallback] Model {model_name} first chunk in {elapsed:.0f}ms")
+                        first_chunk = False
+                    yield from self._process_function_chunk(chunk)
+                return
+
+            except httpx.TimeoutException as e:
+                elapsed = (time.time() - start_time) * 1000
+                prefix = "[Fallback] " if is_fallback else ""
+                logger.bind(tag=TAG).warning(f"{prefix}Model {model_name} timeout after {elapsed:.0f}ms, trying next...")
+                last_error = e
+                
+            except Exception as e:
+                error_msg = repr(e) if e else "unknown error"
+                if self.allow_fallbacks:
+                    prefix = "[Fallback] " if is_fallback else ""
+                    logger.bind(tag=TAG).warning(f"{prefix}Model {model_name} failed: {error_msg}, trying next...")
+                else:
+                    logger.bind(tag=TAG).error(f"Error in function call streaming: {error_msg}")
+                last_error = e
+
+        if self.allow_fallbacks:
+            logger.bind(tag=TAG).error(f"All {len(models)} models failed. Last error: {last_error}")
+        yield "LLM service error", None
+
+    def _build_tools(self, functions):
+        """Build tools list from functions."""
+        if not functions:
+            return None
+        
+        tools = []
+        for f in functions:
+            if f.get("type") == "function" and "function" in f:
+                func = f["function"]
+                tools.append({
+                    "type": "function",
+                    "name": func["name"],
+                    "description": func.get("description", ""),
+                    "parameters": func.get("parameters", {}),
+                })
+            else:
+                tool = {k: v for k, v in f.items() if k != "strict"}
+                tools.append(tool)
+        return tools
+
+    def _process_function_chunk(self, chunk):
+        """Process a single chunk from function call stream."""
+        if isinstance(chunk, ResponseOutputItemAddedEvent):
+            if chunk.item.type == "function_call":
+                yield None, [SimpleNamespace(
+                    id=chunk.item.call_id,
+                    type="function",
+                    function=SimpleNamespace(
+                        name=chunk.item.name,
+                    ),
+                )]
+        elif isinstance(chunk, ResponseFunctionCallArgumentsDeltaEvent):
+            yield None, [SimpleNamespace(
+                function=SimpleNamespace(
+                    arguments=chunk.item.arguments,
+                ),
+            )]
+        elif isinstance(chunk, ResponseTextDeltaEvent):
+            yield chunk.delta, None
