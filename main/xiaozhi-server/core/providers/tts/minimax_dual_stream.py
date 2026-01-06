@@ -221,6 +221,16 @@ class TTSProvider(TTSProviderBase):
         if self.ws and self._session_active:
             logger.bind(tag=TAG).info("Using existing WebSocket connection")
             return
+        
+        # Reset stale state before creating new connection
+        if self.ws or self._session_active or self._task_started:
+            logger.bind(tag=TAG).debug(
+                f"Resetting stale state: ws={self.ws is not None}, "
+                f"active={self._session_active}, started={self._task_started}"
+            )
+            self.ws = None
+            self._session_active = False
+            self._task_started = False
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -815,6 +825,7 @@ class TTSProvider(TTSProviderBase):
     async def _cleanup_session(self):
         """Clean up session state without closing WebSocket"""
         self._task_started = False
+        self._session_active = False  # Mark session as inactive for keeper to restart
         self._first_audio_sent = False
         self._first_segment_send_time = None
         self._session_end = False
@@ -823,9 +834,13 @@ class TTSProvider(TTSProviderBase):
         self._sent_continue_count = 0
         self._received_final_count = 0
         self._session_text_buffer = []
+        
+        # Signal connection keeper to preheat next connection
+        if self._preheat_ready:
+            self._preheat_ready.clear()
 
     async def _close_websocket(self):
-        """Close WebSocket connection"""
+        """Close WebSocket connection and reset all session state"""
         # Cancel monitor task
         if self._monitor_task and not self._monitor_task.done():
             self._monitor_task.cancel()
@@ -851,6 +866,8 @@ class TTSProvider(TTSProviderBase):
             finally:
                 self.ws = None
 
+        # Always reset session state to prevent keeper loop
+        # (must be outside the if block to handle ws=None case)
         self._session_active = False
         self._task_started = False
 
