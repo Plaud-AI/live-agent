@@ -97,16 +97,17 @@ services:
   # 需要 GPU 支持 (NVIDIA Container Toolkit)
   # ============================================================================
   turn-detection:
-    image: jasonyang1/turn-detection-serve:v1
+    image: jasonyang1/turn-detection-serve:v2
     restart: unless-stopped
     networks:
       - xiaozhi-network
     # 内部端口，不暴露到公网（同 VPC 内通过服务名访问）
+    # 注意：预构建镜像 jasonyang1/turn-detection-serve:v2 内部监听 8080 端口
     expose:
-      - "18000"
+      - "8080"
     # 如需调试，可取消注释以下端口映射
     # ports:
-    #   - "18000:18000"
+    #   - "18000:8080"  # 主机 18000 -> 容器 8080
     environment:
       TZ: Asia/Shanghai
       NVIDIA_VISIBLE_DEVICES: all
@@ -119,37 +120,48 @@ services:
               count: 1
               capabilities: [gpu]
     healthcheck:
-      # 使用 Python 进行健康检查
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:18000/health', timeout=5)"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      # 使用 Python 进行健康检查（容器内部端口 8080）
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 180s  # GPU 模型加载需要更多时间
 
   # ============================================================================
   # live-agent-api Dependencies: Postgres + Minio
   # ============================================================================
   live-agent-postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: live_agent
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      # 允许 Docker 网络内的非 SSL 密码认证连接
+      # md5 认证允许非加密连接使用密码（解决 pg_hba.conf "no encryption" 问题）
+      POSTGRES_HOST_AUTH_METHOD: md5
+    # 安全警告：不要将 5432 暴露到公网！
+    # 容器间通过服务名通信，无需暴露端口
+    # 如需从宿主机调试，使用: "127.0.0.1:5432:5432"
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
     volumes:
       - live_agent_postgres_data:/var/lib/postgresql/data
       - ./live-agent-api/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     networks:
       - xiaozhi-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "PGPASSWORD=postgres psql -U postgres -d live_agent -c 'SELECT 1' || exit 1"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   live-agent-minio:
     image: minio/minio:latest
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -171,6 +183,7 @@ services:
   # live-agent-api
   # ============================================================================
   live-agent-api:
+    restart: unless-stopped
     env_file:
       - .env  # 相对于本 compose 文件的位置
     build:

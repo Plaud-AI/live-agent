@@ -46,6 +46,10 @@ async def sendAudioMessage(conn, sentenceType, audios, text, message_tag=Message
         if not conn.client_is_speaking:
             await send_tts_message(conn, "start", None, message_tag)
             conn.client_is_speaking = True
+            
+            # 重置打断检测的连续帧计数器（行业最佳实践）
+            # TTS 开始时必须重置，避免残留计数影响本次打断检测
+            conn._interrupt_consecutive_high_prob_frames = 0
 
             # 等待设备端完成状态切换（Schedule 异步切换）
             # 硬件约束：设备端需要 ~134ms 完成 Schedule callback + AudioService 操作

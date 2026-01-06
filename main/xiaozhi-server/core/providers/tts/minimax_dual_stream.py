@@ -17,6 +17,7 @@ import queue
 import asyncio
 import traceback
 import websockets
+from websockets.protocol import State as WebSocketState
 
 from core.utils.tts import MarkdownCleaner
 from core.utils import opus_encoder_utils, textUtils
@@ -157,45 +158,83 @@ class TTSProvider(TTSProviderBase):
 
     async def _connection_keeper(self):
         """
-        Connection keeper coroutine - maintains WebSocket connection ready for low latency.
+        智能连接保持器 - 按需预热，优雅降级
         
         Uses single Event: _preheat_ready
         - clear = need preheat (triggered by abort or initial state)
         - set = connection ready
         
-        Lifecycle:
-        1. Preheat connection (ensure_connection + send_task_start)
-        2. Set _preheat_ready
-        3. Poll until _preheat_ready is cleared (by abort) or connection invalid
-        4. Go back to step 1
+        策略：
+        1. 检测真实连接状态（ws.open），不仅是对象存在
+        2. 服务器正常关闭（1000）时静默处理，减少日志噪音
+        3. 异常时退避重试
         """
         while not self.conn.stop_event.is_set():
             try:
-                # Check if connection is still valid
-                if self._task_started and self.ws and self._session_active:
+                # 检查连接是否真正活跃（不仅是对象存在）
+                connection_valid = (
+                    self._task_started and 
+                    self.ws and 
+                    self.ws.state == WebSocketState.OPEN and 
+                    self._session_active
+                )
+                
+                if connection_valid:
                     self._preheat_ready.set()
                 else:
-                    # Preheat new connection
+                    # 需要预热新连接
                     self._preheat_ready.clear()
-                    logger.bind(tag=TAG).info("Connection keeper: preheating...")
+                    logger.bind(tag=TAG).debug("Connection keeper: preheating...")
                     await self._ensure_connection()
                     await self._send_task_start()
                     self._preheat_ready.set()
-                    logger.bind(tag=TAG).info("Connection keeper: connection ready")
+                    logger.bind(tag=TAG).debug("Connection keeper: connection ready")
                 
-                # Wait until connection becomes invalid or abort triggers clear
-                while (self._preheat_ready.is_set() and 
-                       self._task_started and self.ws and self._session_active and
-                       not self.conn.stop_event.is_set()):
+                # 等待连接失效或 abort 触发
+                while not self.conn.stop_event.is_set():
                     await asyncio.sleep(0.1)
+                    # 检查真实连接状态
+                    if not (self.ws and self.ws.state == WebSocketState.OPEN and self._session_active):
+                        break  # 连接失效，跳出重新预热
+                    if not self._preheat_ready.is_set():
+                        break  # 被 abort 触发
                 
             except asyncio.CancelledError:
                 logger.bind(tag=TAG).info("Connection keeper: cancelled")
                 break
             except Exception as e:
-                logger.bind(tag=TAG).warning(f"Connection keeper error: {e}")
-                self._preheat_ready.set()  # Set anyway to unblock waiters
-                await asyncio.sleep(0.5)  # Back off on error
+                # 区分正常关闭和异常
+                error_str = str(e)
+                if "1000" in error_str or "1001" in error_str:
+                    # 服务器正常关闭空闲连接，静默处理
+                    logger.bind(tag=TAG).debug("Server closed idle connection, will re-preheat")
+                else:
+                    logger.bind(tag=TAG).warning(f"Connection keeper error: {e}")
+                
+                # 重置状态，准备重新预热
+                self._reset_preheat_state()
+                self._preheat_ready.set()  # 解除阻塞
+                await asyncio.sleep(0.5)  # 退避
+
+    def _reset_preheat_state(self):
+        """重置预热相关状态（同步方法，用于异常恢复）"""
+        if self.ws:
+            try:
+                # 异步关闭，不阻塞
+                asyncio.create_task(self._safe_close_ws())
+            except Exception:
+                pass
+        self.ws = None
+        self._session_active = False
+        self._task_started = False
+
+    async def _safe_close_ws(self):
+        """安全关闭 WebSocket，忽略所有异常"""
+        try:
+            if self.ws:
+                await self.ws.close()
+        except Exception:
+            pass
 
     async def _send_task_start(self):
         """Send task_start event and wait for task_started response"""
@@ -218,9 +257,17 @@ class TTSProvider(TTSProviderBase):
 
     async def _ensure_connection(self, max_retries: int = 2):
         """Ensure WebSocket connection is established with retry logic"""
-        if self.ws and self._session_active:
-            logger.bind(tag=TAG).info("Using existing WebSocket connection")
+        # 检查连接是否真正活跃（ws.state 才是真实状态）
+        if self.ws and self.ws.state == WebSocketState.OPEN and self._session_active:
+            logger.bind(tag=TAG).debug("Using existing WebSocket connection")
             return
+        
+        # 旧连接已死，重置状态
+        if self.ws and self.ws.state != WebSocketState.OPEN:
+            logger.bind(tag=TAG).debug("Stale WebSocket detected, resetting state")
+            self.ws = None
+            self._session_active = False
+            self._task_started = False
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -286,9 +333,6 @@ class TTSProvider(TTSProviderBase):
         while not self.conn.stop_event.is_set():
             try:
                 message = self.tts_text_queue.get(timeout=1)
-                logger.bind(tag=TAG).debug(
-                    f"Received TTS task | {message.sentence_type.name} | {message.content_type.name}"
-                )
 
                 if message.sentence_type == SentenceType.FIRST:
                     self.conn.client_abort = False
@@ -337,22 +381,15 @@ class TTSProvider(TTSProviderBase):
                     if message.content_detail:
                         self._session_text_buffer.append(message.content_detail)
                         self._text_buffer += message.content_detail
-                        logger.bind(tag=TAG).debug(
-                            f"Text buffer updated: +'{message.content_detail}', total len={len(self._text_buffer)}"
-                        )
 
                         # Record TTS first text input time
                         if self.conn._latency_tts_first_text_time is None:
                             self.conn._latency_tts_first_text_time = time.time() * 1000
-                            logger.bind(tag=TAG).debug("📝 [Latency] TTS received first text")
 
                         # Extract and send segments by punctuation
                         while True:
                             segment = self._extract_segment()
                             if not segment:
-                                logger.bind(tag=TAG).debug(
-                                    f"No segment extracted, waiting for punctuation. Buffer: {self._text_buffer[self._processed_idx:][:30]}..."
-                                )
                                 break
                             try:
                                 future = asyncio.run_coroutine_threadsafe(
@@ -605,15 +642,12 @@ class TTSProvider(TTSProviderBase):
         if emotion:
             minimax_emotion = self.EMOTION_MAP.get(emotion)
             if minimax_emotion:
-                logger.bind(tag=TAG).debug(f"Emotion tag mapped: ({emotion}) -> {minimax_emotion}")
                 # Update voice_setting emotion for next request
                 self.voice_setting["emotion"] = minimax_emotion
             text = clean_text
 
         if not text.strip():
             return
-
-        logger.bind(tag=TAG).info(f"Sending text to MiniMax: {text[:50]}...")
 
         continue_event = {
             "event": "task_continue",
@@ -648,10 +682,7 @@ class TTSProvider(TTSProviderBase):
                     except asyncio.TimeoutError:
                         continue  # Check abort again
 
-                    logger.bind(tag=TAG).debug(f"Monitor received: {msg[:200]}...")
-
                     response = json.loads(msg)
-                    logger.bind(tag=TAG).debug(f"Monitor received: {str(response)[:200]}...")
 
                     event = response.get("event")
 
@@ -670,9 +701,6 @@ class TTSProvider(TTSProviderBase):
                     elif "data" in response and "audio" in response["data"]:
                         audio_hex = response["data"]["audio"]
                         is_final = response.get("is_final", False)
-                        logger.bind(tag=TAG).debug(
-                            f"Received audio chunk, len={len(audio_hex) if audio_hex else 0}, is_final={is_final}"
-                        )
 
                         if audio_hex and not self.conn.client_abort:
                             # Send FIRST before first audio
@@ -706,9 +734,6 @@ class TTSProvider(TTSProviderBase):
                         # Check if this is the final audio for current segment
                         if is_final:
                             self._received_final_count += 1
-                            logger.bind(tag=TAG).debug(
-                                f"Received is_final, count: {self._received_final_count}/{self._sent_continue_count}"
-                            )
 
                             # Only send LAST when:
                             # 1. _session_end is True (all text from LLM received)
@@ -747,8 +772,6 @@ class TTSProvider(TTSProviderBase):
                                 self._session_end = False
                                 self._sent_continue_count = 0
                                 self._received_final_count = 0
-                                # Don't reset _task_started - we'll continue the same task
-                                logger.bind(tag=TAG).debug("Round completed, keeping task active for next round")
 
                 except asyncio.TimeoutError:
                     logger.bind(tag=TAG).warning("WebSocket receive timeout")

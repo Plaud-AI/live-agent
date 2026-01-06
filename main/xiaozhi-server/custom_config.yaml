@@ -374,7 +374,8 @@ TurnDetection:
     # Docker 网络内使用服务名访问，无需公网 IP
     # 本地开发可通过环境变量 TURN_DETECTION_HOST 覆盖
     host: ${TURN_DETECTION_HOST:-turn-detection}
-    port: 18000
+    # 注意：预构建镜像 jasonyang1/turn-detection-serve:v2 内部监听 8080 端口
+    port: 8080
     timeout: 1              # HTTP request timeout (seconds)
     endpoint: /turn-detect    # API endpoint path
     min_endpoint_delay: 500      # Min time to wait after last speech before forcing end of turn (milliseconds)
@@ -648,7 +649,8 @@ selected_module:
   LLM: OpenRouterLLM
   VLLM: ChatGLMVLLM
   # TTS: FishDualStreamTTS
-  TTS: FishSingleStreamTTS
+  # TTS: FishSingleStreamTTS
+  TTS: MinimaxDualStreamTTS
   # TODO: temporarily, fish speech doesn't reuse the wesocket connection, need to discuss further.
   # TTS: FishSpeech
   Memory: memu

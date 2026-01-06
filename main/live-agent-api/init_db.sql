@@ -60,7 +60,7 @@ COMMENT ON COLUMN agents.owner_id IS 'User ID of the agent owner';
 COMMENT ON COLUMN agents.instruction IS 'System prompt/instruction for the agent';
 COMMENT ON COLUMN agents.voice_opening IS 'Opening message when conversation starts';
 COMMENT ON COLUMN agents.voice_closing IS 'Closing message when conversation ends';
-COMMENT ON COLUMN agents.wake_word IS 'Wake word for device binding (required for device binding)';
+COMMENT ON COLUMN agents.wake_word IS 'Optional wake word for device voice activation';
 COMMENT ON COLUMN agents.template_id IS 'Reference to agent template (nullable - not all agents come from templates)';
 
 -- ==================== Table: voices ====================

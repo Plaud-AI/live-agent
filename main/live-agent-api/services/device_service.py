@@ -32,12 +32,11 @@ class DeviceService:
         device = await Device.get_by_id(db, device_id)
         
         if device:
-            # Device exists
-            if device.owner_id and device.owner_id != owner_id:
-                raise BadRequestException("Device is bound to another user")
-            
-            # Update owner if not set
-            if not device.owner_id:
+            # Device exists - rebind if owner is different
+            if device.owner_id != owner_id:
+                # Clear agent bindings when owner changes
+                if device.owner_id:
+                    await AgentDeviceBinding.delete_all_by_device(db, device_id)
                 device = await Device.update_owner(db, device_id, owner_id)
         else:
             # Create new device
@@ -98,10 +97,6 @@ class DeviceService:
             raise NotFoundException("Agent not found")
         if agent.owner_id != owner_id:
             raise BadRequestException("Agent does not belong to you")
-        
-        # Verify agent has wake_word configured (required for device binding)
-        if not agent.wake_word:
-            raise BadRequestException("Agent must have a wake word configured to bind to device")
         
         # Check if binding already exists
         existing = await AgentDeviceBinding.get_binding(db, device_id, agent_id)
