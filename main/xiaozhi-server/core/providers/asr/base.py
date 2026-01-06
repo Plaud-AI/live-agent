@@ -11,12 +11,14 @@ import opuslib_next
 import concurrent.futures
 from abc import ABC, abstractmethod
 from config.logger import setup_logging
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, TYPE_CHECKING
 from core.handle.reportHandle import enqueue_asr_report
 from core.utils.util import remove_punctuation_and_length
 from .dto import ASRMessageType, ASRInputMessage, InterfaceType
 from queue import Queue, Empty
 
+if TYPE_CHECKING:
+    from core.connection import ConnectionHandler
 TAG = __name__
 logger = setup_logging()
 
@@ -30,14 +32,22 @@ class ASRProviderBase(ABC):
         self.interface_type = InterfaceType.NON_STREAM
 
     # 打开音频通道
-    async def open_audio_channels(self, conn):
+    async def open_audio_channels(self, conn: 'ConnectionHandler'):
         """Open ASR-related audio channels for a connection (idempotent).
         
         NOTE: This method may be called multiple times (e.g. connection pre-init + ensure_agent_ready()).
         It must be idempotent to avoid:
         - Starting duplicate queue-consumer threads
         - Re-creating VAD event processor tasks (double consumption / race conditions)
+        
+        After initialization, sends a ready signal to client so it knows
+        when to start sending audio data (avoiding first utterance loss).
         """
+        # Track if this is the first initialization (for sending ready signal)
+        if conn.input_audio_stream_ready:
+            await conn.send_server_ready()
+            return
+        
         # Thread for processing raw audio from WebSocket (idempotent)
         existing_priority = getattr(conn, "asr_priority_thread", None)
         if existing_priority is None or not getattr(existing_priority, "is_alive", lambda: False)():
@@ -63,6 +73,10 @@ class ASRProviderBase(ABC):
             logger.bind(tag=TAG).info("ASR input queue thread started")
         else:
             logger.bind(tag=TAG).debug("ASR input queue thread already started, skipping")
+        
+        # Send ready signal to client when audio channels are opened
+        conn.input_audio_stream_ready = True
+        await conn.send_server_ready()
 
     async def _start_vad_stream(self, conn):
         """Start VAD stream task and event processor

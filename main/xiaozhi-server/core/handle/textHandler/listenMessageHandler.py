@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, TYPE_CHECKING
 import asyncio
 
 from core.handle.receiveAudioHandle import handleAudioMessage, startToChat
@@ -10,6 +10,9 @@ from core.handle.textMessageType import TextMessageType
 from core.handle.helloHandle import checkWakeupWords
 from core.utils.wakeup_suppression import is_wakeup_word
 from core.utils.util import remove_punctuation_and_length
+
+if TYPE_CHECKING:
+    from core.connection import ConnectionHandler
 
 TAG = __name__
 
@@ -68,12 +71,13 @@ class ListenTextMessageHandler(TextMessageHandler):
     def message_type(self) -> TextMessageType:
         return TextMessageType.LISTEN
 
-    async def handle(self, conn, msg_json: Dict[str, Any]) -> None:
+    async def handle(self, conn: 'ConnectionHandler', msg_json: Dict[str, Any]) -> None:
         if "mode" in msg_json:
             conn.client_listen_mode = msg_json["mode"]
             conn.logger.bind(tag=TAG).info(
                 f"客户端拾音模式：{conn.client_listen_mode}"
             )
+            await conn.asr.open_audio_channels(conn)
         if msg_json["state"] == "start":
             conn.client_have_voice = True
             conn.client_voice_stop = False

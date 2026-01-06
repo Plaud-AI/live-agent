@@ -143,7 +143,7 @@ class ConnectionHandler:
         # 所以涉及到ASR的变量，需要在这里定义，属于connection的私有变量
         self.asr_audio = []
         self.asr_audio_queue = queue.Queue()
-        
+        self.input_audio_stream_ready = False
         # VAD stream instance (created per connection)
         self.vad_stream: VADStream = None
         # VAD event processor task
@@ -371,6 +371,23 @@ class ConnectionHandler:
                 self.logger.bind(tag=TAG).error(
                     f"保存记忆后关闭连接失败: {close_error}"
                 )
+
+    async def send_server_ready(self):
+        """Send ready signal to client after ASR/VAD initialized.
+        
+        Client should wait for this message before sending audio data
+        to avoid missing the first utterance.
+        """
+        try:
+            ready_message = json.dumps({
+                "type": "server",
+                "state": "ready",
+                "session_id": self.session_id,
+            })
+            await self.websocket.send(ready_message)
+            self.logger.bind(tag=TAG).info("Sent server ready signal to client")
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"Failed to send ready signal: {e}")
 
     async def _route_message(self, message):
         """消息路由"""
@@ -622,6 +639,7 @@ class ConnectionHandler:
             # Initialize VAD stream for this connection
             self.vad = self._vad if self.vad is None else self.vad
             self._initialize_vad_stream()
+            # Open ASR audio channels (sends ready signal to client when done)
             asyncio.run_coroutine_threadsafe(
                 self.asr.open_audio_channels(self), self.loop
             )
@@ -2038,3 +2056,4 @@ class ConnectionHandler:
             self.logger.bind(tag=TAG).error(f"超时检查任务出错: {e}")
         finally:
             self.logger.bind(tag=TAG).info("超时检查任务已退出")
+
