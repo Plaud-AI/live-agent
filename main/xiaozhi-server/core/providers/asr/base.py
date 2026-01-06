@@ -44,7 +44,9 @@ class ASRProviderBase(ABC):
         when to start sending audio data (avoiding first utterance loss).
         """
         # Track if this is the first initialization (for sending ready signal)
-        is_first_init = not conn.input_audio_stream_ready
+        if conn.input_audio_stream_ready:
+            await conn.send_server_ready()
+            return
         
         # Thread for processing raw audio from WebSocket (idempotent)
         existing_priority = getattr(conn, "asr_priority_thread", None)
@@ -72,10 +74,9 @@ class ASRProviderBase(ABC):
         else:
             logger.bind(tag=TAG).debug("ASR input queue thread already started, skipping")
         
-        # Send ready signal to client (only on first init)
-        if is_first_init:
-            conn._audio_channels_initialized = True
-            await conn.send_server_ready()
+        # Send ready signal to client when audio channels are opened
+        conn.input_audio_stream_ready = True
+        await conn.send_server_ready()
 
     async def _start_vad_stream(self, conn):
         """Start VAD stream task and event processor
