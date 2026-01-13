@@ -25,6 +25,11 @@ services:
       - "8000:8000"
       # HTTP server for vision analysis and OTA
       - "8003:8003"
+    # 解决 "Too many open files" 错误：提升文件描述符限制
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     security_opt:
       - seccomp:unconfined
     environment:
