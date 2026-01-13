@@ -221,6 +221,11 @@ class ConnectionHandler:
 
     async def handle_connection(self, ws):
         try:
+            # ===== 连接初始化时间追踪 =====
+            self._conn_timing = {
+                "conn_start": time.time() * 1000,  # 连接开始时间
+            }
+            
             # 获取并验证headers
             self.headers = dict(ws.request.headers)
             real_ip = self.headers.get("x-real-ip") or self.headers.get(
@@ -529,6 +534,15 @@ class ConnectionHandler:
 
     def _initialize_components(self):
         try:
+            # ===== 组件初始化时间追踪 =====
+            init_start = time.time() * 1000
+            if hasattr(self, '_conn_timing'):
+                self._conn_timing["init_start"] = init_start
+                conn_to_init = init_start - self._conn_timing.get("conn_start", init_start)
+                self.logger.bind(tag=TAG).info(
+                    f"⏱️ [初始化追踪] 组件初始化开始 | 距连接建立: {conn_to_init:.0f}ms"
+                )
+            
             self.selected_module_str = build_module_string(
                 self.config.get("selected_module", {})
             )
@@ -543,6 +557,7 @@ class ConnectionHandler:
                 )
                 # 预初始化默认的 LLM/TTS/ASR 模块（使用默认配置）
                 try:
+                    pre_init_start = time.time() * 1000
                     modules = initialize_modules(
                         self.logger,
                         self.config,
@@ -559,11 +574,21 @@ class ConnectionHandler:
                         self.llm = modules["llm"]
                     if modules.get("asr"):
                         self.asr = modules["asr"]
-                    self.logger.bind(tag=TAG).info("Pre-initialized LLM/TTS/ASR modules successfully")
+                    pre_init_elapsed = time.time() * 1000 - pre_init_start
+                    self.logger.bind(tag=TAG).info(
+                        f"⏱️ [初始化追踪] 预初始化模块完成: {pre_init_elapsed:.0f}ms"
+                    )
                 except Exception as e:
                     self.logger.bind(tag=TAG).warning(f"Pre-initialization failed: {e}, will init on wake")
             else:
+                agent_config_start = time.time() * 1000
                 self._initialize_agent_config()
+                agent_config_elapsed = time.time() * 1000 - agent_config_start
+                if hasattr(self, '_conn_timing'):
+                    self._conn_timing["agent_config_done"] = time.time() * 1000
+                self.logger.bind(tag=TAG).info(
+                    f"⏱️ [初始化追踪] Agent配置初始化完成: {agent_config_elapsed:.0f}ms"
+                )
             
             init_llm = True
             init_tts = True
@@ -571,13 +596,16 @@ class ConnectionHandler:
             init_intent = not self.defer_agent_init
 
             if init_tts and self.tts:
+                tts_open_start = time.time() * 1000
                 open_tts_audio_future = asyncio.run_coroutine_threadsafe(
                     self.tts.open_audio_channels(self), self.loop
                 )
                 # wait for 2 seconds to open the audio channels
                 open_tts_audio_future.result(timeout=2)
-
-                # self.logger.bind(tag=TAG).info("TTS audio channels opened")
+                tts_open_elapsed = time.time() * 1000 - tts_open_start
+                self.logger.bind(tag=TAG).info(
+                    f"⏱️ [初始化追踪] TTS音频通道打开: {tts_open_elapsed:.0f}ms"
+                )
                 # 预热唤醒词短回复缓存：确保首唤醒尽可能命中本地 wav（同音色、低时延）
                 try:
                     from core.handle.helloHandle import prewarm_wakeup_reply_cache
@@ -622,10 +650,15 @@ class ConnectionHandler:
 
             # open audio channels for ASR
             # Initialize VAD stream for this connection
+            vad_asr_start = time.time() * 1000
             self.vad = self._vad if self.vad is None else self.vad
             self._initialize_vad_stream()
             asyncio.run_coroutine_threadsafe(
                 self.asr.open_audio_channels(self), self.loop
+            )
+            vad_asr_elapsed = time.time() * 1000 - vad_asr_start
+            self.logger.bind(tag=TAG).info(
+                f"⏱️ [初始化追踪] VAD/ASR通道初始化: {vad_asr_elapsed:.0f}ms"
             )
             # 初始化声纹识别
             self._initialize_voiceprint()
@@ -646,6 +679,17 @@ class ConnectionHandler:
             """更新系统提示词（必须在 TTS 初始化前，以便加载 role 的 TTS 配置）"""
             if init_tts or init_llm:
                 self._init_prompt_enhancement()
+
+            # ===== 组件初始化完成 =====
+            init_end = time.time() * 1000
+            if hasattr(self, '_conn_timing'):
+                self._conn_timing["init_done"] = init_end
+                init_total = init_end - self._conn_timing.get("init_start", init_end)
+                conn_to_ready = init_end - self._conn_timing.get("conn_start", init_end)
+                self.logger.bind(tag=TAG).info(
+                    f"✅ [初始化追踪] 组件初始化完成 | 初始化耗时: {init_total:.0f}ms | "
+                    f"连接→就绪: {conn_to_ready:.0f}ms"
+                )
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")

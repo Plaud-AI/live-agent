@@ -130,6 +130,8 @@ async def prewarm_wakeup_reply_cache(conn) -> None:
 
 async def handleHelloMessage(conn, msg_json):
     """处理hello消息"""
+    hello_recv_time = time.time() * 1000
+    
     audio_params = msg_json.get("audio_params")
     if audio_params:
         format = audio_params.get("format")
@@ -149,6 +151,23 @@ async def handleHelloMessage(conn, msg_json):
             asyncio.create_task(send_mcp_tools_list_request(conn))
 
     await conn.websocket.send(json.dumps(conn.welcome_msg))
+    
+    # ===== Hello 消息处理时间追踪 =====
+    hello_sent_time = time.time() * 1000
+    hello_process_time = hello_sent_time - hello_recv_time
+    
+    # 计算从连接建立到 hello 响应发送的总时间
+    if hasattr(conn, '_conn_timing') and conn._conn_timing.get("conn_start"):
+        conn_to_hello = hello_sent_time - conn._conn_timing["conn_start"]
+        conn._conn_timing["hello_sent"] = hello_sent_time
+        conn.logger.bind(tag=TAG).info(
+            f"⏱️ [初始化追踪] Hello响应已发送 | Hello处理: {hello_process_time:.0f}ms | "
+            f"连接→Hello: {conn_to_hello:.0f}ms"
+        )
+    else:
+        conn.logger.bind(tag=TAG).info(
+            f"⏱️ [初始化追踪] Hello响应已发送 | Hello处理: {hello_process_time:.0f}ms"
+        )
 
 
 async def checkWakeupWords(conn, text):
