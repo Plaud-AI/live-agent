@@ -15,6 +15,10 @@ from typing import List, Dict, Any
 TAG = __name__
 logger = setup_logging()
 
+# 共享线程池：避免每次调用都创建新的 ThreadPoolExecutor（防止资源泄漏）
+# 32 workers 支持约 16 个并发连接（每连接最多 2 个 ASR 任务）
+_shared_executor = concurrent.futures.ThreadPoolExecutor(max_workers=64, thread_name_prefix="asr_worker")
+
 
 def _get_parallel_chat_handler(conn):
     """
@@ -340,14 +344,13 @@ async def _quick_asr_for_prefetch(conn, audio_buffer: List[bytes]) -> str:
                 logger.bind(tag=TAG).debug(f"预取 ASR 失败: {e}")
                 return ""
         
-        # 在线程池中执行，设置超时
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            try:
-                future = executor.submit(run_asr)
-                return future.result(timeout=PSEUDO_STREAM_ASR_TIMEOUT)
-            except concurrent.futures.TimeoutError:
-                logger.bind(tag=TAG).debug("预取 ASR 超时")
-                return ""
+        # 使用共享线程池执行，设置超时（避免每次创建新的 ThreadPoolExecutor）
+        try:
+            future = _shared_executor.submit(run_asr)
+            return future.result(timeout=PSEUDO_STREAM_ASR_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            logger.bind(tag=TAG).debug("预取 ASR 超时")
+            return ""
                 
     except Exception as e:
         logger.bind(tag=TAG).warning(f"快速 ASR 异常: {e}")
@@ -423,14 +426,13 @@ async def _quick_asr_and_check(conn, audio_chunks):
                 logger.bind(tag=TAG).debug(f"快速 ASR 失败: {e}")
                 return ""
         
-        # 在线程池中执行，设置超时
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            try:
-                future = executor.submit(run_quick_asr)
-                text = future.result(timeout=INTERRUPT_ASR_TIMEOUT)
-            except concurrent.futures.TimeoutError:
-                logger.bind(tag=TAG).debug("快速 ASR 超时，跳过本次检测")
-                return
+        # 使用共享线程池执行，设置超时（避免每次创建新的 ThreadPoolExecutor）
+        try:
+            future = _shared_executor.submit(run_quick_asr)
+            text = future.result(timeout=INTERRUPT_ASR_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            logger.bind(tag=TAG).debug("快速 ASR 超时，跳过本次检测")
+            return
         
         elapsed_ms = (time.time() - start_time) * 1000
         
