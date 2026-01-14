@@ -1,20 +1,9 @@
 import httpx
 import openai
 from openai.types import CompletionUsage
-from openai.types.responses import Response
-from openai.types.responses import (
-    ResponseOutputItemAddedEvent,
-    ResponseOutputItemDoneEvent,
-    ResponseTextDeltaEvent, 
-    ResponseFunctionCallArgumentsDeltaEvent, 
-    ResponseFunctionCallArgumentsDoneEvent
-)
 from config.logger import setup_logging
 from core.utils.util import check_model_key
 from core.providers.llm.base import LLMProviderBase
-from types import SimpleNamespace
-import time
-from typing import List
 
 TAG = __name__
 logger = setup_logging()
@@ -28,40 +17,26 @@ class LLMProvider(LLMProviderBase):
             self.base_url = config.get("base_url")
         else:
             self.base_url = config.get("url")
-        # 增加timeout的配置项，单位为秒
         timeout = config.get("timeout", 300)
         self.timeout = int(timeout) if timeout else 300
 
         param_defaults = {
-            "max_tokens": (1000, int),
-            "temperature": (0.7, lambda x: round(float(x), 1)),
-            "top_p": (1.0, lambda x: round(float(x), 1)),
-            "frequency_penalty": (0, lambda x: round(float(x), 1)),
+            "max_tokens": int,
+            "temperature": lambda x: round(float(x), 1),
+            "top_p": lambda x: round(float(x), 1),
+            "frequency_penalty": lambda x: round(float(x), 1),
         }
 
-        order = config.get("order", None)
-        allow_fallbacks = config.get("allow_fallbacks", False)
-        reasoning_effort = config.get("reasoning_effort", "none")
-        self._reasoning_effort = reasoning_effort
-
-        self._provider = None
-        if order is not None:
-            orders: List[str] = order.split(",")
-            self._provider = {
-                "order": orders, 
-                "allow_fallbacks": allow_fallbacks
-            }
-
-        for param, (default, converter) in param_defaults.items():
+        for param, converter in param_defaults.items():
             value = config.get(param)
             try:
                 setattr(
                     self,
                     param,
-                    converter(value) if value not in (None, "") else default,
+                    converter(value) if value not in (None, "") else None,
                 )
             except (ValueError, TypeError):
-                setattr(self, param, default)
+                setattr(self, param, None)
 
         logger.debug(
             f"意图识别参数初始化: {self.temperature}, {self.max_tokens}, {self.top_p}, {self.frequency_penalty}"
@@ -72,116 +47,96 @@ class LLMProvider(LLMProviderBase):
             logger.bind(tag=TAG).error(model_key_msg)
         self.client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=httpx.Timeout(self.timeout))
 
-    def prewarm(self):
-
-        self.client.responses.create(
-            model=self.model_name,
-            input="test",
-            stream=True,
-            max_output_tokens=1,
-            temperature=0.0,
-            top_p=0.0,
-            reasoning={
-                "effort": self._reasoning_effort if self._reasoning_effort else "none"
-            },
-            extra_body={
-                "provider": self._provider
-            } if self._provider is not None else None
-        )
+    @staticmethod
+    def normalize_dialogue(dialogue):
+        """自动修复 dialogue 中缺失 content 的消息"""
+        for msg in dialogue:
+            if "role" in msg and "content" not in msg:
+                msg["content"] = ""
+        return dialogue
 
     def response(self, session_id, dialogue, **kwargs):
         try:
-            responses = self.client.responses.create(
-                model=self.model_name,
-                input=dialogue,
-                stream=True,
-                max_output_tokens=kwargs.get("max_tokens", self.max_tokens),
-                temperature=kwargs.get("temperature", self.temperature),
-                top_p=kwargs.get("top_p", self.top_p),
-                reasoning={
-                    "effort": self._reasoning_effort if self._reasoning_effort else "none"
-                },
-                extra_body={
-                    "provider": self._provider
-                } if self._provider is not None else None
-            )
+            dialogue = self.normalize_dialogue(dialogue)
 
-            for chunk in responses:
-                if isinstance(chunk, ResponseTextDeltaEvent):
-                    yield chunk.delta
-
-        except Exception as e:
-            try:
-                error_msg = repr(e)
-            except:
-                error_msg = "encoding error"
-            logger.bind(tag=TAG).error(f"Error in response generation: {error_msg}")
-
-    def response_with_functions(self, session_id, dialogue, functions=None):
-        tools = None
-        if functions:
-            tools = []
-            for f in functions:
-                if f.get("type") == "function" and "function" in f:
-                    func = f["function"]
-                    tools.append({
-                        "type": "function",
-                        "name": func["name"],
-                        "description": func.get("description", ""),
-                        "parameters": func.get("parameters", {}),
-
-                    })
-                else:
-                    # 已经是 Responses API 格式，移除不支持的字段
-                    tool = {k: v for k, v in f.items() if k != "strict"}
-                    tools.append(tool)
-
-        try:
-            # 构建请求参数
             request_params = {
                 "model": self.model_name,
-                "input": dialogue,
+                "messages": dialogue,
                 "stream": True,
-                "max_output_tokens": self.max_tokens,
-                "temperature": self.temperature,
-                "top_p": self.top_p,
-                "reasoning": {
-                    "effort": self._reasoning_effort if self._reasoning_effort else "none"
-                },
-                "extra_body": {
-                    "provider": self._provider
-                } if self._provider is not None else None
             }
 
-            # 只有在有 tools 时才添加 tools 参数
-            if tools:
-                request_params["tools"] = tools
-            
-            stream = self.client.responses.create(**request_params)
+            # 添加可选参数,只有当参数不为None时才添加
+            optional_params = {
+                "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+                "temperature": kwargs.get("temperature", self.temperature),
+                "top_p": kwargs.get("top_p", self.top_p),
+                "frequency_penalty": kwargs.get("frequency_penalty", self.frequency_penalty),
+            }
 
-            for chunk in stream:
-                if isinstance(chunk, ResponseOutputItemAddedEvent):
-                    if chunk.item.type == "function_call":
-                        yield None, [SimpleNamespace(
-                            id=chunk.item.call_id,
-                            type="function",
-                            function=SimpleNamespace(
-                                name=chunk.item.name,
-                            ),
-                        )]
-                elif isinstance(chunk, ResponseFunctionCallArgumentsDeltaEvent):
-                    yield None, [SimpleNamespace(
-                            function=SimpleNamespace(
-                                arguments=chunk.item.arguments,
-                            ),
-                        )]
-                elif isinstance(chunk, ResponseTextDeltaEvent):
-                    yield chunk.delta, None
+            for key, value in optional_params.items():
+                if value is not None:
+                    request_params[key] = value
+
+            responses = self.client.chat.completions.create(**request_params)
+
+            is_active = True
+            for chunk in responses:
+                try:
+                    delta = chunk.choices[0].delta if getattr(chunk, "choices", None) else None
+                    content = getattr(delta, "content", "") if delta else ""
+                except IndexError:
+                    content = ""
+                if content:
+                    if "<think>" in content:
+                        is_active = False
+                        content = content.split("<think>")[0]
+                    if "</think>" in content:
+                        is_active = True
+                        content = content.split("</think>")[-1]
+                    if is_active:
+                        yield content
 
         except Exception as e:
-            try:
-                error_msg = repr(e)
-            except:
-                error_msg = "encoding error"
-            logger.bind(tag=TAG).error(f"Error in function call streaming: {error_msg}")
-            yield "OpenAI service error", None
+            logger.bind(tag=TAG).error(f"Error in response generation: {e}")
+
+    def response_with_functions(self, session_id, dialogue, functions=None, **kwargs):
+        try:
+            dialogue = self.normalize_dialogue(dialogue)
+
+            request_params = {
+                "model": self.model_name,
+                "messages": dialogue,
+                "stream": True,
+                "tools": functions,
+            }
+
+            optional_params = {
+                "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+                "temperature": kwargs.get("temperature", self.temperature),
+                "top_p": kwargs.get("top_p", self.top_p),
+                "frequency_penalty": kwargs.get("frequency_penalty", self.frequency_penalty),
+            }
+
+            for key, value in optional_params.items():
+                if value is not None:
+                    request_params[key] = value
+
+            stream = self.client.chat.completions.create(**request_params)
+
+            for chunk in stream:
+                if getattr(chunk, "choices", None):
+                    delta = chunk.choices[0].delta
+                    content = getattr(delta, "content", "")
+                    tool_calls = getattr(delta, "tool_calls", None)
+                    yield content, tool_calls
+                elif isinstance(getattr(chunk, "usage", None), CompletionUsage):
+                    usage_info = getattr(chunk, "usage", None)
+                    logger.bind(tag=TAG).info(
+                        f"Token 消耗：输入 {getattr(usage_info, 'prompt_tokens', '未知')}，"
+                        f"输出 {getattr(usage_info, 'completion_tokens', '未知')}，"
+                        f"共计 {getattr(usage_info, 'total_tokens', '未知')}"
+                    )
+
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"Error in function call streaming: {e}")
+            yield f"【OpenAI服务响应异常: {e}】", None

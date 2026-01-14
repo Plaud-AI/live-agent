@@ -3,9 +3,9 @@ import time
 import json
 import os
 import yaml
-from typing import Optional
 from config.config_loader import get_project_dir
-from config.manage_api_client import save_mem_local_short
+from config.manage_api_client import generate_and_save_chat_summary
+import asyncio
 from core.utils.util import check_model_key
 
 
@@ -75,18 +75,6 @@ short_term_memory_prompt = """
 ```
 """
 
-short_term_memory_prompt_only_content = """
-你是一个经验丰富的记忆总结者，擅长将对话内容进行总结摘要，遵循以下规则：
-1、总结user的重要信息，以便在未来的对话中提供更个性化的服务
-2、不要重复总结，不要遗忘之前记忆，除非原来的记忆超过了1800字内，否则不要遗忘、不要压缩用户的历史记忆
-3、用户操控的设备音量、播放音乐、天气、退出、不想对话等和用户本身无关的内容，这些信息不需要加入到总结中
-4、聊天内容中的今天的日期时间、今天的天气情况与用户事件无关的数据，这些信息如果当成记忆存储会影响后序对话，这些信息不需要加入到总结中
-5、不要把设备操控的成果结果和失败结果加入到总结中，也不要把用户的一些废话加入到总结中
-6、不要为了总结而总结，如果用户的聊天没有意义，请返回原来的历史记录也是可以的
-7、只需要返回总结摘要，严格控制在1800字内
-8、不要包含代码、xml，不需要解释、注释和说明，保存记忆时仅从对话提取信息，不要混入示例内容
-"""
-
 
 def extract_json_data(json_code):
     start = json_code.find("```json")
@@ -144,7 +132,7 @@ class MemoryProvider(MemoryProviderBase):
         with open(self.memory_path, "w", encoding="utf-8") as f:
             yaml.dump(all_memory, f, allow_unicode=True)
 
-    async def save_memory(self, msgs, context=None):
+    async def save_memory(self, msgs, session_id=None):
         # 打印使用的模型信息
         model_info = getattr(self.llm, "model_name", str(self.llm.__class__.__name__))
         logger.bind(tag=TAG).debug(f"使用记忆保存模型: {model_info}")
@@ -188,70 +176,14 @@ class MemoryProvider(MemoryProviderBase):
             except Exception as e:
                 print("Error:", e)
         else:
-            result = self.llm.response_no_stream(
-                short_term_memory_prompt_only_content,
-                msgStr,
-                max_tokens=2000,
-                temperature=0.2,
-            )
-            save_mem_local_short(self.role_id, result)
-        logger.bind(tag=TAG).info(f"Save memory successful - Role: {self.role_id}")
+            # 当save_to_file为False时，调用Java端的聊天记录总结接口
+            summary_id = session_id if session_id else self.role_id
+            await generate_and_save_chat_summary(summary_id)
+        logger.bind(tag=TAG).info(
+            f"Save memory successful - Role: {self.role_id}, Session: {session_id}"
+        )
 
         return self.short_memory
 
-    async def query_memory(self, query: str, client_timezone: str = None) -> str:
+    async def query_memory(self, query: str) -> str:
         return self.short_memory
-
-    def get_user_persona(self) -> Optional[str]:
-        """获取格式化的用户画像信息（用于 prompt）
-        
-        Returns:
-            格式化后的用户画像字符串，如果无记忆则返回 None
-        """
-        if not self.short_memory:
-            return None
-        
-        try:
-            # 尝试解析 JSON 格式的记忆
-            memory_data = json.loads(self.short_memory)
-            
-            # 提取关键信息
-            persona_items = []
-            
-            # 提取身份信息
-            if "时空档案" in memory_data:
-                identity = memory_data["时空档案"].get("身份图谱", {})
-                if identity.get("现用名"):
-                    persona_items.append(f"- 名字：{identity['现用名']}")
-                if identity.get("特征标记"):
-                    tags = identity["特征标记"]
-                    if isinstance(tags, list) and tags:
-                        persona_items.append(f"- 特征：{', '.join(tags)}")
-            
-            # 提取记忆立方中的关键事件
-            if "时空档案" in memory_data and "记忆立方" in memory_data["时空档案"]:
-                events = memory_data["时空档案"]["记忆立方"]
-                if isinstance(events, list) and events:
-                    persona_items.append("\n重要事件：")
-                    for event in events[:5]:  # 只取前5个事件
-                        if isinstance(event, dict) and event.get("事件"):
-                            persona_items.append(f"  - {event['事件']}")
-            
-            # 提取高光语录
-            if "高光语录" in memory_data and memory_data["高光语录"]:
-                quotes = memory_data["高光语录"]
-                if isinstance(quotes, list) and quotes:
-                    persona_items.append("\n高光语录：")
-                    for quote in quotes[:3]:  # 只取前3条
-                        if quote:
-                            persona_items.append(f"  - {quote}")
-            
-            return "\n".join(persona_items) if persona_items else None
-            
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            # 如果解析失败，可能是纯文本格式，直接返回
-            logger.bind(tag=TAG).debug(f"记忆不是 JSON 格式，使用原始文本: {e}")
-            # 如果 short_memory 是纯文本，直接返回（但限制长度）
-            if isinstance(self.short_memory, str) and len(self.short_memory) > 0:
-                return self.short_memory[:500]  # 限制长度避免 prompt 过长
-            return None

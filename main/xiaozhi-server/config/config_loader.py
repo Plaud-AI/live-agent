@@ -1,49 +1,7 @@
 import os
-import re
 import yaml
 from collections.abc import Mapping
 from config.manage_api_client import init_service, get_server_config, get_agent_models
-from dotenv import load_dotenv
-
-
-# Environment variable pattern: ${VAR_NAME} or ${VAR_NAME:-default_value}
-ENV_VAR_PATTERN = re.compile(r'\$\{([^}:]+)(?::-([^}]*))?\}')
-
-
-def expand_env_vars(config):
-    """
-    Recursively expand environment variable placeholders in config.
-    
-    Supports two formats:
-    - ${VAR_NAME}              - Required, raises error if not set
-    - ${VAR_NAME:-default}     - Optional, uses default if not set
-    
-    Examples:
-        api_key: ${OPENAI_API_KEY}
-        base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-    """
-    if isinstance(config, dict):
-        return {k: expand_env_vars(v) for k, v in config.items()}
-    elif isinstance(config, list):
-        return [expand_env_vars(item) for item in config]
-    elif isinstance(config, str):
-        def replace_env_var(match):
-            var_name = match.group(1)
-            default_value = match.group(2)  # None if no default specified
-            
-            env_value = os.environ.get(var_name)
-            
-            if env_value is not None:
-                return env_value
-            elif default_value is not None:
-                return default_value
-            else:
-                # Keep original placeholder if env var not set and no default
-                # This allows optional configs to remain as placeholders
-                return match.group(0)
-        
-        return ENV_VAR_PATTERN.sub(replace_env_var, config)
-    return config
 
 
 def get_project_dir():
@@ -66,19 +24,27 @@ def load_config():
     if cached_config is not None:
         return cached_config
 
-    custom_config_path = get_project_dir() + "custom_config.yaml"
+    default_config_path = get_project_dir() + "config.yaml"
+    custom_config_path = get_project_dir() + "data/.config.yaml"
 
-    # Load environment variables from .env file
-    load_dotenv()
-    
-    # Read YAML config
-    config = read_config(custom_config_path)
-    
-    # Expand environment variable placeholders (e.g., ${OPENAI_API_KEY})
-    config = expand_env_vars(config)
-    
-    config["read_config_from_live_agent_api"] = True
+    # 加载默认配置
+    default_config = read_config(default_config_path)
+    custom_config = read_config(custom_config_path)
 
+    if custom_config.get("manager-api", {}).get("url"):
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            # 如果已经在事件循环中，使用异步版本
+            config = asyncio.run_coroutine_threadsafe(
+                get_config_from_api_async(custom_config), loop
+            ).result()
+        except RuntimeError:
+            # 如果不在事件循环中（启动时），创建新的事件循环
+            config = asyncio.run(get_config_from_api_async(custom_config))
+    else:
+        # 合并配置
+        config = merge_configs(default_config, custom_config)
     # 初始化目录
     ensure_directories(config)
 
@@ -87,13 +53,13 @@ def load_config():
     return config
 
 
-def get_config_from_api(config):
-    """从Java API获取配置"""
+async def get_config_from_api_async(config):
+    """从Java API获取配置（异步版本）"""
     # 初始化API客户端
     init_service(config)
 
     # 获取服务器配置
-    config_data = get_server_config()
+    config_data = await get_server_config()
     if config_data is None:
         raise Exception("Failed to fetch server config from API")
 
@@ -102,6 +68,7 @@ def get_config_from_api(config):
         "url": config["manager-api"].get("url", ""),
         "secret": config["manager-api"].get("secret", ""),
     }
+    auth_enabled = config_data.get("server", {}).get("auth", {}).get("enabled", False)
     # server的配置以本地为准
     if config.get("server"):
         config_data["server"] = {
@@ -111,119 +78,57 @@ def get_config_from_api(config):
             "vision_explain": config["server"].get("vision_explain", ""),
             "auth_key": config["server"].get("auth_key", ""),
         }
+    config_data["server"]["auth"] = {"enabled": auth_enabled}
     # 如果服务器没有prompt_template，则从本地配置读取
     if not config_data.get("prompt_template"):
         config_data["prompt_template"] = config.get("prompt_template")
     return config_data
 
 
-def get_private_config_from_api(config, device_id, client_id):
+async def get_private_config_from_api(config, device_id, client_id):
     """从Java API获取私有配置"""
-    return get_agent_models(device_id, client_id, config["selected_module"])
+    return await get_agent_models(device_id, client_id, config["selected_module"])
 
 
 def ensure_directories(config):
-    """确保所有配置路径存在（向后兼容的包装函数）"""
-    project_dir = get_project_dir()
-    _setup_directories(config, project_dir)
+    """确保所有配置路径存在"""
+    dirs_to_create = set()
+    project_dir = get_project_dir()  # 获取项目根目录
+    # 日志文件目录
+    log_dir = config.get("log", {}).get("log_dir", "tmp")
+    dirs_to_create.add(os.path.join(project_dir, log_dir))
 
-
-def _collect_output_dirs(config: dict) -> set:
-    """
-    收集配置中所有 Provider 的 output_dir
-    
-    Args:
-        config: 配置字典
-        
-    Returns:
-        包含所有唯一 output_dir 的集合
-    """
-    dirs = set()
-    
-    # 遍历 ASR 和 TTS 模块
+    # ASR/TTS模块输出目录
     for module in ["ASR", "TTS"]:
         if config.get(module) is None:
             continue
         for provider in config.get(module, {}).values():
-            if isinstance(provider, dict):
-                output_dir = provider.get("output_dir", "")
-                if output_dir:
-                    dirs.add(output_dir)
-    
-    return dirs
+            output_dir = provider.get("output_dir", "")
+            if output_dir:
+                dirs_to_create.add(output_dir)
 
+    # 根据selected_module创建模型目录
+    selected_modules = config.get("selected_module", {})
+    for module_type in ["ASR", "LLM", "TTS"]:
+        selected_provider = selected_modules.get(module_type)
+        if not selected_provider:
+            continue
+        if config.get(module) is None:
+            continue
+        if config.get(selected_provider) is None:
+            continue
+        provider_config = config.get(module_type, {}).get(selected_provider, {})
+        output_dir = provider_config.get("output_dir")
+        if output_dir:
+            full_model_dir = os.path.join(project_dir, output_dir)
+            dirs_to_create.add(full_model_dir)
 
-def _setup_directories(config: dict, project_dir: str) -> None:
-    """
-    根据配置创建所有必需的目录
-    
-    Args:
-        config: 配置字典
-        project_dir: 项目根目录（绝对路径）
-    """
-    dirs_to_create = set()
-    
-    # 日志文件目录
-    log_dir = config.get("log", {}).get("log_dir", "tmp")
-    dirs_to_create.add(os.path.join(project_dir, log_dir))
-    
-    # 收集所有 output_dir 并转换为绝对路径
-    output_dirs = _collect_output_dirs(config)
-    for output_dir in output_dirs:
-        # 关键修复：将相对路径转换为绝对路径
-        if not os.path.isabs(output_dir):
-            full_path = os.path.join(project_dir, output_dir)
-        else:
-            full_path = output_dir
-        dirs_to_create.add(full_path)
-    
-    # 统一创建目录
+    # 统一创建目录（保留原data目录创建）
     for dir_path in dirs_to_create:
-        ensure_dir_exists(dir_path)
-
-
-def ensure_dir_exists(path: str) -> None:
-    """
-    确保目录存在，不存在则创建
-    
-    Args:
-        path: 目录路径
-        
-    Raises:
-        PermissionError: 如果没有创建权限
-    """
-    try:
-        os.makedirs(path, exist_ok=True)
-    except PermissionError:
-        print(f"警告：无法创建目录 {path}，请检查写入权限")
-        raise
-
-
-def save_audio_defensive(pcm_data: bytes, file_path: str) -> str:
-    """
-    
-    Args:
-        pcm_data: PCM 音频数据
-        file_path: 目标文件路径
-        
-    Returns:
-        保存成功的文件路径
-    """
-    import wave
-    
-    # 确保目录存在
-    dir_path = os.path.dirname(file_path)
-    if dir_path:
-        ensure_dir_exists(dir_path)
-    
-    # 写入 WAV 文件
-    with wave.open(file_path, "wb") as wf:
-        wf.setnchannels(1)      # 单声道
-        wf.setsampwidth(2)      # 16-bit
-        wf.setframerate(16000)  # 16kHz
-        wf.writeframes(pcm_data)
-    
-    return file_path
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+        except PermissionError:
+            print(f"警告：无法创建目录 {dir_path}，请检查写入权限")
 
 
 def merge_configs(default_config, custom_config):

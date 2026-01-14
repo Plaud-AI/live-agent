@@ -1,5 +1,4 @@
 import traceback
-from typing import Optional
 
 from ..base import MemoryProviderBase, logger
 from mem0 import MemoryClient
@@ -29,7 +28,7 @@ class MemoryProvider(MemoryProviderBase):
             logger.bind(tag=TAG).error(f"详细错误: {traceback.format_exc()}")
             self.use_mem0 = False
 
-    async def save_memory(self, msgs, context=None):
+    async def save_memory(self, msgs, session_id=None):
         if not self.use_mem0:
             return None
         if len(msgs) < 2:
@@ -42,21 +41,22 @@ class MemoryProvider(MemoryProviderBase):
                 for message in msgs
                 if message.role != "system"
             ]
-            result = self.client.add(
-                messages, user_id=self.role_id, output_format=self.api_version
-            )
+            result = self.client.add(messages, user_id=self.role_id)
             logger.bind(tag=TAG).debug(f"Save memory result: {result}")
         except Exception as e:
             logger.bind(tag=TAG).error(f"保存记忆失败: {str(e)}")
             return None
 
-    async def query_memory(self, query: str, client_timezone: str = None) -> str:
+    async def query_memory(self, query: str) -> str:
         if not self.use_mem0:
             return ""
         try:
-            results = self.client.search(
-                query, user_id=self.role_id, output_format=self.api_version
-            )
+            if not getattr(self, "role_id", None):
+                return ""
+
+            filters = {"user_id": self.role_id}
+
+            results = self.client.search(query, filters=filters)
             if not results or "results" not in results:
                 return ""
 
@@ -86,37 +86,3 @@ class MemoryProvider(MemoryProviderBase):
         except Exception as e:
             logger.bind(tag=TAG).error(f"查询记忆失败: {str(e)}")
             return ""
-
-    def get_user_persona(self) -> Optional[str]:
-        """获取格式化的用户画像信息（用于 prompt）
-        
-        Returns:
-            格式化后的用户画像字符串，如果无记忆则返回 None
-        """
-        if not self.use_mem0:
-            return None
-        
-        try:
-            # 使用通用查询获取所有记忆
-            results = self.client.search(
-                "user information, preferences, background, personal details",
-                user_id=self.role_id,
-                output_format=self.api_version,
-                limit=10  # 限制返回数量
-            )
-            
-            if not results or "results" not in results:
-                return None
-            
-            # 格式化记忆条目
-            persona_items = []
-            for entry in results["results"]:
-                memory = entry.get("memory", "")
-                if memory:
-                    persona_items.append(f"- {memory}")
-            
-            return "\n".join(persona_items) if persona_items else None
-            
-        except Exception as e:
-            logger.bind(tag=TAG).debug(f"获取用户画像失败: {str(e)}")
-            return None

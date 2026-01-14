@@ -1,2 +1,0 @@
-# Turn Detection Provider Module
-

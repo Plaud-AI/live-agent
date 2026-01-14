@@ -19,7 +19,7 @@ class CacheType(Enum):
     CONFIG = "config"
     DEVICE_PROMPT = "device_prompt"
     VOICEPRINT_HEALTH = "voiceprint_health"  # 声纹识别健康检查
-    AGENT_CONFIG = "agent_config"  # Agent 配置缓存（唤醒延迟优化）
+    AUDIO_DATA = "audio_data"  # 音频数据缓存
 
 
 @dataclass
@@ -59,8 +59,8 @@ class CacheConfig:
             CacheType.VOICEPRINT_HEALTH: cls(
                 strategy=CacheStrategy.TTL, ttl=600, max_size=100  # 10分钟过期
             ),
-            CacheType.AGENT_CONFIG: cls(
-                strategy=CacheStrategy.TTL_LRU, ttl=60, max_size=500  # 60秒 TTL，支持 500 个 agent
+            CacheType.AUDIO_DATA: cls(
+                strategy=CacheStrategy.TTL, ttl=600, max_size=100  # 10分钟过期
             ),
         }
         return configs.get(cache_type, cls())

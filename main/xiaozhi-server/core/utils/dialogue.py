@@ -1,5 +1,6 @@
 import uuid
-from typing import List, Dict, Union, Any
+import re
+from typing import List, Dict
 from datetime import datetime
 
 
@@ -7,28 +8,11 @@ class Message:
     def __init__(
         self,
         role: str,
-        content: Union[str, List[Dict[str, Any]]] = None,
+        content: str = None,
         uniq_id: str = None,
         tool_calls=None,
         tool_call_id=None,
     ):
-        """
-        Message in Live Agent System
-        
-        Args:
-            role: Message role (system, user, assistant, tool)
-            content: Message content, can be:
-                - str: Text content
-                - List[Dict]: Multimodal content
-                  For example: [
-                      {"type": "text", "text": "Please, describe this image."},
-                      {"type": "image", "image": {"url": "https://..."}},
-                      {"type": "file", "file": {"url": "https://..."}}
-                  ]
-            uniq_id: Message unique identifier
-            tool_calls: Tool call information
-            tool_call_id: Tool call ID
-        """
         self.uniq_id = uniq_id if uniq_id is not None else str(uuid.uuid4())
         self.role = role
         self.content = content
@@ -75,69 +59,6 @@ class Dialogue:
         else:
             self.put(Message(role="system", content=new_content))
 
-    def load_history_messages(self, messages: List[Dict]) -> int:
-        """
-        Load historical messages from API into dialogue context
-        
-        Messages format from live-agent-api:
-        [
-            {"role": 1, "content": [{"message_type": "text", "message_content": "..."}]},
-            {"role": 2, "content": [{"message_type": "text", "message_content": "..."}]},
-        ]
-        
-        Note: Audio content is skipped (not useful for LLM context)
-        
-        Args:
-            messages: List of message dicts from API (role: 1=user, 2=agent)
-            
-        Returns:
-            Number of messages loaded
-        """
-        if not messages:
-            return 0
-        
-        loaded = 0
-        for msg in messages:
-            role_num = msg.get("role")
-            content_list = msg.get("content", [])
-            
-            # Map role: 1=user, 2=assistant
-            role = "user" if role_num == 1 else "assistant"
-            
-            # Build content: support multimodal (text, image, file)
-            # Skip audio - not useful for LLM context
-            multimodal_parts = []
-            text_content = ""
-            
-            for part in content_list:
-                msg_type = part.get("message_type")
-                msg_content = part.get("message_content", "")
-                
-                if msg_type == "text":
-                    text_content = msg_content
-                    multimodal_parts.append({"type": "text", "text": msg_content})
-                elif msg_type == "image":
-                    # Image URL (OpenAI compatible format)
-                    multimodal_parts.append({"type": "input_image", "image_url": msg_content})
-                elif msg_type == "file":
-                    # File URL (OpenAI compatible format)
-                    multimodal_parts.append({"type": "input_file", "file_url": msg_content})
-                # Skip audio type - not useful for LLM dialogue context
-            
-            # Determine final content format
-            # If only text, use simple string; if multimodal, use list
-            if len(multimodal_parts) == 1 and multimodal_parts[0].get("type") == "text":
-                final_content = text_content
-            elif len(multimodal_parts) > 0:
-                final_content = multimodal_parts
-            else:
-                continue  # Skip empty messages
-            
-            self.put(Message(role=role, content=final_content))
-            loaded += 1
-        
-        return loaded
-
     def get_llm_dialogue_with_memory(
         self, memory_str: str = None, voiceprint_config: dict = None
     ) -> List[Dict[str, str]]:
@@ -150,8 +71,12 @@ class Dialogue:
         )
 
         if system_message:
-            # 基础系统提示（新架构已处理时间信息，无需替换 {{current_time}}）
+            # 基础系统提示
             enhanced_system_prompt = system_message.content
+            # 替换时间占位符
+            enhanced_system_prompt = enhanced_system_prompt.replace(
+                "{{current_time}}", datetime.now().strftime("%H:%M")
+            )
 
             # 添加说话人个性化描述
             try:
@@ -175,8 +100,14 @@ class Dialogue:
                 # 配置读取失败时忽略错误，不影响其他功能
                 pass
 
-            # Memory injection is now handled in connection.py via template replacement
-            # The memory_str parameter is kept for backward compatibility but not used here
+            # 使用正则表达式匹配 <memory> 标签，不管中间有什么内容
+            if memory_str is not None:
+                enhanced_system_prompt = re.sub(
+                    r"<memory>.*?</memory>",
+                    f"<memory>\n{memory_str}\n</memory>",
+                    enhanced_system_prompt,
+                    flags=re.DOTALL,
+                )
             dialogue.append({"role": "system", "content": enhanced_system_prompt})
 
         # 添加用户和助手的对话

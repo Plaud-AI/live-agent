@@ -1,4 +1,0 @@
-"""VAD providers."""
-
-
-

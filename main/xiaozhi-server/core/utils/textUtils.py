@@ -1,7 +1,4 @@
 import json
-import re
-from urllib3 import Retry
-
 
 TAG = __name__
 EMOJI_MAP = {
@@ -75,37 +72,26 @@ def is_punctuation_or_emoji(char):
         "【",
         "】",  # 中文方括号
     }
-    # if char.isspace() or char in punctuation_set:
-    #     return True
-    if char.isspace():
+    if char.isspace() or char in punctuation_set:
         return True
     return is_emoji(char)
 
 
 async def get_emotion(conn, text):
-    """获取文本内的情绪消息
-    
-    优先从 emotion tag (如 "(happy)") 中提取，其次从 emoji 中提取。
-    用于发送 llm 类型消息，使设备端能够显示对应的表情动画。
-    """
-    emotion = "calm"  # 默认 calm 更中性
-    
-    # 优先从 emotion tag 中提取 (如 "(happy) Hello!")
-    emotion_tag = get_emotion_tag(text)
-    if emotion_tag:
-        emotion = emotion_tag
-    else:
-        # 其次从 emoji 中提取
-        for char in text:
-            if char in EMOJI_MAP:
-                emotion = EMOJI_MAP[char]
-                break
-    
+    """获取文本内的情绪消息"""
+    emoji = "🙂"
+    emotion = "happy"
+    for char in text:
+        if char in EMOJI_MAP:
+            emoji = char
+            emotion = EMOJI_MAP[char]
+            break
     try:
         await conn.websocket.send(
             json.dumps(
                 {
                     "type": "llm",
+                    "text": emoji,
                     "emotion": emotion,
                     "session_id": conn.session_id,
                 }
@@ -125,96 +111,3 @@ def is_emoji(char):
 def check_emoji(text):
     """去除文本中的所有emoji表情"""
     return ''.join(char for char in text if not is_emoji(char) and char != "\n")
-
-# Regex pattern to match emotion tags anywhere in text
-# Format: (emotion) e.g., "(happy)", "(sincere)", "(curious)"
-# Matches: optional whitespace + (word) + optional whitespace
-EMOTION_TAG_PATTERN = re.compile(r'\s*\([a-zA-Z_]+\)\s*')
-
-# Pattern to extract emotion name from tag at start of text
-EMOTION_EXTRACT_PATTERN = re.compile(r'^\s*\(([a-zA-Z_]+)\)')
-
-
-def extract_emotion_tag(text: str) -> tuple[str | None, str]:
-    """
-    Extract emotion tag from text and return (emotion, cleaned_text).
-    
-    Only extracts the first emotion tag at the start of the text.
-    
-    Args:
-        text: Text with potential emotion tag at start
-        
-    Returns:
-        Tuple of (emotion_name, text_without_tag)
-        emotion_name is None if no tag found
-        
-    Examples:
-        "(happy) Hello!" -> ("happy", "Hello!")
-        "(sad) I'm sorry." -> ("sad", "I'm sorry.")
-        "No tag here" -> (None, "No tag here")
-    """
-    if not text:
-        return None, text
-    
-    match = EMOTION_EXTRACT_PATTERN.match(text)
-    if match:
-        emotion = match.group(1).lower()
-        cleaned = text[match.end():].strip()
-        return emotion, cleaned
-    
-    return None, text
-
-
-def strip_emotion_tags(text: str) -> str:
-    """
-    Remove all emotion tags from TTS text.
-    
-    Emotion tags are in format: (emotion) typically at the start of sentences.
-    Examples:
-        "(happy) Hello!" -> "Hello!"
-        "(sincere) That's great. (curious) What next?" -> "That's great. What next?"
-        "Hello (happy) world" -> "Hello world"
-    
-    Args:
-        text: Text with potential emotion tags
-        
-    Returns:
-        Text with all emotion tags removed
-    """
-    if not text:
-        return text
-    
-    # Remove all emotion tags from the text
-    result = EMOTION_TAG_PATTERN.sub(' ', text)
-    # Clean up multiple spaces and trim
-    result = re.sub(r'\s+', ' ', result)
-    return result.strip()
-
-
-def get_emotion_tag(text: str) -> str | None:
-    """
-    Extract the first emotion tag from the text.
-    
-    Emotion tags are in format: (emotion) e.g., "(happy)", "(sad)", "(curious)"
-    
-    Examples:
-        "(happy) Hello!" -> "happy"
-        "(sad) I'm sorry" -> "sad"
-        "Hello world" -> None
-    
-    Args:
-        text: Text with potential emotion tags
-        
-    Returns:
-        The emotion tag name (e.g., "happy") or None if not found
-    """
-    if not text:
-        return None
-    
-    match = EMOTION_TAG_PATTERN.search(text)
-    if match:
-        # Extract content inside parentheses, e.g., "(happy)" -> "happy"
-        content = match.group().strip()
-        if content.startswith('(') and content.endswith(')'):
-            return content[1:-1]
-    return None

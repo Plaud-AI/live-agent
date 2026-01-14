@@ -9,7 +9,8 @@ from core.utils.util import get_local_ip, validate_mcp_endpoint
 from core.http_server import SimpleHttpServer
 from core.websocket_server import WebSocketServer
 from core.utils.util import check_ffmpeg_installed
-from config.live_agent_api_client import init_live_agent_api, live_agent_api_safe_close
+from core.utils.gc_manager import get_gc_manager
+
 TAG = __name__
 logger = setup_logging()
 
@@ -46,13 +47,6 @@ async def main():
     check_ffmpeg_installed()
     config = load_config()
 
-    if config.get("read_config_from_live_agent_api", False):
-        init_live_agent_api(config)
-    
-    # disable all parallel features
-    # TODO: find a better way to control
-    from core.parallel import get_feature_manager
-    get_feature_manager().disable_all()
     # auth_key优先级：配置文件server.auth_key > manager-api.secret > 自动生成
     # auth_key用于jwt认证，比如视觉分析接口的jwt认证、ota接口的token生成与websocket认证
     # 获取配置文件中的auth_key
@@ -69,6 +63,10 @@ async def main():
 
     # 添加 stdin 监控任务
     stdin_task = asyncio.create_task(monitor_stdin())
+
+    # 启动全局GC管理器（5分钟清理一次）
+    gc_manager = get_gc_manager(interval_seconds=300)
+    await gc_manager.start()
 
     # 启动 WebSocket 服务器
     ws_server = WebSocketServer(config)
@@ -129,8 +127,9 @@ async def main():
     except asyncio.CancelledError:
         print("任务被取消，清理资源中...")
     finally:
-        if config.get("read_config_from_live_agent_api", False):
-            live_agent_api_safe_close()
+        # 停止全局GC管理器
+        await gc_manager.stop()
+
         # 取消所有任务（关键修复点）
         stdin_task.cancel()
         ws_task.cancel()
