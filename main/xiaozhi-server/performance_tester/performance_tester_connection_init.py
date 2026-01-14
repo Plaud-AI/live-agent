@@ -50,6 +50,7 @@ PROTOCOL_VERSION = 1
 NUM_TESTS = 10  # 测试次数
 HELLO_TIMEOUT = 10.0  # hello 响应超时时间（秒）
 CONNECT_TIMEOUT = 5.0  # 连接超时时间（秒）
+WAIT_AFTER_HELLO = 1.0  # hello 响应后等待时间（秒），让服务端完成初始化
 
 
 @dataclass
@@ -186,6 +187,10 @@ class ConnectionInitTester:
             result.hello_rtt = result.t3_hello_received - result.t2_hello_sent
             result.total_latency = result.t3_hello_received - result.t0_connect_start
             result.success = True
+            
+            # 等待一段时间让服务端完成初始化（避免打断后续组件初始化）
+            if WAIT_AFTER_HELLO > 0:
+                await asyncio.sleep(WAIT_AFTER_HELLO)
             
         except Exception as e:
             result.error_msg = f"测试异常: {str(e)}"
