@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 
 import websockets
@@ -12,6 +13,11 @@ from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
 
 TAG = __name__
+
+# 抑制 websockets 库的握手失败日志（网络扫描器造成的噪音）
+# 这些请求已在 _http_response 中被正确处理并记录 WARNING
+logging.getLogger("websockets.server").setLevel(logging.ERROR)
+logging.getLogger("websockets.protocol").setLevel(logging.ERROR)
 
 
 # WebSocket 关闭码说明
@@ -103,18 +109,21 @@ class WebSocketServer:
             f"当前活动连接数={len(self.active_connections)}"
         )
         
+        # 解析 URL 查询参数，用于补充 Headers 中缺失的字段
+        from urllib.parse import parse_qs, urlparse
+        
+        request_path = websocket.request.path
+        query_params = {}
+        if request_path:
+            parsed_url = urlparse(request_path)
+            query_params = parse_qs(parsed_url.query)
+        
+        # 检查 device-id：优先使用 Headers，其次使用 URL 参数
         if headers.get("device-id", None) is None:
-            # 尝试从 URL 的查询参数中获取 device-id
-            from urllib.parse import parse_qs, urlparse
-
-            # 从 WebSocket 请求中获取路径
-            request_path = websocket.request.path
             if not request_path:
                 self.logger.bind(tag=TAG).error(f"🔴 [连接拒绝] IP={client_ip} | 原因=无法获取请求路径")
                 await websocket.close()
                 return
-            parsed_url = urlparse(request_path)
-            query_params = parse_qs(parsed_url.query)
             if "device-id" not in query_params:
                 self.logger.bind(tag=TAG).warning(
                     f"⚠️ [连接测试] IP={client_ip} | 原因=缺少device-id，可能是端口探测"
@@ -125,17 +134,14 @@ class WebSocketServer:
             else:
                 websocket.request.headers["device-id"] = query_params["device-id"][0]
                 device_id = query_params["device-id"][0]  # 更新设备ID
-            if "client-id" in query_params:
-                websocket.request.headers["client-id"] = query_params["client-id"][0]
-            if "agent-id" in query_params:
-                websocket.request.headers["agent-id"] = query_params["agent-id"][0]
-            if "authorization" in query_params:
-                websocket.request.headers["authorization"] = query_params[
-                    "authorization"
-                ][0]
-            if "timezone" in query_params:
-                self.logger.bind(tag=TAG).info(f"timezone: {query_params['timezone'][0]}")
-                websocket.request.headers["timezone"] = query_params["timezone"][0]
+        
+        # 从 URL 参数补充 Headers 中缺失的字段（不覆盖已存在的 Header）
+        param_header_mapping = ["client-id", "agent-id", "authorization", "timezone"]
+        for param_name in param_header_mapping:
+            if headers.get(param_name) is None and param_name in query_params:
+                websocket.request.headers[param_name] = query_params[param_name][0]
+                if param_name == "timezone":
+                    self.logger.bind(tag=TAG).info(f"timezone: {query_params[param_name][0]}")
 
         """处理新连接，每次创建独立的ConnectionHandler"""
         # 先认证，后建立连接
@@ -201,16 +207,18 @@ class WebSocketServer:
             # 强制关闭连接（如果还没有关闭的话）
             try:
                 # 安全地检查WebSocket状态并关闭
-                if hasattr(websocket, "closed") and not websocket.closed:
-                    await websocket.close()
-                elif hasattr(websocket, "state") and websocket.state.name != "CLOSED":
-                    await websocket.close()
-                else:
-                    # 如果没有closed属性，直接尝试关闭
-                    await websocket.close()
+                is_closed = False
+                if hasattr(websocket, "closed"):
+                    is_closed = websocket.closed
+                elif hasattr(websocket, "state"):
+                    is_closed = websocket.state.name == "CLOSED"
+                
+                if not is_closed:
+                    # 发送正常关闭帧 (RFC 6455: code=1000 表示正常关闭)
+                    await websocket.close(code=1000, reason="Server cleanup")
             except Exception as close_error:
-                self.logger.bind(tag=TAG).error(
-                    f"服务器端强制关闭连接时出错: {close_error}"
+                self.logger.bind(tag=TAG).warning(
+                    f"服务器端关闭连接时出错（可能已关闭）: {close_error}"
                 )
 
     async def _http_response(self, websocket, request_headers):

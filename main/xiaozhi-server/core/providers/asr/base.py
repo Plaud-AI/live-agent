@@ -287,33 +287,15 @@ class ASRProviderBase(ABC):
             self.stop_ws_connection()
             
             if text_len > 0:
-                # Option1: suppress wakeup residue ASR to avoid double-trigger (listen/detect + ASR/TD)
-                # If wakeup has just been handled (short reply already played), the same audio segment
-                # is often transcribed into a very short/noisy phrase (e.g. "OK那不"), which then
-                # triggers TurnDetection → on_end_of_turn → second chat after endpoint delay.
-                try:
-                    from core.utils.wakeup_suppression import should_drop_asr_after_wakeup
-                    suppress_until_ms = getattr(conn, "_wakeup_suppress_next_asr_until_ms", 0) or 0
-                    now_ms = int(time.time() * 1000)
-                    if suppress_until_ms and now_ms <= suppress_until_ms:
-                        if should_drop_asr_after_wakeup(
-                            asr_text=raw_text,
-                            wakeup_words=conn.config.get("wakeup_words", []),
-                            max_norm_len=4,
-                        ):
-                            # Consume the suppress window once (avoid affecting later real queries)
-                            conn._wakeup_suppress_next_asr_until_ms = 0
-                            logger.bind(tag=TAG).info(
-                                f"Dropped wakeup residue ASR: '{raw_text}'"
-                            )
-                            return
-                        # Not a wakeup residue (likely wakeup + real query in one breath)
-                        conn._wakeup_suppress_next_asr_until_ms = 0
-                    elif suppress_until_ms and now_ms > suppress_until_ms:
-                        # Expired window
-                        conn._wakeup_suppress_next_asr_until_ms = 0
-                except Exception as e:
-                    logger.bind(tag=TAG).warning(f"Wakeup ASR suppression check failed: {e}")
+                # Drop the first ASR result after wakeup unconditionally.
+                # Reason: device sends wakeup audio → ASR transcribes it (e.g., "Okinaabu", "OK南部")
+                # → this is NOT a real user query, just the wakeup word audio residue.
+                if getattr(conn, "_drop_first_asr_after_wakeup", False):
+                    conn._drop_first_asr_after_wakeup = False
+                    logger.bind(tag=TAG).info(
+                        f"Dropped first ASR after wakeup: '{raw_text}'"
+                    )
+                    return
 
                 # Append to ASR text buffer
                 if conn.asr_text_buffer:
@@ -547,10 +529,17 @@ class ASRProviderBase(ABC):
         pass
 
     def save_audio_to_file(self, pcm_data: List[bytes], session_id: str) -> str:
-        """PCM数据保存为WAV文件"""
+        """
+        PCM数据保存为WAV文件
+        
+
+        """
         module_name = __name__.split(".")[-1]
         file_name = f"asr_{module_name}_{session_id}_{uuid.uuid4()}.wav"
         file_path = os.path.join(self.output_dir, file_name)
+
+ 
+        os.makedirs(os.path.dirname(file_path) or self.output_dir, exist_ok=True)
 
         with wave.open(file_path, "wb") as wf:
             wf.setnchannels(1)

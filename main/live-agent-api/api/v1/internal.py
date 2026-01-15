@@ -132,6 +132,7 @@ async def get_agent_config(
         voice=voice_config,
         language=language,
         instruction=agent.instruction,
+        voice_opening=agent.voice_opening,  # Always return for wakeup greeting
         voice_closing=agent.voice_closing,
         enable_greeting=enable_greeting,
         greeting=greeting,

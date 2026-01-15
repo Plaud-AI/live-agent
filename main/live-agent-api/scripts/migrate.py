@@ -19,19 +19,32 @@ logging.basicConfig(
 logger = logging.getLogger("MigrationRunner")
 
 # 延迟导入，因为这个脚本可能在不同环境下运行
+def load_env_file() -> dict[str, str]:
+    """从 .env 文件加载环境变量"""
+    env_vars = {}
+    env_path = Path(__file__).resolve().parent.parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    env_vars[key.strip()] = value.strip().strip('"\'')
+    return env_vars
+
+
+def get_env_var(name: str, env_file_vars: dict[str, str] | None = None) -> str:
+    """获取环境变量，优先从系统环境变量，然后从 .env 文件"""
+    value = os.environ.get(name, '')
+    if not value and env_file_vars:
+        value = env_file_vars.get(name, '')
+    return value
+
+
 def get_database_url():
     """从环境变量获取数据库 URL"""
-    url = os.environ.get('DATABASE_URL', '')
-    if not url:
-        # 尝试从 .env 文件加载
-        env_path = Path(__file__).resolve().parent.parent / '.env'
-        if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith('DATABASE_URL='):
-                        url = line.split('=', 1)[1].strip().strip('"\'')
-                        break
-    return url
+    env_file_vars = load_env_file()
+    return get_env_var('DATABASE_URL', env_file_vars)
 
 
 def parse_dsn(sqlalchemy_url: str) -> str:
@@ -40,6 +53,28 @@ def parse_dsn(sqlalchemy_url: str) -> str:
     postgresql+asyncpg://user:pass@host:port/db -> postgresql://user:pass@host:port/db
     """
     return re.sub(r'^postgresql\+asyncpg://', 'postgresql://', sqlalchemy_url)
+
+
+def substitute_env_vars(sql_content: str, env_file_vars: dict[str, str] | None = None) -> str:
+    """
+    替换 SQL 中的环境变量占位符 ${VAR_NAME}
+    
+    支持的变量:
+    - ${S3_PUBLIC_BASE_URL}: S3 公网访问基础 URL
+    - ${S3_BUCKET_NAME}: S3 存储桶名称
+    """
+    # 查找所有 ${VAR_NAME} 格式的占位符
+    pattern = r'\$\{([A-Z_][A-Z0-9_]*)\}'
+    
+    def replace_var(match):
+        var_name = match.group(1)
+        value = get_env_var(var_name, env_file_vars)
+        if not value:
+            logger.warning(f"Environment variable {var_name} not set, placeholder will remain")
+            return match.group(0)  # 保持原样
+        return value
+    
+    return re.sub(pattern, replace_var, sql_content)
 
 
 async def detect_schema_baseline(conn) -> dict[str, bool]:
@@ -113,7 +148,8 @@ async def run_migrations():
     import asyncpg
     
     migration_dir = Path(__file__).resolve().parent.parent / "migrations"
-    database_url = get_database_url()
+    env_file_vars = load_env_file()
+    database_url = get_env_var('DATABASE_URL', env_file_vars)
     
     if not database_url or 'postgresql' not in database_url:
         logger.error("Invalid or missing DATABASE_URL")
@@ -201,6 +237,9 @@ async def run_migrations():
             file_path = migration_dir / filename
             with open(file_path, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
+            
+            # 替换环境变量占位符 (${VAR_NAME})
+            sql_content = substitute_env_vars(sql_content, env_file_vars)
             
             logger.info(f"[APPLY] {filename}...")
             

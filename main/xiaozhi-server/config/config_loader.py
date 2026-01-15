@@ -123,44 +123,107 @@ def get_private_config_from_api(config, device_id, client_id):
 
 
 def ensure_directories(config):
-    """确保所有配置路径存在"""
-    dirs_to_create = set()
-    project_dir = get_project_dir()  # 获取项目根目录
-    # 日志文件目录
-    log_dir = config.get("log", {}).get("log_dir", "tmp")
-    dirs_to_create.add(os.path.join(project_dir, log_dir))
+    """确保所有配置路径存在（向后兼容的包装函数）"""
+    project_dir = get_project_dir()
+    _setup_directories(config, project_dir)
 
-    # ASR/TTS模块输出目录
+
+def _collect_output_dirs(config: dict) -> set:
+    """
+    收集配置中所有 Provider 的 output_dir
+    
+    Args:
+        config: 配置字典
+        
+    Returns:
+        包含所有唯一 output_dir 的集合
+    """
+    dirs = set()
+    
+    # 遍历 ASR 和 TTS 模块
     for module in ["ASR", "TTS"]:
         if config.get(module) is None:
             continue
         for provider in config.get(module, {}).values():
-            output_dir = provider.get("output_dir", "")
-            if output_dir:
-                dirs_to_create.add(output_dir)
+            if isinstance(provider, dict):
+                output_dir = provider.get("output_dir", "")
+                if output_dir:
+                    dirs.add(output_dir)
+    
+    return dirs
 
-    # 根据selected_module创建模型目录
-    selected_modules = config.get("selected_module", {})
-    for module_type in ["ASR", "LLM", "TTS"]:
-        selected_provider = selected_modules.get(module_type)
-        if not selected_provider:
-            continue
-        if config.get(module) is None:
-            continue
-        if config.get(selected_provider) is None:
-            continue
-        provider_config = config.get(module_type, {}).get(selected_provider, {})
-        output_dir = provider_config.get("output_dir")
-        if output_dir:
-            full_model_dir = os.path.join(project_dir, output_dir)
-            dirs_to_create.add(full_model_dir)
 
-    # 统一创建目录（保留原data目录创建）
+def _setup_directories(config: dict, project_dir: str) -> None:
+    """
+    根据配置创建所有必需的目录
+    
+    Args:
+        config: 配置字典
+        project_dir: 项目根目录（绝对路径）
+    """
+    dirs_to_create = set()
+    
+    # 日志文件目录
+    log_dir = config.get("log", {}).get("log_dir", "tmp")
+    dirs_to_create.add(os.path.join(project_dir, log_dir))
+    
+    # 收集所有 output_dir 并转换为绝对路径
+    output_dirs = _collect_output_dirs(config)
+    for output_dir in output_dirs:
+        # 关键修复：将相对路径转换为绝对路径
+        if not os.path.isabs(output_dir):
+            full_path = os.path.join(project_dir, output_dir)
+        else:
+            full_path = output_dir
+        dirs_to_create.add(full_path)
+    
+    # 统一创建目录
     for dir_path in dirs_to_create:
-        try:
-            os.makedirs(dir_path, exist_ok=True)
-        except PermissionError:
-            print(f"警告：无法创建目录 {dir_path}，请检查写入权限")
+        ensure_dir_exists(dir_path)
+
+
+def ensure_dir_exists(path: str) -> None:
+    """
+    确保目录存在，不存在则创建
+    
+    Args:
+        path: 目录路径
+        
+    Raises:
+        PermissionError: 如果没有创建权限
+    """
+    try:
+        os.makedirs(path, exist_ok=True)
+    except PermissionError:
+        print(f"警告：无法创建目录 {path}，请检查写入权限")
+        raise
+
+
+def save_audio_defensive(pcm_data: bytes, file_path: str) -> str:
+    """
+    
+    Args:
+        pcm_data: PCM 音频数据
+        file_path: 目标文件路径
+        
+    Returns:
+        保存成功的文件路径
+    """
+    import wave
+    
+    # 确保目录存在
+    dir_path = os.path.dirname(file_path)
+    if dir_path:
+        ensure_dir_exists(dir_path)
+    
+    # 写入 WAV 文件
+    with wave.open(file_path, "wb") as wf:
+        wf.setnchannels(1)      # 单声道
+        wf.setsampwidth(2)      # 16-bit
+        wf.setframerate(16000)  # 16kHz
+        wf.writeframes(pcm_data)
+    
+    return file_path
 
 
 def merge_configs(default_config, custom_config):

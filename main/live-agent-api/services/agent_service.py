@@ -164,14 +164,14 @@ class AgentService:
         owner_id: str
     ) -> List[AgentModel]:
         """
-        Get agents that can be bound to device (must have wake_word configured)
+        Get agents that can be bound to device
         
         Args:
             db: Database session
             owner_id: User ID
             
         Returns:
-            List of agents with wake_word configured
+            List of agents owned by user
         """
         return await Agent.get_bindable_agents(db, owner_id)
     
