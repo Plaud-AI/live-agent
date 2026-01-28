@@ -18,6 +18,7 @@ export class StreamingContext {
         this.pendingAudioBufferQueue = [];  // 待处理的缓存队列
         this.audioBufferQueue = new BlockingQueue();  // 缓存队列
         this.playing = false;     // 是否正在播放
+        this.stopped = false;     // 是否已停止（用于打断）
         this.endOfStream = false; // 是否收到结束信号
         this.source = null;       // 当前音频源
         this.totalSamples = 0;    // 累积的总样本数
@@ -64,8 +65,17 @@ export class StreamingContext {
         }
 
         while (true) {
+            // 检查是否已停止
+            if (this.stopped) {
+                log('解码已停止，退出解码循环', 'info');
+                return;
+            }
+            
             let decodedSamples = [];
             for (const frame of this.pendingAudioBufferQueue) {
+                // 在循环中也检查停止标志
+                if (this.stopped) break;
+                
                 try {
                     // 使用Opus解码器解码
                     const frameData = this.opusDecoder.decode(frame);
@@ -82,6 +92,12 @@ export class StreamingContext {
                 }
             }
 
+            // 再次检查是否已停止
+            if (this.stopped) {
+                log('解码已停止，退出解码循环', 'info');
+                return;
+            }
+
             if (decodedSamples.length > 0) {
                 // 使用循环替代展开运算符
                 for (let i = 0; i < decodedSamples.length; i++) {
@@ -91,20 +107,40 @@ export class StreamingContext {
             } else {
                 log('没有成功解码的样本', 'warning');
             }
+            
             await this.getPendingAudioBufferQueue();
+            
+            // 等待后再次检查
+            if (this.stopped) {
+                log('解码已停止，退出解码循环', 'info');
+                return;
+            }
         }
     }
 
     // 开始播放音频
     async startPlaying() {
         while (true) {
+            // 检查是否已停止
+            if (this.stopped) {
+                log('播放已停止，退出播放循环', 'info');
+                return;
+            }
+            
             // 如果累积了至少0.3秒的音频，开始播放
             const minSamples = this.sampleRate * this.minAudioDuration * 3;
             if (!this.playing && this.queue.length < minSamples) {
                 await this.getQueue(minSamples);
             }
+            
+            // 再次检查是否已停止（等待队列期间可能被停止）
+            if (this.stopped) {
+                log('播放已停止，退出播放循环', 'info');
+                return;
+            }
+            
             this.playing = true;
-            while (this.playing && this.queue.length) {
+            while (this.playing && this.queue.length && !this.stopped) {
                 // 创建新的音频缓冲区
                 const minPlaySamples = Math.min(this.queue.length, this.sampleRate);
                 const currentSamples = this.queue.splice(0, minPlaySamples);
@@ -136,10 +172,83 @@ export class StreamingContext {
 
                 this.lastPlayTime = this.audioContext.currentTime;
                 log(`开始播放 ${currentSamples.length} 个样本，约 ${(currentSamples.length / this.sampleRate).toFixed(2)} 秒`, 'info');
-                this.source.start();
+                
+                // 使用 Promise 等待当前片段播放完成，以便能够响应停止信号
+                await new Promise((resolve) => {
+                    const currentSource = this.source;
+                    currentSource.onended = () => {
+                        resolve();
+                    };
+                    currentSource.start();
+                    
+                    // 同时检查停止信号，如果停止则立即 resolve
+                    const checkStop = setInterval(() => {
+                        if (this.stopped) {
+                            clearInterval(checkStop);
+                            try {
+                                currentSource.stop();
+                                currentSource.disconnect();
+                            } catch (e) {}
+                            resolve();
+                        }
+                    }, 10); // 每 10ms 检查一次
+                    
+                    // 播放结束后清除检查定时器
+                    currentSource.onended = () => {
+                        clearInterval(checkStop);
+                        resolve();
+                    };
+                });
+                
+                // 播放完成后检查是否应该停止
+                if (this.stopped) {
+                    log('播放被中断', 'info');
+                    return;
+                }
+            }
+            
+            if (this.stopped) {
+                return;
             }
             await this.getQueue(minSamples);
         }
+    }
+
+    // 停止播放并清空所有缓冲区
+    stop() {
+        log('停止音频播放，清空缓冲区', 'info');
+        
+        // 设置停止标志（必须先设置，让循环能检测到）
+        this.stopped = true;
+        this.playing = false;
+        this.endOfStream = true;
+        
+        // 中止所有阻塞的队列等待（关键：让 dequeue 立即返回）
+        if (this.activeQueue && typeof this.activeQueue.abort === 'function') {
+            this.activeQueue.abort();
+        }
+        if (this.audioBufferQueue && typeof this.audioBufferQueue.abort === 'function') {
+            this.audioBufferQueue.abort();
+        }
+        
+        // 停止当前正在播放的音频源
+        if (this.source) {
+            try {
+                this.source.stop();
+                this.source.disconnect();
+            } catch (e) {
+                // 忽略已停止的音频源错误
+            }
+            this.source = null;
+        }
+        
+        // 清空所有缓冲区
+        this.queue = [];
+        this.pendingAudioBufferQueue = [];
+        
+        // 重置统计
+        this.totalSamples = 0;
+        this.lastPlayTime = 0;
     }
 }
 
