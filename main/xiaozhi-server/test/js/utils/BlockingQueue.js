@@ -5,6 +5,9 @@ export default class BlockingQueue {
     /* 空队列一次性闸门 */
     #emptyPromise = null;
     #emptyResolve = null;
+    
+    /* 是否已中止 */
+    #aborted = false;
 
     /* 生产者：把数据塞进去 */
     enqueue(item, ...restItems) {
@@ -30,9 +33,18 @@ export default class BlockingQueue {
 
     /* 消费者：min 条或 timeout ms 先到谁 */
     async dequeue(min = 1, timeout = Infinity, onTimeout = null) {
+        // 如果已中止，立即返回空数组
+        if (this.#aborted) {
+            return [];
+        }
+        
         // 1. 若空，等第一次数据到达（所有调用共享同一个 promise）
         if (this.#items.length === 0) {
             await this.#waitForFirstItem();
+            // 等待后再次检查是否已中止
+            if (this.#aborted) {
+                return [];
+            }
         }
 
         // 立即满足
@@ -56,6 +68,33 @@ export default class BlockingQueue {
 
             this.#waiters.push(waiter);
         });
+    }
+    
+    /* 中止所有等待，清空队列 */
+    abort() {
+        this.#aborted = true;
+        
+        // 唤醒空队列闸门
+        if (this.#emptyResolve) {
+            this.#emptyResolve();
+            this.#emptyResolve = null;
+            this.#emptyPromise = null;
+        }
+        
+        // 立即解决所有等待者，返回空数组
+        for (const w of this.#waiters) {
+            if (w.timer) clearTimeout(w.timer);
+            w.resolve([]);
+        }
+        this.#waiters = [];
+        
+        // 清空队列
+        this.#items = [];
+    }
+    
+    /* 检查是否已中止 */
+    get isAborted() {
+        return this.#aborted;
     }
 
     /* 空队列闸门生成器 */
