@@ -10,26 +10,54 @@ export class UIController {
         this.isEditing = false;
         this.visualizerCanvas = null;
         this.visualizerContext = null;
+        this.visualizerCanvasAuto = null;
+        this.visualizerContextAuto = null;
         this.audioStatsTimer = null;
+        this.currentVoiceTab = 'manual'; // 'manual' 或 'auto'
     }
 
     // 初始化
     init() {
+        console.log('UIController 初始化开始');
+        
         this.visualizerCanvas = document.getElementById('audioVisualizer');
-        this.visualizerContext = this.visualizerCanvas.getContext('2d');
+        this.visualizerCanvasAuto = document.getElementById('audioVisualizerAuto');
+        
+        console.log('visualizerCanvas:', this.visualizerCanvas);
+        console.log('visualizerCanvasAuto:', this.visualizerCanvasAuto);
+        
+        if (this.visualizerCanvas) {
+            this.visualizerContext = this.visualizerCanvas.getContext('2d');
+        }
+        if (this.visualizerCanvasAuto) {
+            this.visualizerContextAuto = this.visualizerCanvasAuto.getContext('2d');
+        }
 
         this.initVisualizer();
+        this.initVisualizerAuto();
         this.initEventListeners();
         this.startAudioStatsMonitor();
         loadConfig();
+        
+        console.log('UIController 初始化完成');
     }
 
-    // 初始化可视化器
+    // 初始化可视化器（手动模式）
     initVisualizer() {
-        this.visualizerCanvas.width = this.visualizerCanvas.clientWidth;
-        this.visualizerCanvas.height = this.visualizerCanvas.clientHeight;
+        if (!this.visualizerCanvas || !this.visualizerContext) return;
+        this.visualizerCanvas.width = this.visualizerCanvas.clientWidth || 300;
+        this.visualizerCanvas.height = this.visualizerCanvas.clientHeight || 60;
         this.visualizerContext.fillStyle = '#fafafa';
         this.visualizerContext.fillRect(0, 0, this.visualizerCanvas.width, this.visualizerCanvas.height);
+    }
+
+    // 初始化可视化器（自动模式）
+    initVisualizerAuto() {
+        if (!this.visualizerCanvasAuto || !this.visualizerContextAuto) return;
+        this.visualizerCanvasAuto.width = this.visualizerCanvasAuto.clientWidth || 300;
+        this.visualizerCanvasAuto.height = this.visualizerCanvasAuto.clientHeight || 60;
+        this.visualizerContextAuto.fillStyle = '#fafafa';
+        this.visualizerContextAuto.fillRect(0, 0, this.visualizerCanvasAuto.width, this.visualizerCanvasAuto.height);
     }
 
     // 更新状态显示
@@ -51,6 +79,10 @@ export class UIController {
         const messageInput = document.getElementById('messageInput');
         const sendTextButton = document.getElementById('sendTextButton');
         const recordButton = document.getElementById('recordButton');
+        const recordButtonAuto = document.getElementById('recordButtonAuto');
+
+        console.log('updateConnectionUI called, isConnected:', isConnected);
+        console.log('recordButtonAuto element:', recordButtonAuto);
 
         if (isConnected) {
             this.updateStatusDisplay(connectionStatus, '● WS已连接');
@@ -59,6 +91,12 @@ export class UIController {
             messageInput.disabled = false;
             sendTextButton.disabled = false;
             recordButton.disabled = false;
+            if (recordButtonAuto) {
+                recordButtonAuto.disabled = false;
+                console.log('recordButtonAuto enabled');
+            } else {
+                console.error('recordButtonAuto not found!');
+            }
         } else {
             this.updateStatusDisplay(connectionStatus, '● WS未连接');
             this.updateStatusDisplay(otaStatus, '● OTA未连接');
@@ -66,6 +104,9 @@ export class UIController {
             messageInput.disabled = true;
             sendTextButton.disabled = true;
             recordButton.disabled = true;
+            if (recordButtonAuto) {
+                recordButtonAuto.disabled = true;
+            }
             // 断开连接时，会话状态变为离线
             this.updateSessionStatus(null);
         }
@@ -74,14 +115,37 @@ export class UIController {
     // 更新录音按钮状态
     updateRecordButtonState(isRecording, seconds = 0) {
         const recordButton = document.getElementById('recordButton');
+        const recordButtonAuto = document.getElementById('recordButtonAuto');
+        const audioRecorder = getAudioRecorder();
+        const isAutoMode = audioRecorder.getRecordingMode() === 'auto';
+        
+        // 根据当前模式更新对应的按钮
+        const activeButton = isAutoMode ? recordButtonAuto : recordButton;
+        const inactiveButton = isAutoMode ? recordButton : recordButtonAuto;
+        
         if (isRecording) {
-            recordButton.textContent = `停止录音 ${seconds.toFixed(1)}秒`;
-            recordButton.classList.add('recording');
+            if (isAutoMode) {
+                activeButton.textContent = `对话中 ${seconds.toFixed(1)}秒`;
+            } else {
+                activeButton.textContent = `停止录音 ${seconds.toFixed(1)}秒`;
+            }
+            activeButton.classList.add('recording');
+            inactiveButton.disabled = true;
         } else {
+            // 根据模式显示不同的按钮文本
+            if (isAutoMode) {
+                activeButton.textContent = '开始对话';
+            } else {
+                activeButton.textContent = '开始录音';
+            }
+            // 恢复非活动按钮的文本
             recordButton.textContent = '开始录音';
-            recordButton.classList.remove('recording');
+            recordButtonAuto.textContent = '开始对话';
+            
+            activeButton.classList.remove('recording');
+            inactiveButton.disabled = false;
         }
-        recordButton.disabled = false;
+        activeButton.disabled = false;
     }
 
     // 更新会话状态UI
@@ -186,10 +250,14 @@ export class UIController {
 
     // 绘制音频可视化效果
     drawVisualizer(dataArray) {
-        this.visualizerContext.fillStyle = '#fafafa';
-        this.visualizerContext.fillRect(0, 0, this.visualizerCanvas.width, this.visualizerCanvas.height);
+        // 根据当前模式选择对应的 canvas
+        const canvas = this.currentVoiceTab === 'auto' ? this.visualizerCanvasAuto : this.visualizerCanvas;
+        const context = this.currentVoiceTab === 'auto' ? this.visualizerContextAuto : this.visualizerContext;
+        
+        context.fillStyle = '#fafafa';
+        context.fillRect(0, 0, canvas.width, canvas.height);
 
-        const barWidth = (this.visualizerCanvas.width / dataArray.length) * 2.5;
+        const barWidth = (canvas.width / dataArray.length) * 2.5;
         let barHeight;
         let x = 0;
 
@@ -197,12 +265,12 @@ export class UIController {
             barHeight = dataArray[i] / 2;
 
             // 创建渐变色：从紫色到蓝色到青色
-            const hue = 200 + (barHeight / this.visualizerCanvas.height) * 60; // 200-260度，从青色到紫色
-            const saturation = 80 + (barHeight / this.visualizerCanvas.height) * 20; // 饱和度 80-100%
-            const lightness = 45 + (barHeight / this.visualizerCanvas.height) * 15; // 亮度 45-60%
+            const hue = 200 + (barHeight / canvas.height) * 60; // 200-260度，从青色到紫色
+            const saturation = 80 + (barHeight / canvas.height) * 20; // 饱和度 80-100%
+            const lightness = 45 + (barHeight / canvas.height) * 15; // 亮度 45-60%
 
-            this.visualizerContext.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-            this.visualizerContext.fillRect(x, this.visualizerCanvas.height - barHeight, barWidth, barHeight);
+            context.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            context.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
 
             x += barWidth + 1;
         }
@@ -210,6 +278,7 @@ export class UIController {
 
     // 初始化事件监听器
     initEventListeners() {
+        console.log('initEventListeners 开始');
         const wsHandler = getWebSocketHandler();
         const audioRecorder = getAudioRecorder();
 
@@ -285,6 +354,11 @@ export class UIController {
         const tabs = document.querySelectorAll('.tab');
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
+                // 如果正在录音，不允许切换标签页
+                if (audioRecorder.isRecording) {
+                    return;
+                }
+                
                 tabs.forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
@@ -292,9 +366,18 @@ export class UIController {
                 const tabContent = document.getElementById(`${tab.dataset.tab}Tab`);
                 tabContent.classList.add('active');
 
+                // 根据标签页设置录音模式
                 if (tab.dataset.tab === 'voice') {
+                    this.currentVoiceTab = 'manual';
+                    audioRecorder.setRecordingMode('manual');
                     setTimeout(() => {
                         this.initVisualizer();
+                    }, 50);
+                } else if (tab.dataset.tab === 'voiceAuto') {
+                    this.currentVoiceTab = 'auto';
+                    audioRecorder.setRecordingMode('auto');
+                    setTimeout(() => {
+                        this.initVisualizerAuto();
                     }, 50);
                 }
             });
@@ -316,18 +399,49 @@ export class UIController {
             if (e.key === 'Enter') sendMessage();
         });
 
-        // 录音按钮
+        // 手动模式录音按钮
         const recordButton = document.getElementById('recordButton');
-        recordButton.addEventListener('click', () => {
-            if (audioRecorder.isRecording) {
-                audioRecorder.stop();
-            } else {
-                audioRecorder.start();
-            }
-        });
+        console.log('绑定手动模式按钮事件, element:', recordButton);
+        if (recordButton) {
+            recordButton.addEventListener('click', () => {
+                console.log('手动模式录音按钮被点击');
+                if (audioRecorder.isRecording) {
+                    audioRecorder.stop();
+                } else {
+                    audioRecorder.setRecordingMode('manual');
+                    this.currentVoiceTab = 'manual';
+                    audioRecorder.start();
+                }
+            });
+            console.log('手动模式按钮事件绑定成功');
+        } else {
+            console.error('recordButton 元素不存在!');
+        }
+
+        // 自动模式录音按钮
+        const recordButtonAuto = document.getElementById('recordButtonAuto');
+        console.log('绑定自动模式按钮事件, element:', recordButtonAuto);
+        if (recordButtonAuto) {
+            recordButtonAuto.addEventListener('click', () => {
+                console.log('自动模式录音按钮被点击');
+                if (audioRecorder.isRecording) {
+                    audioRecorder.stop();
+                } else {
+                    audioRecorder.setRecordingMode('auto');
+                    this.currentVoiceTab = 'auto';
+                    audioRecorder.start();
+                }
+            });
+            console.log('自动模式按钮事件绑定成功');
+        } else {
+            console.error('recordButtonAuto 元素不存在!');
+        }
 
         // 窗口大小变化
-        window.addEventListener('resize', () => this.initVisualizer());
+        window.addEventListener('resize', () => {
+            this.initVisualizer();
+            this.initVisualizerAuto();
+        });
     }
 }
 

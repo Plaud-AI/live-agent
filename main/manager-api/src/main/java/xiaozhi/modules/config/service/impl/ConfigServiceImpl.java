@@ -105,6 +105,99 @@ public class ConfigServiceImpl implements ConfigService {
     }
 
     @Override
+    public Map<String, Object> getAgentConfigById(String agentId) {
+        // 获取智能体信息
+        AgentEntity agent = agentService.getAgentById(agentId);
+        if (agent == null) {
+            throw new RenException(ErrorCode.AGENT_NOT_FOUND);
+        }
+
+        // 获取音色信息
+        String voice = null;
+        String referenceAudio = null;
+        String referenceText = null;
+        TimbreDetailsVO timbre = timbreService.get(agent.getTtsVoiceId());
+        if (timbre != null) {
+            voice = timbre.getTtsVoice();
+            referenceAudio = timbre.getReferenceAudio();
+            referenceText = timbre.getReferenceText();
+        } else {
+            VoiceCloneEntity voice_print = cloneVoiceService.selectById(agent.getTtsVoiceId());
+            if (voice_print != null) {
+                voice = voice_print.getVoiceId();
+            }
+        }
+
+        // 构建返回数据
+        Map<String, Object> result = new HashMap<>();
+
+        // 获取单台设备每天最多输出字数
+        String deviceMaxOutputSize = sysParamsService.getValue("device_max_output_size", true);
+        result.put("device_max_output_size", deviceMaxOutputSize);
+
+        // 获取聊天记录配置
+        Integer chatHistoryConf = agent.getChatHistoryConf();
+        if (agent.getMemModelId() != null && agent.getMemModelId().equals(Constant.MEMORY_NO_MEM)) {
+            chatHistoryConf = Constant.ChatHistoryConfEnum.IGNORE.getCode();
+        } else if (agent.getMemModelId() != null
+                && !agent.getMemModelId().equals(Constant.MEMORY_NO_MEM)
+                && agent.getChatHistoryConf() == null) {
+            chatHistoryConf = Constant.ChatHistoryConfEnum.RECORD_TEXT_AUDIO.getCode();
+        }
+        result.put("chat_history_conf", chatHistoryConf);
+
+        // 添加函数调用参数信息
+        if (!Objects.equals(agent.getIntentModelId(), "Intent_nointent")) {
+            List<AgentPluginMapping> pluginMappings = agentPluginMappingService.agentPluginParamsByAgentId(agentId);
+            if (pluginMappings != null && !pluginMappings.isEmpty()) {
+                Map<String, Object> pluginParams = new HashMap<>();
+                for (AgentPluginMapping pluginMapping : pluginMappings) {
+                    pluginParams.put(pluginMapping.getProviderCode(), pluginMapping.getParamInfo());
+                }
+                result.put("plugins", pluginParams);
+            }
+        }
+
+        // 获取mcp接入点地址
+        String mcpEndpoint = agentMcpAccessPointService.getAgentMcpAccessAddress(agentId);
+        if (StringUtils.isNotBlank(mcpEndpoint) && mcpEndpoint.startsWith("ws")) {
+            mcpEndpoint = mcpEndpoint.replace("/mcp/", "/call/");
+            result.put("mcp_endpoint", mcpEndpoint);
+        }
+
+        // 获取上下文源配置
+        AgentContextProviderEntity contextProviderEntity = agentContextProviderService.getByAgentId(agentId);
+        if (contextProviderEntity != null && contextProviderEntity.getContextProviders() != null 
+                && !contextProviderEntity.getContextProviders().isEmpty()) {
+            result.put("context_providers", contextProviderEntity.getContextProviders());
+        }
+
+        // 获取声纹信息
+        buildVoiceprintConfig(agentId, result);
+
+        // 构建模块配置（传入所有模型ID，不做客户端已实例化检查）
+        buildModuleConfig(
+                agent.getAgentName(),
+                agent.getSystemPrompt(),
+                agent.getSummaryMemory(),
+                voice,
+                referenceAudio,
+                referenceText,
+                agent.getVadModelId(),
+                agent.getAsrModelId(),
+                agent.getLlmModelId(),
+                agent.getVllmModelId(),
+                agent.getTtsModelId(),
+                agent.getMemModelId(),
+                agent.getIntentModelId(),
+                null,
+                result,
+                true);
+
+        return result;
+    }
+
+    @Override
     public Map<String, Object> getAgentModels(String macAddress, Map<String, String> selectedModule) {
         // 检查是否为管理控制台请求
         String redisKey = RedisKeys.getTmpRegisterMacKey(macAddress);
@@ -491,5 +584,33 @@ public class ConfigServiceImpl implements ConfigService {
         }
         result.put("prompt", prompt);
         result.put("summaryMemory", summaryMemory);
+    }
+
+    @Override
+    public List<Map<String, Object>> getUserAgentConfigs(Long userId) {
+        // 获取用户所有 agent
+        List<xiaozhi.modules.agent.dto.AgentDTO> agents = agentService.getUserAgents(userId);
+        
+        if (agents == null || agents.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 批量获取每个 agent 的完整配置
+        List<Map<String, Object>> configs = new ArrayList<>();
+        for (xiaozhi.modules.agent.dto.AgentDTO agent : agents) {
+            try {
+                Map<String, Object> config = getAgentConfigById(agent.getId());
+                if (config != null) {
+                    // 添加 agent_id 到配置中，便于客户端缓存
+                    config.put("agent_id", agent.getId());
+                    configs.add(config);
+                }
+            } catch (Exception e) {
+                // 单个 agent 获取失败不影响其他
+                System.err.println("获取 agent 配置失败: " + agent.getId() + ", " + e.getMessage());
+            }
+        }
+
+        return configs;
     }
 }

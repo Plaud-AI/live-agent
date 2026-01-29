@@ -34,13 +34,16 @@ from core.providers.tools.unified_tool_handler import UnifiedToolHandler
 from plugins_func.loadplugins import auto_import_modules
 from plugins_func.register import Action
 from core.auth import AuthenticationError
-from config.config_loader import get_private_config_from_api
+from config.config_loader import get_private_config_from_api, resolve_env_vars
 from core.providers.tts.dto.dto import ContentType, TTSMessageDTO, SentenceType
 from config.logger import setup_logging, build_module_string, create_connection_logger
 from config.manage_api_client import DeviceNotFoundException, DeviceBindException
+from config.live_agent_api_client import get_agent_config_cached as get_agent_config_from_live_agent, init_live_agent_api
 from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils import textUtils
+from core.utils import expressionUtils
+from core.utils.latency_metrics import LatencyMetrics, remove_metrics
 
 TAG = __name__
 
@@ -78,7 +81,10 @@ class ConnectionHandler:
 
         self.websocket = None
         self.headers = None
+        self.query_params = {}  # URL query parameters
         self.device_id = None
+        self.client_id = None
+        self.agent_id = None  # Agent ID from mobile client
         self.client_ip = None
         self.prompt = None
         self.welcome_msg = None
@@ -95,6 +101,8 @@ class ConnectionHandler:
         self.loop = None  # 在 handle_connection 中获取运行中的事件循环
         self.stop_event = threading.Event()
         self.executor = ThreadPoolExecutor(max_workers=5)
+        self.chat_future = None  # 当前 chat() 任务的 Future
+        self.chat_lock = threading.Lock()  # 保护 chat_future 的锁
 
         # 添加上报线程池
         self.report_queue = queue.Queue()
@@ -134,6 +142,10 @@ class ConnectionHandler:
         # llm相关变量
         self.llm_finish_task = True
         self.dialogue = Dialogue()
+        self.llm_cancel_event = None  # LLM 取消事件，用于中断 LLM 请求
+
+        # 延迟监控
+        self.latency_metrics = None  # 延迟初始化，等待 session_id 设置
 
         # tts相关变量
         self.sentence_id = None
@@ -165,6 +177,18 @@ class ConnectionHandler:
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(self.config, self.logger)
 
+    def _parse_query_params(self, path: str):
+        """解析 URL query parameters"""
+        from urllib.parse import urlparse, parse_qs
+        try:
+            parsed = urlparse(path)
+            # parse_qs 返回 dict[str, list[str]]，取每个参数的第一个值
+            qs = parse_qs(parsed.query)
+            self.query_params = {k: v[0] if v else None for k, v in qs.items()}
+        except Exception as e:
+            self.logger.bind(tag=TAG).warning(f"Failed to parse query params: {e}")
+            self.query_params = {}
+
     async def handle_connection(self, ws):
         try:
             # 获取运行中的事件循环（必须在异步上下文中）
@@ -183,7 +207,17 @@ class ConnectionHandler:
                 f"{self.client_ip} conn - Headers: {self.headers}"
             )
 
-            self.device_id = self.headers.get("device-id", None)
+            # 解析 URL query parameters
+            self._parse_query_params(ws.request.path)
+            
+            # 优先从 query params 获取，其次从 headers 获取
+            self.device_id = self.query_params.get("device-id") or self.headers.get("device-id")
+            self.client_id = self.query_params.get("client-id") or self.headers.get("client-id") or self.device_id
+            self.agent_id = self.query_params.get("agent-id") or self.headers.get("agent-id")
+            
+            self.logger.bind(tag=TAG).info(
+                f"Client params - device_id: {self.device_id}, client_id: {self.client_id}, agent_id: {self.agent_id}"
+            )
 
             # 认证通过,继续处理
             self.websocket = ws
@@ -203,6 +237,9 @@ class ConnectionHandler:
 
             self.welcome_msg = self.config["xiaozhi"]
             self.welcome_msg["session_id"] = self.session_id
+
+            # 初始化延迟监控
+            self.latency_metrics = LatencyMetrics(session_id=self.session_id)
 
             # 在后台初始化配置和组件（完全不阻塞主循环）
             asyncio.create_task(self._background_initialize())
@@ -491,16 +528,24 @@ class ConnectionHandler:
 
     def _init_report_threads(self):
         """初始化ASR和TTS上报线程"""
-        if not self.read_config_from_api or self.need_bind:
+        # App连接 (agent_id): 始终启动上报线程
+        # 设备连接: 需要 read_config_from_api 且 chat_history_conf > 0
+        if self.agent_id:
+            # App连接：始终启动上报线程
+            pass
+        elif not self.read_config_from_api or self.need_bind:
             return
-        if self.chat_history_conf == 0:
+        elif self.chat_history_conf == 0:
             return
+        
         if self.report_thread is None or not self.report_thread.is_alive():
             self.report_thread = threading.Thread(
                 target=self._report_worker, daemon=True
             )
             self.report_thread.start()
-            self.logger.bind(tag=TAG).info("TTS上报线程已启动")
+            self.logger.bind(tag=TAG).info(
+                f"聊天记录上报线程已启动 (agent_id={self.agent_id})"
+            )
 
     def _initialize_tts(self):
         """初始化TTS"""
@@ -556,36 +601,138 @@ class ConnectionHandler:
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"后台初始化失败: {e}")
 
+    def _convert_live_agent_config(self, agent_config: dict) -> dict:
+        """
+        将 live-agent-api 返回的配置转换为 xiaozhi-server 期望的格式
+        
+        live-agent-api 格式:
+        {
+            "voice": {"voice_id": "xxx", "reference_id": "xxx", "provider": "fishspeech"},
+            "instruction": "...",
+            "language": "en",
+            ...
+        }
+        
+        xiaozhi-server 格式:
+        {
+            "TTS": {"FishSpeechStreamTTS": {"private_voice": "xxx"}},
+            "selected_module": {"TTS": "FishSpeechStreamTTS"},
+            "prompt": "...",
+            ...
+        }
+        """
+        result = {}
+        
+        # 转换 voice 配置到 TTS 配置
+        voice = agent_config.get("voice")
+        if voice:
+            provider = voice.get("provider", "fishspeech")
+            reference_id = voice.get("reference_id")
+            
+            if reference_id:
+                # 根据 provider 选择 TTS 模块
+                # 模块名称映射（与 config.yaml 中的 selected_module.TTS 和 TTS 配置块名称一致）
+                if provider == "fishspeech":
+                    tts_module = "FishSpeechStream"  # config.yaml 中的名称
+                    # 获取当前 TTS 配置作为基础
+                    base_tts_config = copy.deepcopy(self.config.get("TTS", {}).get(tts_module, {}))
+                    base_tts_config["private_voice"] = reference_id
+                    result["TTS"] = {tts_module: base_tts_config}
+                    result["selected_module"] = result.get("selected_module", {})
+                    result["selected_module"]["TTS"] = tts_module
+                    self.logger.bind(tag=TAG).info(
+                        f"转换 voice 配置: provider={provider}, reference_id={reference_id}, tts_module={tts_module}"
+                    )
+                elif provider == "minimax":
+                    tts_module = "MinimaxTTSWebSocket"  # config.yaml 中的名称
+                    base_tts_config = copy.deepcopy(self.config.get("TTS", {}).get(tts_module, {}))
+                    base_tts_config["private_voice"] = reference_id
+                    result["TTS"] = {tts_module: base_tts_config}
+                    result["selected_module"] = result.get("selected_module", {})
+                    result["selected_module"]["TTS"] = tts_module
+                    self.logger.bind(tag=TAG).info(
+                        f"转换 voice 配置: provider={provider}, reference_id={reference_id}, tts_module={tts_module}"
+                    )
+        
+        # 转换 instruction 到 prompt
+        instruction = agent_config.get("instruction")
+        if instruction:
+            result["prompt"] = instruction
+        
+        # 保留原始配置供其他用途
+        result["_live_agent_config"] = agent_config
+        
+        return result
+
     async def _initialize_private_config_async(self):
         """从接口异步获取差异化配置（异步版本，不阻塞主循环）"""
         if not self.read_config_from_api:
             self.need_bind = False
             self.bind_completed_event.set()
             return
-        try:
-            begin_time = time.time()
-            private_config = await get_private_config_from_api(
-                self.config,
-                self.headers.get("device-id"),
-                self.headers.get("client-id", self.headers.get("device-id")),
-            )
-            private_config["delete_audio"] = bool(self.config.get("delete_audio", True))
+        
+        # 如果有 agent_id（移动端连接），从 live-agent-api 获取配置
+        if self.agent_id:
             self.logger.bind(tag=TAG).info(
-                f"{time.time() - begin_time} 秒，异步获取差异化配置成功: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}"
+                f"Mobile client with agent_id={self.agent_id}, fetching agent config from live-agent-api"
             )
             self.need_bind = False
             self.bind_completed_event.set()
-        except DeviceNotFoundException as e:
-            self.need_bind = True
-            private_config = {}
-        except DeviceBindException as e:
-            self.need_bind = True
-            self.bind_code = e.bind_code
-            private_config = {}
-        except Exception as e:
-            self.need_bind = True
-            self.logger.bind(tag=TAG).error(f"异步获取差异化配置失败: {e}")
-            private_config = {}
+            try:
+                begin_time = time.time()
+                
+                # 初始化 live-agent-api 客户端（如果尚未初始化）
+                if self.config.get("live-agent-api"):
+                    init_live_agent_api(self.config)
+                agent_config = get_agent_config_from_live_agent(self.agent_id, self.config)
+                # 转换 live-agent-api 配置格式为 xiaozhi-server 格式
+                private_config = self._convert_live_agent_config(agent_config) if agent_config else None
+                
+                if private_config:
+                    # 解析环境变量（配置可能包含 ${env:VAR_NAME} 语法）
+                    private_config = resolve_env_vars(private_config)
+                    private_config["delete_audio"] = bool(self.config.get("delete_audio", True))
+                    self.logger.bind(tag=TAG).info(
+                        f"{time.time() - begin_time:.2f} 秒，根据 agent_id={self.agent_id} 获取配置成功: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}"
+                    )
+                else:
+                    self.logger.bind(tag=TAG).warning(
+                        f"根据 agent_id={self.agent_id} 获取配置失败，使用默认配置"
+                    )
+                    private_config = {}
+            except Exception as e:
+                self.logger.bind(tag=TAG).error(
+                    f"根据 agent_id={self.agent_id} 获取配置异常: {e}，使用默认配置"
+                )
+                private_config = {}
+        else:
+            # 传统设备（ESP32等），从 manager-api 获取配置
+            try:
+                begin_time = time.time()
+                private_config = await get_private_config_from_api(
+                    self.config,
+                    self.device_id,
+                    self.client_id,
+                )
+                # 解析环境变量（配置可能包含 ${env:VAR_NAME} 语法）
+                private_config = resolve_env_vars(private_config)
+                private_config["delete_audio"] = bool(self.config.get("delete_audio", True))
+                self.logger.bind(tag=TAG).info(
+                    f"{time.time() - begin_time} 秒，异步获取差异化配置成功: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}"
+                )
+                self.need_bind = False
+                self.bind_completed_event.set()
+            except DeviceNotFoundException as e:
+                self.need_bind = True
+                private_config = {}
+            except DeviceBindException as e:
+                self.need_bind = True
+                self.bind_code = e.bind_code
+                private_config = {}
+            except Exception as e:
+                self.need_bind = True
+                self.logger.bind(tag=TAG).error(f"异步获取差异化配置失败: {e}")
+                private_config = {}
 
         init_llm, init_tts, init_memory, init_intent = (
             False,
@@ -792,9 +939,18 @@ class ConnectionHandler:
 
         # 为最顶层时新建会话ID和发送FIRST请求
         if depth == 0:
+            # 检查是否已被取消（被新的 chat() 任务取代）
+            if self.client_abort:
+                self.logger.bind(tag=TAG).info("chat() 启动时已被取消，直接退出")
+                return None
+            
             self.llm_finish_task = False
             self.sentence_id = str(uuid.uuid4().hex)
             self.dialogue.put(Message(role="user", content=query))
+            
+            # llm_cancel_event 已在 receiveAudioHandle 中创建
+            # 这里不再重复创建，确保使用正确的事件
+            
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
                     sentence_id=self.sentence_id,
@@ -802,6 +958,9 @@ class ConnectionHandler:
                     content_type=ContentType.ACTION,
                 )
             )
+            # 重置延迟监控
+            if self.latency_metrics:
+                self.latency_metrics.reset()
 
         # 设置最大递归深度，避免无限循环，可根据实际需求调整
         MAX_DEPTH = 5
@@ -840,6 +999,10 @@ class ConnectionHandler:
                 )
                 memory_str = future.result()
 
+            # 记录 LLM 请求时间
+            if self.latency_metrics and depth == 0:
+                self.latency_metrics.mark_llm_request()
+
             if self.intent_type == "function_call" and functions is not None:
                 # 使用支持functions的streaming接口
                 llm_responses = self.llm.response_with_functions(
@@ -865,11 +1028,27 @@ class ConnectionHandler:
         # 支持多个并行工具调用 - 使用列表存储
         tool_calls_list = []  # 格式: [{"id": "", "name": "", "arguments": ""}]
         content_arguments = ""
-        self.client_abort = False
-        emotion_flag = True
+        # 注意：client_abort 已在 chat() 开始时重置，这里不再重复设置
+        # 以避免覆盖并发任务取消时设置的状态
+        llm_first_token_recorded = False  # 标记是否已记录首 token 时间
+        
+        # 表情处理相关变量
+        expression_flag = True  # 是否需要提取表情（每轮只提取一次）
+        expression_buffer = ""  # 用于累积文本，确保能完整提取 [expr:xxx] 标签
+        expression_extracted = False  # 表情是否已提取
+        
+        response_count = 0
         for response in llm_responses:
-            if self.client_abort:
+            response_count += 1
+            # 检查是否被取消或打断
+            if self.client_abort or (self.llm_cancel_event and self.llm_cancel_event.is_set()):
+                self.logger.bind(tag=TAG).info(f"LLM 请求被取消 (response_count={response_count}, client_abort={self.client_abort}, event_set={self.llm_cancel_event.is_set() if self.llm_cancel_event else 'None'})")
                 break
+            
+            # 记录首 token 时间
+            if not llm_first_token_recorded and self.latency_metrics and depth == 0:
+                self.latency_metrics.mark_llm_first_token()
+                llm_first_token_recorded = True
             if self.intent_type == "function_call" and functions is not None:
                 content, tools_call = response
                 if "content" in response:
@@ -888,16 +1067,63 @@ class ConnectionHandler:
             else:
                 content = response
 
-            # 在llm回复中获取情绪表情，一轮对话只在开头获取一次
-            if emotion_flag and content is not None and content.strip():
-                asyncio.run_coroutine_threadsafe(
-                    textUtils.get_emotion(self, content),
-                    self.loop,
-                )
-                emotion_flag = False
-
             if content is not None and len(content) > 0:
                 if not tool_call_flag:
+                    # 表情标签处理逻辑
+                    if expression_flag and not expression_extracted:
+                        expression_buffer += content
+                        
+                        # 检查是否有完整的表情标签 [expr:xxx]
+                        if expressionUtils.has_expression_tag(expression_buffer):
+                            # 提取表情并发送
+                            expression_name, clean_text = expressionUtils.extract_expression(expression_buffer)
+                            if expression_name:
+                                asyncio.run_coroutine_threadsafe(
+                                    expressionUtils.send_expression(self, expression_name),
+                                    self.loop,
+                                )
+                            expression_extracted = True
+                            expression_flag = False
+                            
+                            # 发送清理后的文本到 TTS（如果有内容）
+                            if clean_text.strip():
+                                response_message.append(clean_text)
+                                self.tts.tts_text_queue.put(
+                                    TTSMessageDTO(
+                                        sentence_id=self.sentence_id,
+                                        sentence_type=SentenceType.MIDDLE,
+                                        content_type=ContentType.TEXT,
+                                        content_detail=clean_text,
+                                    )
+                                )
+                            expression_buffer = ""  # 清空缓冲区
+                            continue
+                        
+                        # 检查是否有不完整的标签（正在接收中）
+                        elif expressionUtils.has_incomplete_expression_tag(expression_buffer):
+                            # 继续等待更多内容
+                            continue
+                        
+                        # 累积超过 30 字符还没有表情标签，说明这轮回复没有表情
+                        elif len(expression_buffer) > 30:
+                            expression_flag = False
+                            # 发送累积的内容
+                            response_message.append(expression_buffer)
+                            self.tts.tts_text_queue.put(
+                                TTSMessageDTO(
+                                    sentence_id=self.sentence_id,
+                                    sentence_type=SentenceType.MIDDLE,
+                                    content_type=ContentType.TEXT,
+                                    content_detail=expression_buffer,
+                                )
+                            )
+                            expression_buffer = ""
+                            continue
+                        else:
+                            # 继续累积
+                            continue
+                    
+                    # 正常发送文本（已提取过表情或无表情标签）
                     response_message.append(content)
                     self.tts.tts_text_queue.put(
                         TTSMessageDTO(
@@ -907,6 +1133,23 @@ class ConnectionHandler:
                             content_detail=content,
                         )
                     )
+        # 记录 LLM 响应循环结束
+        self.logger.bind(tag=TAG).info(f"LLM 响应循环结束: expression_buffer长度={len(expression_buffer)}, tool_call_flag={tool_call_flag}, response_message长度={len(response_message)}")
+        
+        # 处理 expression_buffer 中未发送的内容
+        # 当 LLM 响应结束时，如果 buffer 中还有未处理的内容，需要发送到 TTS
+        if expression_buffer and not tool_call_flag:
+            self.logger.bind(tag=TAG).info(f"发送 expression_buffer 剩余内容到 TTS: {expression_buffer[:50]}...")
+            response_message.append(expression_buffer)
+            self.tts.tts_text_queue.put(
+                TTSMessageDTO(
+                    sentence_id=self.sentence_id,
+                    sentence_type=SentenceType.MIDDLE,
+                    content_type=ContentType.TEXT,
+                    content_detail=expression_buffer,
+                )
+            )
+
         # 处理function call
         if tool_call_flag:
             bHasError = False
@@ -964,11 +1207,49 @@ class ConnectionHandler:
                     )
                     futures_with_data.append((future, tool_call_data))
 
-                # 等待协程结束（实际等待时长为最慢的那个）
+                # 等待协程结束，同时检查打断状态
                 tool_results = []
+                tool_errors = []
                 for future, tool_call_data in futures_with_data:
-                    result = future.result()
-                    tool_results.append((result, tool_call_data))
+                    # 使用带超时的等待，以便定期检查打断状态
+                    while True:
+                        # 检查是否被打断
+                        if self.client_abort or (self.llm_cancel_event and self.llm_cancel_event.is_set()):
+                            self.logger.bind(tag=TAG).info("工具调用期间检测到打断，取消处理")
+                            # 取消所有未完成的 future
+                            for f, _ in futures_with_data:
+                                if not f.done():
+                                    f.cancel()
+                            return None
+                        
+                        try:
+                            result = future.result(timeout=0.5)  # 500ms 超时
+                            tool_results.append((result, tool_call_data))
+                            break
+                        except (TimeoutError, Exception) as e:
+                            # 检查是否是真正的超时（concurrent.futures.TimeoutError）
+                            if type(e).__name__ == 'TimeoutError' or 'TimeoutError' in type(e).__name__:
+                                # 超时后继续循环检查打断状态
+                                continue
+                            else:
+                                # 其他异常，记录并跳出
+                                import traceback
+                                self.logger.bind(tag=TAG).error(f"工具调用异常: {e}\n{traceback.format_exc()}")
+                                tool_errors.append((tool_call_data.get("name", "unknown"), str(e)))
+                                break
+                
+                # 如果有工具调用错误且没有成功的结果，发送错误提示给用户
+                if tool_errors and not tool_results:
+                    error_msg = "抱歉，我在执行任务时遇到了一些问题，请稍后再试。"
+                    self.tts.tts_text_queue.put(
+                        TTSMessageDTO(
+                            sentence_id=self.sentence_id,
+                            sentence_type=SentenceType.MIDDLE,
+                            content_type=ContentType.TEXT,
+                            content_detail=error_msg,
+                        )
+                    )
+                    response_message.append(error_msg)
 
                 # 统一处理所有工具调用结果
                 if tool_results:
@@ -1092,6 +1373,14 @@ class ConnectionHandler:
     async def close(self, ws=None):
         """资源清理方法"""
         try:
+            # 输出延迟指标摘要
+            if self.latency_metrics:
+                summary = self.latency_metrics.get_summary()
+                if summary:
+                    self.logger.bind(tag=TAG).info(f"会话延迟摘要: {summary}")
+                remove_metrics(self.session_id)
+                self.latency_metrics = None
+            
             # 清理音频缓冲区
             if hasattr(self, "audio_buffer"):
                 self.audio_buffer.clear()

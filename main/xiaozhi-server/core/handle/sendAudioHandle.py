@@ -133,12 +133,12 @@ def _get_or_create_rate_controller(conn, frame_duration, is_single_packet):
     Returns:
         (rate_controller, flow_control)
     """
-    # 判断是否需要重置：单包模式且 sentence_id 变化，或者控制器不存在
+    # 判断是否需要重置：sentence_id 变化，或者控制器不存在
+    current_sentence_id = getattr(conn, "audio_flow_control", {}).get("sentence_id")
     need_reset = (
-        is_single_packet
-        and getattr(conn, "audio_flow_control", {}).get("sentence_id")
-        != conn.sentence_id
-    ) or not hasattr(conn, "audio_rate_controller")
+        current_sentence_id != conn.sentence_id
+        or not hasattr(conn, "audio_rate_controller")
+    )
 
     if need_reset:
         # 创建或获取 rate_controller
@@ -225,13 +225,22 @@ async def _do_send_audio(conn, opus_packet, flow_control):
     packet_index = flow_control.get("packet_count", 0)
     sequence = flow_control.get("sequence", 0)
 
+    # 记录首音频播放时间（第一个包）
+    if packet_index == 0:
+        if hasattr(conn, 'latency_metrics') and conn.latency_metrics:
+            conn.latency_metrics.mark_first_audio_play()
+
     if conn.conn_from_mqtt_gateway:
         # 计算时间戳（基于播放位置）
         start_time = time.time()
         timestamp = int(start_time * 1000) % (2**32)
         await _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence)
     else:
-        # 直接发送opus数据包
+        # 直接发送opus数据包（纯Opus，无头部）
+        first_bytes = opus_packet[:8].hex() if len(opus_packet) >= 8 else opus_packet.hex()
+        # 每10个包记录一次日志，避免日志过多
+        if packet_index % 10 == 0:
+            conn.logger.bind(tag=TAG).info(f"WebSocket发送Opus包 #{packet_index}: {len(opus_packet)} bytes")
         await conn.websocket.send(opus_packet)
 
     # 更新流控状态
@@ -240,9 +249,11 @@ async def _do_send_audio(conn, opus_packet, flow_control):
 
 
 async def send_tts_message(conn, state, text=None):
-    """发送 TTS 状态消息"""
-    if text is None and state == "sentence_start":
-        return
+    """发送 TTS 状态消息
+    
+    注意：sentence_start 消息的 text 可以为空（流式 TTS 时 FIRST 消息还不知道具体文本）
+    客户端应该能处理没有 text 的 sentence_start 消息
+    """
     message = {"type": "tts", "state": state, "session_id": conn.session_id}
     if text is not None:
         message["text"] = textUtils.check_emoji(text)
@@ -263,6 +274,7 @@ async def send_tts_message(conn, state, text=None):
         conn.clearSpeakStatus()
 
     # 发送消息到客户端
+    conn.logger.bind(tag=TAG).info(f"WebSocket发送TTS消息: state={state}, text={text[:30] if text else 'None'}...")
     await conn.websocket.send(json.dumps(message))
 
 

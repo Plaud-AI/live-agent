@@ -20,6 +20,7 @@ class CacheType(Enum):
     DEVICE_PROMPT = "device_prompt"
     VOICEPRINT_HEALTH = "voiceprint_health"  # 声纹识别健康检查
     AUDIO_DATA = "audio_data"  # 音频数据缓存
+    AGENT_CONFIG = "agent_config"  # Agent 配置缓存（live-agent-api 集成）
 
 
 @dataclass
@@ -61,6 +62,9 @@ class CacheConfig:
             ),
             CacheType.AUDIO_DATA: cls(
                 strategy=CacheStrategy.TTL, ttl=600, max_size=100  # 10分钟过期
+            ),
+            CacheType.AGENT_CONFIG: cls(
+                strategy=CacheStrategy.TTL_LRU, ttl=300, max_size=500  # 5分钟 TTL，支持 500 个 agent（预热优化）
             ),
         }
         return configs.get(cache_type, cls())

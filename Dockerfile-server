@@ -1,7 +1,14 @@
 # 生产镜像，仅包含应用代码
 FROM ghcr.io/xinnan-tech/xiaozhi-esp32-server:server-base
 
+# 缓存控制文件 - 修改 .cache-version 文件内容可强制重新构建
+# 使用方法: 在 commit 中修改 .cache-version 文件的值（如 1 -> 2）
+COPY .cache-version /tmp/.cache-version
+
 COPY main/xiaozhi-server .
 
+# 安装额外依赖（fish-audio-sdk 用于 FishSpeech TTS）
+RUN pip install --no-cache-dir fish-audio-sdk
+
 # 启动应用
-CMD ["python", "app.py"]
+CMD ["python", "app.py"] 

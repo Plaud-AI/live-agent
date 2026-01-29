@@ -19,11 +19,56 @@ export class AudioRecorder {
         this.visualizationRequest = null;
         this.recordingTimer = null;
         this.websocket = null;
+        
+        // 录音模式: 'manual' 或 'auto'
+        this.recordingMode = 'manual';
+        
+        // AudioWorklet 是否已注册
+        this.workletRegistered = false;
+        
+        // 最后一帧音频发送时间（用于计算端到端延迟）
+        this.lastAudioSentTime = 0;
+        
+        // 本地 VAD 检测（用于精确捕获用户停止说话时刻）
+        this.vadSilenceThreshold = 500;    // 静音阈值（PCM 振幅，0-32767）
+        this.vadSilenceDuration = 300;     // 静音持续时间阈值（毫秒）
+        this.vadIsSpeaking = false;        // 当前是否在说话
+        this.vadSilenceStartTime = 0;      // 静音开始时间
+        this.vadLastVoiceTime = 0;         // 最后一次检测到有声音的时间（用于延迟计算）
 
         // 回调函数
         this.onRecordingStart = null;
         this.onRecordingStop = null;
         this.onVisualizerUpdate = null;
+    }
+    
+    // 设置录音模式
+    setRecordingMode(mode) {
+        this.recordingMode = mode;
+        log(`录音模式已切换为: ${mode === 'auto' ? '自动(VAD)' : '手动'}`, 'info');
+    }
+    
+    // 获取当前录音模式
+    getRecordingMode() {
+        return this.recordingMode;
+    }
+    
+    // 获取最后一帧音频发送时间
+    getLastAudioSentTime() {
+        return this.lastAudioSentTime;
+    }
+    
+    // 获取本地 VAD 检测到的最后有声音时间
+    getLastVoiceTime() {
+        return this.vadLastVoiceTime;
+    }
+    
+    // 重置延迟计时（开始新一轮对话时调用）
+    resetLatencyTimer() {
+        this.lastAudioSentTime = 0;
+        this.vadLastVoiceTime = 0;
+        this.vadIsSpeaking = false;
+        this.vadSilenceStartTime = 0;
     }
 
     // 设置WebSocket实例
@@ -110,10 +155,15 @@ export class AudioRecorder {
 
         try {
             if (this.audioContext.audioWorklet) {
-                const blob = new Blob([this.getAudioProcessorCode()], { type: 'application/javascript' });
-                const url = URL.createObjectURL(blob);
-                await this.audioContext.audioWorklet.addModule(url);
-                URL.revokeObjectURL(url);
+                // 只在第一次时注册 AudioWorklet
+                if (!this.workletRegistered) {
+                    const blob = new Blob([this.getAudioProcessorCode()], { type: 'application/javascript' });
+                    const url = URL.createObjectURL(blob);
+                    await this.audioContext.audioWorklet.addModule(url);
+                    URL.revokeObjectURL(url);
+                    this.workletRegistered = true;
+                    log('AudioWorklet 模块已注册', 'success');
+                }
 
                 const audioProcessor = new AudioWorkletNode(this.audioContext, 'audio-recorder-processor');
 
@@ -176,6 +226,33 @@ export class AudioRecorder {
     processPCMBuffer(buffer) {
         if (!this.isRecording) return;
 
+        // 本地 VAD 检测：计算当前帧的音量（取绝对值最大值）
+        let maxAmplitude = 0;
+        for (let i = 0; i < buffer.length; i++) {
+            const abs = Math.abs(buffer[i]);
+            if (abs > maxAmplitude) maxAmplitude = abs;
+        }
+        
+        const now = performance.now();
+        const hasVoice = maxAmplitude > this.vadSilenceThreshold;
+        
+        if (hasVoice) {
+            // 检测到声音
+            this.vadIsSpeaking = true;
+            this.vadSilenceStartTime = 0;
+            this.vadLastVoiceTime = now;  // 更新最后有声音的时间
+        } else if (this.vadIsSpeaking) {
+            // 之前在说话，现在静音了
+            if (this.vadSilenceStartTime === 0) {
+                // 静音刚开始
+                this.vadSilenceStartTime = now;
+            } else if (now - this.vadSilenceStartTime > this.vadSilenceDuration) {
+                // 静音持续超过阈值，判定为停止说话
+                this.vadIsSpeaking = false;
+                log(`本地VAD: 检测到用户停止说话，最后有声时间距今 ${(now - this.vadLastVoiceTime).toFixed(0)}ms`, 'debug');
+            }
+        }
+
         const newBuffer = new Int16Array(this.pcmDataBuffer.length + buffer.length);
         newBuffer.set(this.pcmDataBuffer);
         newBuffer.set(buffer, this.pcmDataBuffer.length);
@@ -209,6 +286,8 @@ export class AudioRecorder {
                     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                         try {
                             this.websocket.send(opusData.buffer);
+                            // 记录最后一帧发送时间（用于计算端到端延迟）
+                            this.lastAudioSentTime = performance.now();
                             log(`发送Opus帧，大小：${opusData.length}字节`, 'debug');
                         } catch (error) {
                             log(`WebSocket发送错误: ${error.message}`, 'error');
@@ -309,7 +388,7 @@ export class AudioRecorder {
             if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                 const listenMessage = {
                     type: 'listen',
-                    mode: 'manual',
+                    mode: this.recordingMode,
                     state: 'start'
                 };
 
@@ -401,7 +480,7 @@ export class AudioRecorder {
 
                 const stopMessage = {
                     type: 'listen',
-                    mode: 'manual',
+                    mode: this.recordingMode,
                     state: 'stop'
                 };
 

@@ -170,7 +170,9 @@ class ServerMCPClient:
              message_handler: MessageHandlerFnT | None = None,
              client_info: Implementation | None = None):
         """MCP客户端工作协程"""
-        async with AsyncExitStack() as stack:
+        stack = AsyncExitStack()
+        try:
+            await stack.__aenter__()
             try:
                 # 建立 StdioClient
                 if "command" in self.config:
@@ -259,3 +261,15 @@ class ServerMCPClient:
                 self.logger.bind(tag=TAG).error(f"服务端MCP客户端工作协程错误: {e}")
                 self._ready_evt.set()
                 raise
+        finally:
+            # 清理session引用，防止在关闭后被使用
+            self.session = None
+            # 安全关闭AsyncExitStack，捕获事件循环相关错误
+            try:
+                await stack.aclose()
+            except RuntimeError as e:
+                # 忽略"no running event loop"错误，这在程序关闭时可能发生
+                if "no running event loop" not in str(e):
+                    self.logger.bind(tag=TAG).error(f"关闭MCP客户端连接时出错: {e}")
+            except Exception as e:
+                self.logger.bind(tag=TAG).error(f"关闭MCP客户端连接时出错: {e}")

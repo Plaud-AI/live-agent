@@ -17,6 +17,10 @@ export class WebSocketHandler {
         this.onSessionEmotionChange = null;
         this.currentSessionId = null;
         this.isRemoteSpeaking = false;
+        
+        // 延迟计算相关
+        this.waitingForFirstAudio = false;  // 是否等待第一帧音频
+        this.lastAudioSentTimeSnapshot = 0;  // 收到stt时快照的最后音频发送时间
     }
 
     // 发送hello握手消息
@@ -80,6 +84,17 @@ export class WebSocketHandler {
         } else if (message.type === 'stt') {
             log(`识别结果: ${message.text}`, 'info');
             addMessage(`${message.text}`, true);
+            // 只使用本地 VAD 检测到的最后有声音时间（精确计算）
+            const audioRecorder = getAudioRecorder();
+            const lastVoiceTime = audioRecorder.getLastVoiceTime();
+            // 只有 VAD 时间有效时才记录，否则不计算延迟
+            this.lastAudioSentTimeSnapshot = lastVoiceTime > 0 ? lastVoiceTime : 0;
+            if (lastVoiceTime > 0) {
+                log(`延迟计算起点: VAD=${lastVoiceTime.toFixed(0)}ms`, 'debug');
+            } else {
+                log(`无法精确计算延迟: VAD 未检测到有效语音`, 'debug');
+            }
+            // 自动模式下不停止录音，保持持续对话
         } else if (message.type === 'llm') {
             log(`大模型回复: ${message.text}`, 'info');
 
@@ -112,6 +127,7 @@ export class WebSocketHandler {
             log('服务器开始发送语音', 'info');
             this.currentSessionId = message.session_id;
             this.isRemoteSpeaking = true;
+            this.waitingForFirstAudio = true;  // 等待第一帧音频来计算延迟
             if (this.onSessionStateChange) {
                 this.onSessionStateChange(true);
             }
@@ -212,11 +228,48 @@ export class WebSocketHandler {
                 return;
             }
 
+            // 计算端到端延迟（第一帧音频到达时）
+            // 延迟 = 收到第一帧回复音频的时间 - 本地VAD检测到的最后有声时间
+            if (this.waitingForFirstAudio) {
+                this.waitingForFirstAudio = false;
+                if (this.lastAudioSentTimeSnapshot > 0) {
+                    const latency = (performance.now() - this.lastAudioSentTimeSnapshot) / 1000;  // 转换为秒
+                    this.updateLatencyDisplay(latency);
+                    log(`端到端延迟: ${latency.toFixed(2)}秒 (用户停止说话 → 首帧回复)`, 'info');
+                } else {
+                    // VAD 未检测到有效语音，显示占位符
+                    this.updateLatencyDisplay(null);
+                    log(`端到端延迟: 无法计算（VAD未检测到有效语音）`, 'info');
+                }
+            }
+
             const opusData = new Uint8Array(arrayBuffer);
             const audioPlayer = getAudioPlayer();
             audioPlayer.enqueueAudioData(opusData);
         } catch (error) {
             log(`处理二进制消息出错: ${error.message}`, 'error');
+        }
+    }
+
+    // 更新延迟显示
+    updateLatencyDisplay(latency) {
+        const latencyValue = document.getElementById('latencyValue');
+        if (latencyValue) {
+            if (latency === null) {
+                // 无法计算时显示占位符
+                latencyValue.textContent = '--';
+                latencyValue.style.color = '#999';  // 灰色
+            } else {
+                latencyValue.textContent = `${latency.toFixed(2)}s`;
+                // 根据延迟值改变颜色
+                if (latency < 1) {
+                    latencyValue.style.color = '#4caf50';  // 绿色 - 优秀
+                } else if (latency < 2) {
+                    latencyValue.style.color = '#ff9800';  // 橙色 - 一般
+                } else {
+                    latencyValue.style.color = '#f44336';  // 红色 - 较慢
+                }
+            }
         }
     }
 

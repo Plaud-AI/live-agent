@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小智服务器测试页面 v2 (WebSocket + Agora RTC)</title>
+    <link rel="stylesheet" href="test_page.css">
+    <script>
+        // 检测是否使用file://协议打开
+        if (window.location.protocol === 'file:') {
+            document.addEventListener('DOMContentLoaded', function () {
+                const warningDiv = document.createElement('div');
+                warningDiv.id = 'fileProtocolWarning';
+                warningDiv.innerHTML = `
+                    <h2>⚠️ 警告：请使用HTTP服务器打开此页面</h2>
+                    <p>您当前使用的是本地文件方式打开页面（file://协议），这可能导致页面功能异常。</p>
+                    <p>请按照以下步骤使用python启动测试http服务：</p>
+                    <ol>
+                        <li>打开命令行终端</li>
+                        <li>命令行进入到 xiaozhi-server/test 目录</li>
+                        <li>执行以下命令启动HTTP服务器：</li>
+                    </ol>
+                    <pre>python -m http.server 8006</pre>
+                    <p>然后在浏览器中访问：<strong>http://localhost:8006/test_page_v2.html</strong></p>
+                `;
+                document.body.appendChild(warningDiv);
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <h1>小智服务器测试页面 v2</h1>
+
+        <div id="scriptStatus" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+            正在加载...
+        </div>
+
+        <!-- 设备配置面板 -->
+        <div class="section">
+            <h2>
+                设备配置
+                <span class="device-info">
+                    <span>MAC: <strong id="displayMac"></strong></span>
+                    <span>客户端: <strong id="displayClient">web_test_client</strong></span>
+                </span>
+                <button class="toggle-button" id="toggleConfig">编辑</button>
+            </h2>
+            <div class="config-panel" id="configPanel">
+                <div class="control-panel">
+                    <div class="config-item">
+                        <label for="deviceMac">设备MAC:</label>
+                        <input type="text" id="deviceMac" placeholder="设备MAC地址">
+                    </div>
+                    <div class="config-item">
+                        <label for="deviceName">设备名称:</label>
+                        <input type="text" id="deviceName" value="Web测试设备" placeholder="设备名称">
+                    </div>
+                    <div class="config-item">
+                        <label for="clientId">客户端ID:</label>
+                        <input type="text" id="clientId" value="web_test_client" placeholder="客户端ID">
+                    </div>
+                    <div class="config-item">
+                        <label for="token">认证Token:</label>
+                        <input type="text" id="token" value="your-token1" placeholder="认证Token">
+                    </div>
+                    <div class="config-item">
+                        <label for="agentId">Agent ID:</label>
+                        <input type="text" id="agentId" value="agent_01KAGYH1ABYDV5JME6WEN45FBY" placeholder="Agent ID">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 连接模式选择 -->
+        <div class="section">
+            <h2>
+                连接模式
+                <span class="connection-status">
+                    <span id="modeStatus">未连接</span>
+                </span>
+            </h2>
+            
+            <div class="mode-selector">
+                <label class="mode-option">
+                    <input type="radio" name="connectionMode" value="websocket" checked>
+                    <span class="mode-label">
+                        <strong>🔌 WebSocket</strong>
+                        <small>直连 xiaozhi-server（本地/远端）</small>
+                    </span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="connectionMode" value="agora-rtc">
+                    <span class="mode-label">
+                        <strong>📡 Agora RTC</strong>
+                        <small>TEN Framework 远端服务</small>
+                    </span>
+                </label>
+            </div>
+
+            <!-- WebSocket 配置 -->
+            <div id="wsConfig" class="mode-config">
+                <div class="config-item">
+                    <label>OTA 地址:</label>
+                    <input type="text" id="otaUrl" value="http://127.0.0.1:8002/xiaozhi/ota/" 
+                        placeholder="OTA服务器地址">
+                </div>
+                <div class="config-item">
+                    <label>WS 地址:</label>
+                    <input type="text" id="serverUrl" value="" readonly disabled 
+                        placeholder="点击连接按钮后自动获取">
+                </div>
+            </div>
+
+            <!-- Agora RTC 配置 -->
+            <div id="rtcConfig" class="mode-config" style="display: none;">
+                <div class="config-item">
+                    <label>服务地址:</label>
+                    <input type="text" id="rtcServerUrl" 
+                        placeholder="http://your-ten-server:8080">
+                </div>
+                <div class="config-item">
+                    <label>Channel:</label>
+                    <input type="text" id="rtcChannel" placeholder="留空自动生成">
+                </div>
+                <div class="config-item">
+                    <label>Graph:</label>
+                    <input type="text" id="rtcGraphName" value="xiaozhi_voice_assistant">
+                </div>
+            </div>
+
+            <div class="connection-controls" style="margin-top: 15px;">
+                <button id="connectButton">连接</button>
+                <span id="connectionStatus" class="status">未连接</span>
+            </div>
+        </div>
+
+        <!-- 消息输入 -->
+        <div class="section">
+            <div class="tabs">
+                <button class="tab active" data-tab="text">文本消息</button>
+                <button class="tab" data-tab="voice">语音消息</button>
+                <button class="tab" data-tab="realtime">实时对话</button>
+            </div>
+
+            <div class="tab-content active" id="textTab">
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="输入消息..." disabled>
+                    <button id="sendTextButton" disabled>发送</button>
+                    <button id="abortButton" disabled style="background-color: #f44336;">打断</button>
+                </div>
+            </div>
+
+            <div class="tab-content" id="voiceTab">
+                <div class="audio-controls">
+                    <button id="recordButton" class="record-button" disabled>开始录音</button>
+                </div>
+                <canvas id="audioVisualizer" class="audio-visualizer"></canvas>
+            </div>
+
+            <div class="tab-content" id="realtimeTab">
+                <div class="realtime-controls">
+                    <button id="realtimeButton" class="realtime-button" disabled>开始实时对话</button>
+                    <button id="realtimeAbortButton" disabled style="background-color: #f44336;">打断</button>
+                </div>
+                <div class="realtime-status">
+                    <div class="status-indicator" id="realtimeStatusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text" id="realtimeStatusText">未开始</span>
+                    </div>
+                    <div class="volume-meter">
+                        <div class="volume-bar" id="volumeBar"></div>
+                    </div>
+                </div>
+                <canvas id="realtimeVisualizer" class="audio-visualizer"></canvas>
+                <div class="realtime-info">
+                    <p><strong>实时对话模式说明：</strong></p>
+                    <ul>
+                        <li>麦克风持续开启，自动检测语音</li>
+                        <li>检测到说话时自动发送音频</li>
+                        <li>支持自然的对话打断</li>
+                        <li>所有协议消息都会记录到协议日志</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 会话记录 -->
+        <div class="section">
+            <h2>会话与日志</h2>
+            <div class="tabs">
+                <button class="tab active" data-tab="conversation">会话记录</button>
+                <button class="tab" data-tab="systemLog">系统日志</button>
+                <button class="tab" data-tab="protocol">协议日志</button>
+            </div>
+
+            <div class="tab-content active" id="conversationTab">
+                <div id="conversation" class="conversation"></div>
+            </div>
+
+            <div class="tab-content" id="systemLogTab">
+                <div id="logContainer">
+                    <div class="log-entry log-info">准备就绪，请连接服务器开始测试...</div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="protocolTab">
+                <div class="protocol-toolbar">
+                    <button id="clearProtocolLog">🗑️ 清空日志</button>
+                    <button id="exportProtocolLog">📥 导出 JSON</button>
+                    <button id="validateTts">✓ 验证 TTS 状态机</button>
+                    <button id="validateHello">✓ 验证 Hello 握手</button>
+                </div>
+                <div id="protocolLog"></div>
+                <div id="validationResult"></div>
+            </div>
+        </div>
+
+        <!-- MCP 工具管理区域 -->
+        <div class="section">
+            <h2>
+                MCP 工具管理
+                <span class="connection-status">
+                    <span id="mcpToolsCount">0 个工具</span>
+                </span>
+                <button class="toggle-button" id="toggleMcpTools">展开</button>
+            </h2>
+            <div class="config-panel" id="mcpToolsPanel">
+                <div id="mcpToolsContainer" class="mcp-tools-container">
+                    <!-- 工具列表将动态插入这里 -->
+                </div>
+                <div style="text-align: center; padding: 15px 0;">
+                    <button class="btn" id="addMcpToolBtn" style="background-color: #4caf50;">
+                        ➕ 添加新工具
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Opus 解码库 -->
+    <script src="libopus.js"></script>
+    
+    <!-- Agora RTC SDK (仅在 RTC 模式下使用) -->
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.22.0.js"></script>
+
+    <script type="module">
+        // ============================================================
+        // 导入模块
+        // ============================================================
+        import { ConnectionMode, ConnectionState, XiaozhiMessageType, TTSState } from './js/ConnectionManager.js';
+        import { WebSocketManager } from './js/WebSocketManager.js';
+        import { AgoraRtcManager } from './js/AgoraRtcManager.js';
+        import { protocolLogger } from './js/ProtocolLogger.js';
+        import { log } from './js/utils/logger.js';
+        import { addMessage } from './js/document.js';
+        import { checkOpusLoaded, initOpusEncoder } from './js/opus.js';
+        import BlockingQueue from './js/utils/BlockingQueue.js';
+        import { createStreamingContext } from './js/StreamingContext.js';
+
+        // ============================================================
+        // 全局状态
+        // ============================================================
+        let connectionManager = null;
+        let currentMode = 'websocket';
+        let streamingContext = null;
+        let opusDecoder = null;
+        let audioContext = null;
+        const audioQueue = new BlockingQueue();
+
+        // 音频常量
+        const SAMPLE_RATE = 16000;
+        const CHANNELS = 1;
+        const FRAME_SIZE = 960;
+        const MIN_AUDIO_DURATION = 0.1;
+
+        // 录音相关
+        let isRecording = false;
+        let recordingTimer = null;
+        let lastSentText = null;  // 跟踪最近发送的文本，用于去重 STT 回显
+
+        // 实时对话相关
+        let isRealtimeActive = false;
+        let realtimeAudioContext = null;
+        let realtimeAnalyser = null;
+        let realtimeMediaStream = null;
+        let realtimeProcessor = null;
+        let realtimeVisualizationFrame = null;
+        let realtimeVolumeFrame = null;
+        let isUserSpeaking = false;
+        let isAgentSpeaking = false;
+        let silenceStartTime = null;
+        const SILENCE_THRESHOLD = 0.02;  // 音量阈值
+        const SILENCE_DURATION = 500;    // 静默持续时间 (ms)
+
+        // ============================================================
+        // DOM 元素
+        // ============================================================
+        const connectButton = document.getElementById('connectButton');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const modeStatus = document.getElementById('modeStatus');
+        const messageInput = document.getElementById('messageInput');
+        const sendTextButton = document.getElementById('sendTextButton');
+        const abortButton = document.getElementById('abortButton');
+        const recordButton = document.getElementById('recordButton');
+        const protocolLogContainer = document.getElementById('protocolLog');
+        const validationResult = document.getElementById('validationResult');
+        
+        // 实时对话 DOM 元素
+        const realtimeButton = document.getElementById('realtimeButton');
+        const realtimeAbortButton = document.getElementById('realtimeAbortButton');
+        const realtimeStatusIndicator = document.getElementById('realtimeStatusIndicator');
+        const realtimeStatusText = document.getElementById('realtimeStatusText');
+        const volumeBar = document.getElementById('volumeBar');
+        const realtimeVisualizer = document.getElementById('realtimeVisualizer');
+
+        // ============================================================
+        // 初始化
+        // ============================================================
+        function init() {
+            // 隐藏加载状态
+            document.getElementById('scriptStatus').style.display = 'none';
+
+            // 检查 Opus 库
+            checkOpusLoaded();
+
+            // 初始化设备配置
+            initDeviceConfig();
+
+            // 初始化连接模式切换
+            initModeSelector();
+
+            // 初始化事件监听
+            initEventListeners();
+
+            // 初始化协议日志
+            initProtocolLogger();
+
+            // 初始化 MCP 工具
+            initMcpTools();
+
+            // 初始化音频播放
+            initAudioPlayback();
+
+            // 页面关闭/刷新时清理资源
+            window.addEventListener('beforeunload', handleBeforeUnload);
+
+            log('页面初始化完成', 'success');
+        }
+
+        // ============================================================
+        // 设备配置
+        // ============================================================
+        function initDeviceConfig() {
+            const deviceMacInput = document.getElementById('deviceMac');
+            const clientIdInput = document.getElementById('clientId');
+            const displayMac = document.getElementById('displayMac');
+            const displayClient = document.getElementById('displayClient');
+
+            // 从 localStorage 加载或生成 MAC
+            let savedMac = localStorage.getItem('deviceMac');
+            if (!savedMac) {
+                savedMac = generateRandomMac();
+                localStorage.setItem('deviceMac', savedMac);
+            }
+            deviceMacInput.value = savedMac;
+            displayMac.textContent = savedMac;
+
+            // 更新显示
+            function updateDisplay() {
+                displayMac.textContent = deviceMacInput.value;
+                displayClient.textContent = clientIdInput.value;
+                localStorage.setItem('deviceMac', deviceMacInput.value);
+            }
+
+            deviceMacInput.addEventListener('input', updateDisplay);
+            clientIdInput.addEventListener('input', updateDisplay);
+
+            // 加载保存的 URL
+            const savedOtaUrl = localStorage.getItem('otaUrl');
+            if (savedOtaUrl) {
+                document.getElementById('otaUrl').value = savedOtaUrl;
+            }
+            const savedRtcUrl = localStorage.getItem('rtcServerUrl');
+            if (savedRtcUrl) {
+                document.getElementById('rtcServerUrl').value = savedRtcUrl;
+            }
+
+            // 配置面板折叠
+            document.getElementById('toggleConfig').addEventListener('click', () => {
+                const panel = document.getElementById('configPanel');
+                const btn = document.getElementById('toggleConfig');
+                panel.classList.toggle('expanded');
+                btn.textContent = panel.classList.contains('expanded') ? '收起' : '编辑';
+            });
+        }
+
+        function generateRandomMac() {
+            const hexDigits = '0123456789ABCDEF';
+            let mac = '';
+            for (let i = 0; i < 6; i++) {
+                if (i > 0) mac += ':';
+                for (let j = 0; j < 2; j++) {
+                    mac += hexDigits.charAt(Math.floor(Math.random() * 16));
+                }
+            }
+            return mac;
+        }
+
+        function getConfig() {
+            return {
+                deviceId: document.getElementById('deviceMac').value.trim(),
+                deviceName: document.getElementById('deviceName').value.trim(),
+                deviceMac: document.getElementById('deviceMac').value.trim(),
+                clientId: document.getElementById('clientId').value.trim(),
+                token: document.getElementById('token').value.trim(),
+                agentId: document.getElementById('agentId').value.trim(),
+                // WebSocket 模式
+                otaUrl: document.getElementById('otaUrl').value.trim(),
+                // Agora RTC 模式
+                serverUrl: document.getElementById('rtcServerUrl').value.trim(),
+                channel: document.getElementById('rtcChannel').value.trim(),
+                graphName: document.getElementById('rtcGraphName').value.trim()
+            };
+        }
+
+        // ============================================================
+        // 连接模式选择
+        // ============================================================
+        function initModeSelector() {
+            const modeRadios = document.querySelectorAll('input[name="connectionMode"]');
+            const wsConfig = document.getElementById('wsConfig');
+            const rtcConfig = document.getElementById('rtcConfig');
+
+            modeRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    currentMode = e.target.value;
+                    
+                    if (currentMode === 'websocket') {
+                        wsConfig.style.display = 'block';
+                        rtcConfig.style.display = 'none';
+                    } else {
+                        wsConfig.style.display = 'none';
+                        rtcConfig.style.display = 'block';
+                    }
+
+                    log(`切换到 ${currentMode === 'websocket' ? 'WebSocket' : 'Agora RTC'} 模式`, 'info');
+                });
+            });
+        }
+
+        // ============================================================
+        // 事件监听
+        // ============================================================
+        function initEventListeners() {
+            // 连接按钮
+            connectButton.addEventListener('click', handleConnect);
+
+            // 发送文本
+            sendTextButton.addEventListener('click', sendTextMessage);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendTextMessage();
+            });
+
+            // 打断按钮
+            abortButton.addEventListener('click', handleAbort);
+
+            // 录音按钮
+            recordButton.addEventListener('click', toggleRecording);
+
+            // 实时对话按钮
+            realtimeButton.addEventListener('click', toggleRealtimeConversation);
+            realtimeAbortButton.addEventListener('click', handleRealtimeAbort);
+
+            // 标签页切换
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    const tabContainer = tab.parentElement;
+                    const section = tabContainer.closest('.section');
+
+                    // 切换标签状态
+                    tabContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    // 切换内容
+                    section.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    const content = section.querySelector(`#${tabName}Tab`);
+                    if (content) content.classList.add('active');
+                });
+            });
+
+            // 协议日志工具栏
+            document.getElementById('clearProtocolLog').addEventListener('click', () => {
+                protocolLogger.clear();
+                protocolLogContainer.innerHTML = '';
+                validationResult.innerHTML = '';
+                log('协议日志已清空', 'info');
+            });
+
+            document.getElementById('exportProtocolLog').addEventListener('click', () => {
+                const json = protocolLogger.exportJson();
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `xiaozhi-protocol-log-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                log('协议日志已导出', 'success');
+            });
+
+            document.getElementById('validateTts').addEventListener('click', () => {
+                const result = protocolLogger.validateTtsStateMachine();
+                showValidationResult('TTS 状态机验证', result);
+            });
+
+            document.getElementById('validateHello').addEventListener('click', () => {
+                const result = protocolLogger.validateHelloHandshake();
+                showValidationResult('Hello 握手验证', result);
+            });
+        }
+
+        // ============================================================
+        // 连接管理
+        // ============================================================
+        async function handleConnect() {
+            if (connectionManager && connectionManager.isConnected()) {
+                await handleDisconnect();
+                return;
+            }
+
+            const config = getConfig();
+
+            // 保存 URL
+            localStorage.setItem('otaUrl', config.otaUrl);
+            localStorage.setItem('rtcServerUrl', config.serverUrl);
+
+            // 创建连接管理器
+            if (currentMode === 'websocket') {
+                connectionManager = new WebSocketManager();
+            } else {
+                connectionManager = new AgoraRtcManager();
+            }
+
+            // 注册消息回调
+            setupMessageHandlers();
+
+            // 更新 UI
+            connectButton.disabled = true;
+            connectButton.textContent = '连接中...';
+            connectionStatus.textContent = '连接中...';
+            connectionStatus.style.color = 'orange';
+
+            try {
+                const success = await connectionManager.connect(config);
+                
+                if (success) {
+                    // 发送 hello 消息
+                    await sendHelloMessage();
+                    
+                    // 更新 UI
+                    connectButton.disabled = false;
+                    connectButton.textContent = '断开';
+                    connectionStatus.textContent = '已连接';
+                    connectionStatus.style.color = 'green';
+                    modeStatus.textContent = `${currentMode === 'websocket' ? 'WS' : 'RTC'} 已连接`;
+
+                    // 启用输入
+                    messageInput.disabled = false;
+                    sendTextButton.disabled = false;
+                    abortButton.disabled = false;
+                    recordButton.disabled = false;
+                    realtimeButton.disabled = false;
+                    realtimeAbortButton.disabled = false;
+
+                    // 显示 WS URL (仅 WebSocket 模式)
+                    if (currentMode === 'websocket') {
+                        const serverUrlInput = document.getElementById('serverUrl');
+                        if (connectionManager._websocket) {
+                            serverUrlInput.value = connectionManager._websocket.url;
+                        }
+                    }
+                } else {
+                    throw new Error('连接失败');
+                }
+            } catch (error) {
+                log(`连接失败: ${error.message}`, 'error');
+                connectButton.disabled = false;
+                connectButton.textContent = '连接';
+                connectionStatus.textContent = '连接失败';
+                connectionStatus.style.color = 'red';
+            }
+        }
+
+        async function handleDisconnect() {
+            if (connectionManager) {
+                await connectionManager.disconnect();
+                connectionManager = null;
+            }
+
+            // 更新 UI
+            connectButton.textContent = '连接';
+            connectionStatus.textContent = '未连接';
+            connectionStatus.style.color = '#666';
+            modeStatus.textContent = '未连接';
+
+            // 禁用输入
+            messageInput.disabled = true;
+            sendTextButton.disabled = true;
+            abortButton.disabled = true;
+            recordButton.disabled = true;
+            realtimeButton.disabled = true;
+            realtimeAbortButton.disabled = true;
+
+            // 停止实时对话（如果正在进行）
+            if (isRealtimeActive) {
+                stopRealtimeConversation();
+            }
+        }
+
+        /**
+         * 页面关闭/刷新前的清理
+         * 确保 Agent 被正确停止，释放服务端资源
+         */
+        function handleBeforeUnload(event) {
+            if (connectionManager && connectionManager.isConnected()) {
+                // 使用 sendBeacon 发送停止请求（不会被页面卸载中断）
+                const config = getConfig();
+                if (currentMode === 'agoraRtc' && config.serverUrl) {
+                    const url = `${config.serverUrl}/api/agents/stop`;
+                    const data = JSON.stringify({
+                        request_id: Date.now().toString(),
+                        channel_name: config.channel || 'test-channel'
+                    });
+                    
+                    // sendBeacon 可以在页面卸载时发送数据
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon(url, new Blob([data], { type: 'application/json' }));
+                        log('[RTC] 发送 Agent 停止请求 (sendBeacon)', 'info');
+                    }
+                }
+            }
+        }
+
+        function setupMessageHandlers() {
+            // 状态变化
+            connectionManager.on('stateChange', ({ oldState, newState }) => {
+                log(`连接状态: ${oldState} -> ${newState}`, 'info');
+                
+                if (newState === ConnectionState.DISCONNECTED) {
+                    handleDisconnect();
+                }
+            });
+
+            // Hello 响应
+            connectionManager.on(XiaozhiMessageType.HELLO, (msg) => {
+                log(`Hello 响应: session_id=${msg.session_id}`, 'success');
+            });
+
+            // TTS 消息
+            connectionManager.on(XiaozhiMessageType.TTS, (msg) => {
+                handleTtsMessage(msg);
+            });
+
+            // STT 消息
+            connectionManager.on(XiaozhiMessageType.STT, (msg) => {
+                log(`STT: ${msg.text}`, 'info');
+                // 如果是文本模式发送的消息，服务端会回显 STT，不需要重复显示
+                // 只有语音模式下的 STT 才需要显示
+                if (lastSentText && lastSentText === msg.text) {
+                    // 这是文本消息的回显，不显示
+                    lastSentText = null;  // 清除标记
+                } else {
+                    // 这是真正的语音识别结果
+                    addMessage(`[语音识别] ${msg.text}`, true);
+                }
+            });
+
+            // LLM 消息
+            connectionManager.on(XiaozhiMessageType.LLM, (msg) => {
+                if (msg.text && msg.text !== '😊') {
+                    log(`LLM: ${msg.text}`, 'info');
+                }
+            });
+
+            // MCP 消息
+            connectionManager.on(XiaozhiMessageType.MCP, (msg) => {
+                handleMcpMessage(msg);
+            });
+
+            // 音频数据 (仅 WebSocket 模式)
+            connectionManager.on('audio', (audioData) => {
+                handleAudioData(audioData);
+            });
+
+            // 错误
+            connectionManager.on('error', (error) => {
+                log(`错误: ${error.message}`, 'error');
+            });
+        }
+
+        async function sendHelloMessage() {
+            const config = getConfig();
+            
+            await connectionManager.sendHello({
+                device_id: config.deviceId,
+                device_name: config.deviceName,
+                device_mac: config.deviceMac,
+                token: config.token,
+                features: {
+                    mcp: true
+                }
+            });
+
+            log('已发送 Hello 消息', 'info');
+        }
+
+        // ============================================================
+        // 消息处理
+        // ============================================================
+        function handleTtsMessage(msg) {
+            const state = msg.state;
+            const text = msg.text;
+
+            switch (state) {
+                case TTSState.START:
+                    log('TTS 开始', 'info');
+                    // 更新实时对话状态
+                    isAgentSpeaking = true;
+                    if (isRealtimeActive) {
+                        updateRealtimeStatus('agent-speaking', 'AI 正在回复...');
+                    }
+                    break;
+                case TTSState.SENTENCE_START:
+                    log(`TTS 句子开始: ${text}`, 'info');
+                    if (text) addMessage(text);
+                    break;
+                case TTSState.SENTENCE_END:
+                    log(`TTS 句子结束: ${text}`, 'debug');
+                    break;
+                case TTSState.STOP:
+                    log('TTS 结束', 'info');
+                    // 更新实时对话状态
+                    isAgentSpeaking = false;
+                    if (isRealtimeActive) {
+                        updateRealtimeStatus('listening', '聆听中...');
+                    }
+                    // 停止音频播放并清空缓冲区（修复打断后音频继续播放的问题）
+                    stopAudioPlayback();
+                    // 重新启用录音按钮
+                    recordButton.disabled = false;
+                    recordButton.textContent = '开始录音';
+                    recordButton.classList.remove('recording');
+                    break;
+            }
+        }
+
+        function handleMcpMessage(msg) {
+            const payload = msg.payload || {};
+            log(`MCP: ${JSON.stringify(payload)}`, 'debug');
+
+            if (payload.method === 'tools/list') {
+                // 返回工具列表
+                const tools = getMcpTools();
+                connectionManager.sendMcpResponse(msg.session_id, {
+                    jsonrpc: '2.0',
+                    id: payload.id,
+                    result: { tools }
+                });
+                log(`回复 MCP 工具列表: ${tools.length} 个工具`, 'info');
+            } else if (payload.method === 'tools/call') {
+                // 执行工具
+                const result = executeMcpTool(payload.params?.name, payload.params?.arguments);
+                connectionManager.sendMcpResponse(msg.session_id, {
+                    jsonrpc: '2.0',
+                    id: payload.id,
+                    result: {
+                        content: [{ type: 'text', text: JSON.stringify(result) }],
+                        isError: false
+                    }
+                });
+            }
+        }
+
+        async function sendTextMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !connectionManager || !connectionManager.isConnected()) return;
+
+            try {
+                // 记录发送的文本，用于去重 STT 回显
+                lastSentText = text;
+                await connectionManager.sendText(text);
+                addMessage(text, true);
+                messageInput.value = '';
+                log(`发送文本: ${text}`, 'info');
+            } catch (error) {
+                log(`发送失败: ${error.message}`, 'error');
+                lastSentText = null;  // 发送失败时清除
+            }
+        }
+
+        async function handleAbort() {
+            if (!connectionManager || !connectionManager.isConnected()) return;
+
+            try {
+                await connectionManager.sendAbort();
+                log('已发送打断消息', 'info');
+            } catch (error) {
+                log(`打断失败: ${error.message}`, 'error');
+            }
+        }
+
+        // ============================================================
+        // 录音处理
+        // ============================================================
+        async function toggleRecording() {
+            if (isRecording) {
+                await stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            if (!connectionManager || !connectionManager.isConnected()) {
+                log('请先连接服务器', 'warning');
+                return;
+            }
+
+            try {
+                await connectionManager.startRecording();
+                isRecording = true;
+                
+                // 更新 UI
+                let seconds = 0;
+                recordingTimer = setInterval(() => {
+                    seconds += 0.1;
+                    recordButton.textContent = `停止录音 ${seconds.toFixed(1)}秒`;
+                }, 100);
+                recordButton.classList.add('recording');
+                
+                log('开始录音', 'success');
+            } catch (error) {
+                log(`录音启动失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopRecording() {
+            if (!isRecording) return;
+
+            try {
+                await connectionManager.stopRecording();
+            } catch (error) {
+                log(`停止录音失败: ${error.message}`, 'error');
+            }
+
+            isRecording = false;
+            
+            // 更新 UI
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+            recordButton.textContent = '开始录音';
+            recordButton.classList.remove('recording');
+            
+            log('停止录音', 'success');
+        }
+
+        // ============================================================
+        // 实时对话
+        // ============================================================
+        async function toggleRealtimeConversation() {
+            if (isRealtimeActive) {
+                await stopRealtimeConversation();
+            } else {
+                await startRealtimeConversation();
+            }
+        }
+
+        async function startRealtimeConversation() {
+            if (!connectionManager || !connectionManager.isConnected()) {
+                log('请先连接服务器', 'warning');
+                return;
+            }
+
+            try {
+                log('启动实时对话...', 'info');
+
+                // 初始化音频上下文
+                realtimeAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: SAMPLE_RATE
+                });
+
+                // 获取麦克风
+                realtimeMediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: CHANNELS,
+                        sampleRate: SAMPLE_RATE,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // 创建音频分析器
+                realtimeAnalyser = realtimeAudioContext.createAnalyser();
+                realtimeAnalyser.fftSize = 256;
+                realtimeAnalyser.smoothingTimeConstant = 0.8;
+
+                const source = realtimeAudioContext.createMediaStreamSource(realtimeMediaStream);
+                source.connect(realtimeAnalyser);
+
+                // 通过 ConnectionManager 开始录音
+                await connectionManager.startRecording();
+
+                isRealtimeActive = true;
+
+                // 更新 UI
+                realtimeButton.textContent = '停止实时对话';
+                realtimeButton.classList.add('active');
+                updateRealtimeStatus('idle', '等待说话...');
+
+                // 启动音量监测和可视化
+                startVolumeMonitoring();
+                startRealtimeVisualization();
+
+                log('实时对话已启动', 'success');
+            } catch (error) {
+                log(`启动实时对话失败: ${error.message}`, 'error');
+                await stopRealtimeConversation();
+            }
+        }
+
+        async function stopRealtimeConversation() {
+            log('停止实时对话...', 'info');
+
+            isRealtimeActive = false;
+
+            // 停止音量监测
+            if (realtimeVolumeFrame) {
+                cancelAnimationFrame(realtimeVolumeFrame);
+                realtimeVolumeFrame = null;
+            }
+
+            // 停止可视化
+            if (realtimeVisualizationFrame) {
+                cancelAnimationFrame(realtimeVisualizationFrame);
+                realtimeVisualizationFrame = null;
+            }
+
+            // 停止录音
+            if (connectionManager && connectionManager.isConnected()) {
+                try {
+                    await connectionManager.stopRecording();
+                } catch (error) {
+                    log(`停止录音失败: ${error.message}`, 'warning');
+                }
+            }
+
+            // 关闭媒体流
+            if (realtimeMediaStream) {
+                realtimeMediaStream.getTracks().forEach(track => track.stop());
+                realtimeMediaStream = null;
+            }
+
+            // 关闭音频上下文
+            if (realtimeAudioContext && realtimeAudioContext.state !== 'closed') {
+                try {
+                    await realtimeAudioContext.close();
+                } catch (e) {
+                    // 忽略关闭错误
+                }
+                realtimeAudioContext = null;
+            }
+
+            realtimeAnalyser = null;
+
+            // 更新 UI
+            realtimeButton.textContent = '开始实时对话';
+            realtimeButton.classList.remove('active');
+            updateRealtimeStatus('offline', '未开始');
+            volumeBar.style.width = '0%';
+
+            // 清除可视化画布
+            if (realtimeVisualizer) {
+                const ctx = realtimeVisualizer.getContext('2d');
+                ctx.clearRect(0, 0, realtimeVisualizer.width, realtimeVisualizer.height);
+            }
+
+            log('实时对话已停止', 'success');
+        }
+
+        function startVolumeMonitoring() {
+            if (!realtimeAnalyser) return;
+
+            const bufferLength = realtimeAnalyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function updateVolume() {
+                if (!isRealtimeActive) return;
+
+                realtimeAnalyser.getByteFrequencyData(dataArray);
+
+                // 计算平均音量
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / bufferLength / 255;
+
+                // 更新音量条
+                volumeBar.style.width = `${Math.min(average * 300, 100)}%`;
+
+                // 检测是否在说话
+                const wasSpeaking = isUserSpeaking;
+
+                if (average > SILENCE_THRESHOLD) {
+                    isUserSpeaking = true;
+                    silenceStartTime = null;
+                    
+                    if (!wasSpeaking) {
+                        updateRealtimeStatus('speaking', '正在说话...');
+                        log('检测到语音活动', 'debug');
+                    }
+                } else {
+                    if (isUserSpeaking) {
+                        if (!silenceStartTime) {
+                            silenceStartTime = Date.now();
+                        } else if (Date.now() - silenceStartTime > SILENCE_DURATION) {
+                            isUserSpeaking = false;
+                            updateRealtimeStatus('listening', '聆听中...');
+                            log('语音活动结束', 'debug');
+                        }
+                    }
+                }
+
+                realtimeVolumeFrame = requestAnimationFrame(updateVolume);
+            }
+
+            updateVolume();
+        }
+
+        function startRealtimeVisualization() {
+            if (!realtimeAnalyser || !realtimeVisualizer) return;
+
+            const ctx = realtimeVisualizer.getContext('2d');
+            const bufferLength = realtimeAnalyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function draw() {
+                if (!isRealtimeActive) return;
+
+                realtimeAnalyser.getByteFrequencyData(dataArray);
+
+                const width = realtimeVisualizer.width;
+                const height = realtimeVisualizer.height;
+
+                ctx.fillStyle = '#f5f5f5';
+                ctx.fillRect(0, 0, width, height);
+
+                const barWidth = (width / bufferLength) * 2.5;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const barHeight = (dataArray[i] / 255) * height;
+                    
+                    // 渐变颜色
+                    const hue = (i / bufferLength) * 120 + 180; // 从青色到紫色
+                    ctx.fillStyle = `hsl(${hue}, 70%, 50%)`;
+                    
+                    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                    x += barWidth + 1;
+                }
+
+                realtimeVisualizationFrame = requestAnimationFrame(draw);
+            }
+
+            draw();
+        }
+
+        function updateRealtimeStatus(status, text) {
+            const dot = realtimeStatusIndicator.querySelector('.status-dot');
+            
+            // 移除所有状态类
+            dot.classList.remove('idle', 'listening', 'speaking', 'agent-speaking');
+            
+            // 添加新状态类
+            if (status !== 'offline') {
+                dot.classList.add(status);
+            }
+            
+            realtimeStatusText.textContent = text;
+        }
+
+        async function handleRealtimeAbort() {
+            if (!connectionManager || !connectionManager.isConnected()) return;
+
+            try {
+                await connectionManager.sendAbort();
+                log('已发送打断消息', 'info');
+                
+                // 立即停止本地音频播放（不等待服务器响应）
+                stopAudioPlayback();
+                
+                // 更新状态
+                isAgentSpeaking = false;
+                updateRealtimeStatus('listening', '聆听中...');
+            } catch (error) {
+                log(`打断失败: ${error.message}`, 'error');
+            }
+        }
+
+        // ============================================================
+        // 音频播放 (WebSocket 模式)
+        // ============================================================
+        function initAudioPlayback() {
+            // 初始化音频上下文
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: SAMPLE_RATE,
+                latencyHint: 'interactive'
+            });
+
+            // 初始化 Opus 解码器
+            initOpusDecoder();
+
+            // 启动音频缓冲和播放
+            startAudioBuffering();
+        }
+
+        // 停止音频播放并清空缓冲区（用于打断场景）
+        function stopAudioPlayback() {
+            // Agora RTC 模式：音频通过 Agora SDK 处理，不使用 streamingContext
+            if (currentMode !== 'websocket') {
+                log('Agora RTC 模式：音频由 Agora SDK 管理，无需手动停止', 'debug');
+                return;
+            }
+            
+            // WebSocket 模式：停止 streamingContext
+            if (streamingContext) {
+                // 检查 stop 方法是否存在（兼容旧版本）
+                if (typeof streamingContext.stop === 'function') {
+                    streamingContext.stop();
+                } else {
+                    // 旧版本兼容：手动停止和清理
+                    if (streamingContext.source) {
+                        try {
+                            streamingContext.source.stop();
+                            streamingContext.source.disconnect();
+                        } catch (e) {}
+                    }
+                    if (streamingContext.playing !== undefined) {
+                        streamingContext.playing = false;
+                    }
+                    if (streamingContext.stopped !== undefined) {
+                        streamingContext.stopped = true;
+                    }
+                    if (streamingContext.queue) {
+                        streamingContext.queue = [];
+                    }
+                    log('音频播放已停止（兼容模式）', 'debug');
+                }
+                streamingContext = null;
+                log('音频播放已停止，缓冲区已清空', 'debug');
+            }
+        }
+
+        async function initOpusDecoder() {
+            try {
+                if (typeof window.ModuleInstance === 'undefined') {
+                    if (typeof Module !== 'undefined') {
+                        window.ModuleInstance = Module;
+                    } else {
+                        throw new Error('Opus 库未加载');
+                    }
+                }
+
+                const mod = window.ModuleInstance;
+                const decoderSize = mod._opus_decoder_get_size(CHANNELS);
+                const decoderPtr = mod._malloc(decoderSize);
+
+                const err = mod._opus_decoder_init(decoderPtr, SAMPLE_RATE, CHANNELS);
+                if (err < 0) {
+                    mod._free(decoderPtr);
+                    throw new Error(`解码器初始化失败: ${err}`);
+                }
+
+                opusDecoder = {
+                    ptr: decoderPtr,
+                    module: mod,
+                    frameSize: FRAME_SIZE,
+
+                    decode: function(opusData) {
+                        const mod = this.module;
+                        const opusPtr = mod._malloc(opusData.length);
+                        mod.HEAPU8.set(opusData, opusPtr);
+                        const pcmPtr = mod._malloc(this.frameSize * 2);
+
+                        const samples = mod._opus_decode(
+                            this.ptr, opusPtr, opusData.length,
+                            pcmPtr, this.frameSize, 0
+                        );
+
+                        let result = null;
+                        if (samples > 0) {
+                            result = new Int16Array(samples);
+                            for (let i = 0; i < samples; i++) {
+                                result[i] = mod.HEAP16[(pcmPtr >> 1) + i];
+                            }
+                        }
+
+                        mod._free(opusPtr);
+                        mod._free(pcmPtr);
+                        return result;
+                    }
+                };
+
+                log('Opus 解码器初始化成功', 'success');
+
+            } catch (error) {
+                log(`Opus 解码器初始化失败: ${error.message}`, 'warning');
+            }
+        }
+
+        function handleAudioData(audioData) {
+            if (audioData.data && audioData.data.length > 0) {
+                audioQueue.enqueue(audioData.data);
+            }
+        }
+
+        async function startAudioBuffering() {
+            // 创建流式播放上下文
+            if (!streamingContext && opusDecoder) {
+                streamingContext = createStreamingContext(
+                    opusDecoder, audioContext, SAMPLE_RATE, CHANNELS, MIN_AUDIO_DURATION
+                );
+                streamingContext.decodeOpusFrames();
+                streamingContext.startPlaying();
+            }
+
+            // 音频缓冲循环
+            while (true) {
+                const packets = await audioQueue.dequeue(3, 300);
+                if (packets.length && streamingContext) {
+                    streamingContext.pushAudioBuffer(packets);
+                }
+
+                while (true) {
+                    const data = await audioQueue.dequeue(99, 50);
+                    if (data.length && streamingContext) {
+                        streamingContext.pushAudioBuffer(data);
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        // 协议日志
+        // ============================================================
+        function initProtocolLogger() {
+            protocolLogger.addListener((entry) => {
+                const html = protocolLogger.formatEntryHtml(entry);
+                protocolLogContainer.insertAdjacentHTML('beforeend', html);
+                protocolLogContainer.scrollTop = protocolLogContainer.scrollHeight;
+            });
+        }
+
+        function showValidationResult(title, result) {
+            let html = '';
+            
+            if (result.valid) {
+                html = `
+                    <div class="validation-result valid">
+                        <h4>✅ ${title} - 通过</h4>
+                        ${result.warnings?.length ? `
+                            <p><strong>警告:</strong></p>
+                            <ul>
+                                ${result.warnings.map(w => `<li class="warning">${w}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                        ${result.summary ? `<p>统计: ${JSON.stringify(result.summary)}</p>` : ''}
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div class="validation-result invalid">
+                        <h4>❌ ${title} - 失败</h4>
+                        <p><strong>错误:</strong></p>
+                        <ul>
+                            ${result.errors.map(e => `<li class="error">${e}</li>`).join('')}
+                        </ul>
+                        ${result.warnings?.length ? `
+                            <p><strong>警告:</strong></p>
+                            <ul>
+                                ${result.warnings.map(w => `<li class="warning">${w}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            validationResult.innerHTML = html;
+        }
+
+        // ============================================================
+        // MCP 工具管理
+        // ============================================================
+        let mcpTools = [];
+
+        function initMcpTools() {
+            const saved = localStorage.getItem('mcpTools');
+            if (saved) {
+                try {
+                    mcpTools = JSON.parse(saved);
+                } catch (e) {
+                    mcpTools = [];
+                }
+            }
+            renderMcpTools();
+
+            // MCP 面板折叠
+            document.getElementById('toggleMcpTools').addEventListener('click', () => {
+                const panel = document.getElementById('mcpToolsPanel');
+                const btn = document.getElementById('toggleMcpTools');
+                panel.classList.toggle('expanded');
+                btn.textContent = panel.classList.contains('expanded') ? '收起' : '展开';
+            });
+        }
+
+        function renderMcpTools() {
+            const container = document.getElementById('mcpToolsContainer');
+            const countSpan = document.getElementById('mcpToolsCount');
+            countSpan.textContent = `${mcpTools.length} 个工具`;
+
+            if (mcpTools.length === 0) {
+                container.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">暂无工具</div>';
+                return;
+            }
+
+            container.innerHTML = mcpTools.map((tool, idx) => `
+                <div class="mcp-tool-card">
+                    <div class="mcp-tool-header">
+                        <span class="mcp-tool-name">${tool.name}</span>
+                    </div>
+                    <div class="mcp-tool-description">${tool.description}</div>
+                </div>
+            `).join('');
+        }
+
+        function getMcpTools() {
+            return mcpTools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema || { type: 'object', properties: {} }
+            }));
+        }
+
+        function executeMcpTool(toolName, args) {
+            const tool = mcpTools.find(t => t.name === toolName);
+            if (!tool) {
+                return { success: false, error: `未知工具: ${toolName}` };
+            }
+            if (tool.mockResponse) {
+                return tool.mockResponse;
+            }
+            return { success: true, message: `工具 ${toolName} 执行成功`, arguments: args };
+        }
+
+        // ============================================================
+        // 启动
+        // ============================================================
+        init();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,249 @@
+# =============================================================================
+# Dokploy 部署配置文件
+# =============================================================================
+# 说明：
+#   - 使用固定 container_name 确保重新部署时自动替换旧容器
+#   - 所有服务共享 xiaozhi-network 网络
+#   - 数据持久化到 /opt/ 目录
+#
+# 端口分配：
+#   - 8000: xiaozhi-esp32-server (WebSocket)
+#   - 8002: xiaozhi-esp32-server-web (管理后台)
+#   - 8003: xiaozhi-esp32-server (HTTP API)
+#   - 8080: live-agent-api (FastAPI)
+#   - 9000: MinIO S3 API
+#   - 9001: MinIO Console
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 公共配置
+# -----------------------------------------------------------------------------
+x-common: &common
+  restart: always
+  networks:
+    - xiaozhi-network
+
+x-timezone: &timezone
+  TZ: Asia/Shanghai
+
+# =============================================================================
+# 服务定义
+# =============================================================================
+services:
+
+  # ---------------------------------------------------------------------------
+  # 小智 ESP32 服务组
+  # ---------------------------------------------------------------------------
+
+  # Python 主服务 - WebSocket + HTTP API
+  xiaozhi-esp32-server:
+    <<: *common
+    container_name: xiaozhi-esp32-server
+    build:
+      context: .
+      dockerfile: Dockerfile-server
+      args:
+        # 使用 Git commit hash 作为缓存键，每次新提交自动触发重新构建
+        - GIT_COMMIT=${GIT_COMMIT:-unknown}
+    depends_on:
+      - xiaozhi-esp32-server-db
+      - xiaozhi-esp32-server-redis
+    ports:
+      - "8000:8000"  # WebSocket
+      - "8003:8003"  # HTTP API
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - /opt/xiaozhi-server/data:/opt/xiaozhi-esp32-server/data
+      - /opt/xiaozhi-server/models/SenseVoiceSmall/model.pt:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall/model.pt
+    environment:
+      <<: *timezone
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      FISH_API_KEY: ${FISH_API_KEY}
+      MINIMAX_TTS_API_KEY: ${MINIMAX_TTS_API_KEY}
+
+  # Java + Vue 管理后台
+  xiaozhi-esp32-server-web:
+    <<: *common
+    container_name: xiaozhi-esp32-server-web
+    build:
+      context: .
+      dockerfile: Dockerfile-web
+    depends_on:
+      xiaozhi-esp32-server-db:
+        condition: service_healthy
+      xiaozhi-esp32-server-redis:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    volumes:
+      - /opt/xiaozhi-server/uploadfile:/uploadfile
+    environment:
+      <<: *timezone
+      # MySQL 连接
+      SPRING_DATASOURCE_DRUID_URL: >-
+        jdbc:mysql://xiaozhi-esp32-server-db:3306/xiaozhi_esp32_server
+        ?useUnicode=true
+        &characterEncoding=UTF-8
+        &serverTimezone=Asia/Shanghai
+        &nullCatalogMeansCurrent=true
+        &connectTimeout=30000
+        &socketTimeout=30000
+        &autoReconnect=true
+        &failOverReadOnly=false
+        &maxReconnects=10
+      SPRING_DATASOURCE_DRUID_USERNAME: root
+      SPRING_DATASOURCE_DRUID_PASSWORD: Xiaozhi2025
+      # Redis 连接
+      SPRING_DATA_REDIS_HOST: xiaozhi-esp32-server-redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_PASSWORD: ""
+
+  # MySQL 数据库
+  xiaozhi-esp32-server-db:
+    <<: *common
+    container_name: xiaozhi-esp32-server-db
+    image: mysql:8.0
+    expose:
+      - "3306"
+    volumes:
+      - /opt/xiaozhi-server/mysql/data:/var/lib/mysql
+    environment:
+      <<: *timezone
+      MYSQL_ROOT_PASSWORD: Xiaozhi2025
+      MYSQL_DATABASE: xiaozhi_esp32_server
+      MYSQL_INITDB_ARGS: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pXiaozhi2025"]
+      interval: 10s
+      timeout: 45s
+      retries: 10
+      start_period: 60s
+
+  # Redis 缓存
+  xiaozhi-esp32-server-redis:
+    <<: *common
+    container_name: xiaozhi-esp32-server-redis
+    image: redis:8.0
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Live Agent 服务组
+  # ---------------------------------------------------------------------------
+
+  # FastAPI 主服务
+  live-agent-api:
+    <<: *common
+    container_name: live-agent-api
+    build:
+      context: .
+      dockerfile: Dockerfile-live-agent-api
+    depends_on:
+      live-agent-postgres:
+        condition: service_healthy
+      live-agent-minio:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    volumes:
+      - /opt/live-agent/config/firebase-admin-key.json:/app/firebase-admin-key.json:ro
+    environment:
+      <<: *timezone
+      DEBUG: "true"
+      # 服务器配置
+      HOST: 0.0.0.0
+      PORT: "8080"
+      # 数据库
+      DATABASE_URL: postgresql+asyncpg://postgres:LiveAgent2025@live-agent-postgres:5432/live_agent
+      # MinIO S3
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_BUCKET_NAME: live-agent
+      S3_ENDPOINT_URL: http://live-agent-minio:9000
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:9000}
+      # 安全配置
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
+      TOKEN_EXPIRE_DAYS: "7"
+      # Firebase
+      FIREBASE_CREDENTIALS_PATH: /app/firebase-admin-key.json
+      # OpenAI
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # OpenRouter
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+      QUICK_PERSONA_MODEL: google/gemini-2.5-flash
+      OPTIMIZE_PERSONA_MODEL: google/gemini-3-pro-preview
+      # Groq
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: https://api.groq.com/openai/v1
+      GROQ_STT_MODEL: whisper-large-v3
+      # Fish Audio
+      FISH_API_KEY: ${FISH_API_KEY:-}
+      # MeMu
+      MEMU_API_KEY: ${MEMU_API_KEY:-}
+      MEMU_BASE_URL: https://api.memu.so
+      # MiniMax TTS
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_API_URL: https://api.minimax.io/v1/t2a_v2
+      MINIMAX_MODEL: speech-2.6-turbo
+      MINIMAX_DEFAULT_VOICE_ID: female-shaonv
+      # SMTP 邮件
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Live Agent}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+
+  # PostgreSQL 数据库
+  live-agent-postgres:
+    <<: *common
+    container_name: live-agent-postgres
+    image: postgres:16-alpine
+    expose:
+      - "5432"
+    volumes:
+      - /opt/live-agent/postgres/data:/var/lib/postgresql/data
+    environment:
+      <<: *timezone
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: LiveAgent2025
+      POSTGRES_DB: live_agent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 对象存储
+  live-agent-minio:
+    <<: *common
+    container_name: live-agent-minio
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Console
+    volumes:
+      - /opt/live-agent/minio/data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+
+# =============================================================================
+# 网络配置
+# =============================================================================
+networks:
+  xiaozhi-network:
+    driver: bridge

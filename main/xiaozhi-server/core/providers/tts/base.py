@@ -41,6 +41,25 @@ class TTSProviderBase(ABC):
         self.before_stop_play_files = []
 
         self.tts_text_buff = []
+        
+        # 分层标点规则：首句使用更细粒度分割，后续句子使用完整句子分割
+        # 首句标点：逗号、顿号等，追求更快首字响应
+        self.first_sentence_punctuations = (
+            "，",
+            ",",
+            "~",
+            "、",
+            "。",
+            "？",
+            "?",
+            "！",
+            "!",
+            "；",
+            ";",
+            "：",
+            ":",
+        )
+        # 后续句子标点：完整句子分割，减少 TTS 请求数
         self.punctuations = (
             "。",
             "？",
@@ -49,22 +68,9 @@ class TTSProviderBase(ABC):
             "!",
             "；",
             ";",
-            "：",
-        )
-        self.first_sentence_punctuations = (
-            "，",
             "~",
-            "、",
-            ",",
-            "。",
-            "？",
-            "?",
-            "！",
-            "!",
-            "；",
-            ";",
-            "：",
         )
+        
         self.tts_stop_request = False
         self.processed_chars = 0
         self.is_first_sentence = True
@@ -76,7 +82,6 @@ class TTSProviderBase(ABC):
         )
 
     def handle_opus(self, opus_data: bytes):
-        logger.bind(tag=TAG).debug(f"推送数据到队列里面帧数～～ {len(opus_data)}")
         self.tts_audio_queue.put((SentenceType.MIDDLE, opus_data, None))
 
     def handle_audio_file(self, file_audio: bytes, text):
@@ -284,8 +289,15 @@ class TTSProviderBase(ABC):
                     self.tts_audio_first_sentence = True
                 elif ContentType.TEXT == message.content_type:
                     self.tts_text_buff.append(message.content_detail)
+                    # 保存首句状态（_get_segment_text 会修改 is_first_sentence）
+                    was_first_sentence = self.is_first_sentence
                     segment_text = self._get_segment_text()
                     if segment_text:
+                        # 记录首句 TTS 请求时间
+                        if was_first_sentence:
+                            if hasattr(self, 'conn') and self.conn:
+                                if hasattr(self.conn, 'latency_metrics') and self.conn.latency_metrics:
+                                    self.conn.latency_metrics.mark_tts_request(segment_text)
                         self.to_tts_stream(segment_text, opus_handler=self.handle_opus)
                 elif ContentType.FILE == message.content_type:
                     self._process_remaining_text_stream(opus_handler=self.handle_opus)
@@ -372,7 +384,7 @@ class TTSProviderBase(ABC):
         current_text = full_text[self.processed_chars :]  # 从未处理的位置开始
         last_punct_pos = -1
 
-        # 根据是否是第一句话选择不同的标点符号集合
+        # 分层标点规则：首句使用更细粒度分割以降低首字延迟
         punctuations_to_use = (
             self.first_sentence_punctuations
             if self.is_first_sentence
@@ -393,7 +405,7 @@ class TTSProviderBase(ABC):
             )
             self.processed_chars += len(segment_text_raw)  # 更新已处理字符位置
 
-            # 如果是第一句话，在找到第一个逗号后，将标志设置为False
+            # 首句分割完成后，切换到完整句子分割模式
             if self.is_first_sentence:
                 self.is_first_sentence = False
 

@@ -6,19 +6,32 @@ TTS上报功能已集成到ConnectionHandler类中。
 2. 上报线程的生命周期与连接对象绑定
 3. 使用ConnectionHandler.enqueue_tts_report方法进行上报
 
+上报目标：统一上报到 live-agent-api
+- 需要 agent_id 才能上报
+- 设备连接需要先绑定 agent 才有 agent_id
+
 具体实现请参考core/connection.py中的相关代码。
 """
 
 import time
-import opuslib_next
-
-from config.manage_api_client import report as manage_report
+import base64
 
 TAG = __name__
 
+# 延迟导入 live_agent_report，避免循环导入
+_live_agent_report = None
+
+def _get_live_agent_report():
+    """延迟获取 live_agent_report 函数"""
+    global _live_agent_report
+    if _live_agent_report is None:
+        from config.live_agent_api_client import report_chat_message
+        _live_agent_report = report_chat_message
+    return _live_agent_report
+
 
 async def report(conn, type, text, opus_data, report_time):
-    """执行聊天记录上报操作
+    """执行聊天记录上报操作（统一上报到 live-agent-api）
 
     Args:
         conn: 连接对象
@@ -27,130 +40,100 @@ async def report(conn, type, text, opus_data, report_time):
         opus_data: opus音频数据
         report_time: 上报时间
     """
-    try:
-        if opus_data:
-            audio_data = opus_to_wav(conn, opus_data)
-        else:
-            audio_data = None
-        # 执行异步上报
-        await manage_report(
-            mac_address=conn.device_id,
-            session_id=conn.session_id,
-            chat_type=type,
-            content=text,
-            audio=audio_data,
-            report_time=report_time,
+    # 必须有 agent_id 才能上报
+    if not conn.agent_id:
+        conn.logger.bind(tag=TAG).debug(
+            f"跳过聊天记录上报: 无 agent_id (device_id={conn.device_id})"
         )
+        return
+    
+    try:
+        await _report_to_live_agent_api(conn, type, text, opus_data, report_time)
     except Exception as e:
         conn.logger.bind(tag=TAG).error(f"聊天记录上报失败: {e}")
 
 
-def opus_to_wav(conn, opus_data):
-    """将Opus数据转换为WAV格式的字节流
-
+async def _report_to_live_agent_api(conn, role, text, opus_data, report_time):
+    """上报到 live-agent-api
+    
     Args:
-        output_dir: 输出目录（保留参数以保持接口兼容）
+        conn: 连接对象
+        role: 角色类型，1=用户，2=智能体
+        text: 消息文本
         opus_data: opus音频数据
-
-    Returns:
-        bytes: WAV格式的音频数据
+        report_time: 上报时间
     """
-    decoder = None
-    try:
-        decoder = opuslib_next.Decoder(16000, 1)  # 16kHz, 单声道
-        pcm_data = []
+    # 构建消息内容列表
+    content_items = [{"message_type": "text", "message_content": text}]
+    
+    # 如果有音频数据，添加到内容列表
+    if opus_data:
+        # 将 opus packets 合并为一个 bytes 对象
+        opus_bytes = b"".join(opus_data)
+        audio_base64 = base64.b64encode(opus_bytes).decode("utf-8")
+        content_items.append({"message_type": "audio", "message_content": audio_base64})
+    
+    # 调用 live-agent-api 上报（使用延迟导入）
+    live_agent_report = _get_live_agent_report()
+    result = live_agent_report(
+        agent_id=conn.agent_id,
+        role=role,
+        content_items=content_items,
+        message_time=report_time,
+        config=conn.config  # 传入配置以确保客户端初始化
+    )
+    
+    if result:
+        conn.logger.bind(tag=TAG).info(
+            f"消息上报成功: agent_id={conn.agent_id}, role={role}, text={text[:50] if text else 'None'}..."
+        )
+    else:
+        conn.logger.bind(tag=TAG).error(
+            f"消息上报失败: agent_id={conn.agent_id}, role={role}, text={text}"
+        )
 
-        for opus_packet in opus_data:
-            try:
-                pcm_frame = decoder.decode(opus_packet, 960)  # 960 samples = 60ms
-                pcm_data.append(pcm_frame)
-            except opuslib_next.OpusError as e:
-                conn.logger.bind(tag=TAG).error(f"Opus解码错误: {e}", exc_info=True)
 
-        if not pcm_data:
-            raise ValueError("没有有效的PCM数据")
-
-        # 创建WAV文件头
-        pcm_data_bytes = b"".join(pcm_data)
-        num_samples = len(pcm_data_bytes) // 2  # 16-bit samples
-
-        # WAV文件头
-        wav_header = bytearray()
-        wav_header.extend(b"RIFF")  # ChunkID
-        wav_header.extend((36 + len(pcm_data_bytes)).to_bytes(4, "little"))  # ChunkSize
-        wav_header.extend(b"WAVE")  # Format
-        wav_header.extend(b"fmt ")  # Subchunk1ID
-        wav_header.extend((16).to_bytes(4, "little"))  # Subchunk1Size
-        wav_header.extend((1).to_bytes(2, "little"))  # AudioFormat (PCM)
-        wav_header.extend((1).to_bytes(2, "little"))  # NumChannels
-        wav_header.extend((16000).to_bytes(4, "little"))  # SampleRate
-        wav_header.extend((32000).to_bytes(4, "little"))  # ByteRate
-        wav_header.extend((2).to_bytes(2, "little"))  # BlockAlign
-        wav_header.extend((16).to_bytes(2, "little"))  # BitsPerSample
-        wav_header.extend(b"data")  # Subchunk2ID
-        wav_header.extend(len(pcm_data_bytes).to_bytes(4, "little"))  # Subchunk2Size
-
-        # 返回完整的WAV数据
-        return bytes(wav_header) + pcm_data_bytes
-    finally:
-        if decoder is not None:
-            try:
-                del decoder
-            except Exception as e:
-                conn.logger.bind(tag=TAG).debug(f"释放decoder资源时出错: {e}")
 
 
 def enqueue_tts_report(conn, text, opus_data):
-    if not conn.read_config_from_api or conn.need_bind or not conn.report_tts_enable:
-        return
-    if conn.chat_history_conf == 0:
-        return
-    """将TTS数据加入上报队列
+    """将TTS数据加入上报队列（统一上报到 live-agent-api）
 
     Args:
         conn: 连接对象
         text: 合成文本
         opus_data: opus音频数据
     """
+    # 必须有 agent_id 才能上报
+    if not conn.agent_id:
+        conn.logger.bind(tag=TAG).debug(f"跳过TTS上报: 无 agent_id")
+        return
+    
     try:
-        # 使用连接对象的队列，传入文本和二进制数据而非文件路径
-        if conn.chat_history_conf == 2:
-            conn.report_queue.put((2, text, opus_data, int(time.time())))
-            conn.logger.bind(tag=TAG).debug(
-                f"TTS数据已加入上报队列: {conn.device_id}, 音频大小: {len(opus_data)} "
-            )
-        else:
-            conn.report_queue.put((2, text, None, int(time.time())))
-            conn.logger.bind(tag=TAG).debug(
-                f"TTS数据已加入上报队列: {conn.device_id}, 不上报音频"
-            )
+        conn.report_queue.put((2, text, opus_data, int(time.time())))
+        conn.logger.bind(tag=TAG).info(
+            f"TTS数据已加入上报队列: agent_id={conn.agent_id}, text={text[:50] if text else 'None'}..."
+        )
     except Exception as e:
         conn.logger.bind(tag=TAG).error(f"加入TTS上报队列失败: {text}, {e}")
 
 
 def enqueue_asr_report(conn, text, opus_data):
-    if not conn.read_config_from_api or conn.need_bind or not conn.report_asr_enable:
-        return
-    if conn.chat_history_conf == 0:
-        return
-    """将ASR数据加入上报队列
+    """将ASR数据加入上报队列（统一上报到 live-agent-api）
 
     Args:
         conn: 连接对象
-        text: 合成文本
+        text: 识别文本
         opus_data: opus音频数据
     """
+    # 必须有 agent_id 才能上报
+    if not conn.agent_id:
+        conn.logger.bind(tag=TAG).debug(f"跳过ASR上报: 无 agent_id")
+        return
+    
     try:
-        # 使用连接对象的队列，传入文本和二进制数据而非文件路径
-        if conn.chat_history_conf == 2:
-            conn.report_queue.put((1, text, opus_data, int(time.time())))
-            conn.logger.bind(tag=TAG).debug(
-                f"ASR数据已加入上报队列: {conn.device_id}, 音频大小: {len(opus_data)} "
-            )
-        else:
-            conn.report_queue.put((1, text, None, int(time.time())))
-            conn.logger.bind(tag=TAG).debug(
-                f"ASR数据已加入上报队列: {conn.device_id}, 不上报音频"
-            )
+        conn.report_queue.put((1, text, opus_data, int(time.time())))
+        conn.logger.bind(tag=TAG).info(
+            f"ASR数据已加入上报队列: agent_id={conn.agent_id}, text={text}"
+        )
     except Exception as e:
-        conn.logger.bind(tag=TAG).debug(f"加入ASR上报队列失败: {text}, {e}")
+        conn.logger.bind(tag=TAG).error(f"加入ASR上报队列失败: {text}, {e}")

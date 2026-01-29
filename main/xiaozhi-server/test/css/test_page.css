@@ -348,6 +348,87 @@ span.connection-status.llm-emoji {
 }
 
 /* ==================== 语音消息控制 ==================== */
+/* 录音模式切换 */
+.voice-mode-switch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.mode-label {
+    font-size: 13px;
+    color: #666;
+}
+
+.mode-button {
+    padding: 5px 15px;
+    border: 1px solid #007aff;
+    background-color: #fff;
+    color: #007aff;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mode-button:first-of-type {
+    border-radius: 15px 0 0 15px;
+}
+
+.mode-button:last-of-type {
+    border-radius: 0 15px 15px 0;
+}
+
+.mode-button.active {
+    background-color: #007aff;
+    color: #fff;
+}
+
+.mode-button:hover:not(.active) {
+    background-color: #e6f0ff;
+}
+
+.mode-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mode-hint {
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+/* 延迟显示区域 */
+.latency-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px 0;
+    padding: 8px 15px;
+    background-color: #f5f5f5;
+    border-radius: 20px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.latency-label {
+    font-size: 13px;
+    color: #666;
+}
+
+.latency-value {
+    font-size: 16px;
+    font-weight: bold;
+    color: #4caf50;
+    font-family: 'Courier New', monospace;
+}
+
 .audio-controls {
     display: flex;
     justify-content: center;
@@ -375,6 +456,24 @@ span.connection-status.llm-emoji {
 
 .record-button.recording {
     animation: pulse 1.5s infinite;
+}
+
+/* 自动模式录音按钮 - 待机绿色，录音中红色 */
+.record-button-auto {
+    background-color: #4caf50;
+}
+
+.record-button-auto:hover {
+    background-color: #43a047;
+}
+
+.record-button-auto.recording {
+    background-color: #db4437;
+    animation: pulse 1.5s infinite;
+}
+
+.record-button-auto.recording:hover {
+    background-color: #c53929;
 }
 
 @keyframes pulse {

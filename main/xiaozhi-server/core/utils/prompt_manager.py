@@ -7,6 +7,7 @@ import os
 from typing import Dict, Any
 from config.logger import setup_logging
 from jinja2 import Template
+from core.utils.expression_manager import expression_manager
 
 TAG = __name__
 
@@ -244,6 +245,9 @@ class PromptManager:
                         or ""
                     )
 
+            # 获取表情列表
+            expression_list = expression_manager.get_simple_expression_list()
+
             # 替换模板变量
             template = Template(self.base_prompt_template)
             enhanced_prompt = template.render(
@@ -254,7 +258,8 @@ class PromptManager:
                 lunar_date=lunar_date,
                 local_address=local_address,
                 weather_info=weather_info,
-                emojiList=EMOJI_List,
+                emojiList=EMOJI_List,  # 保留兼容性
+                expression_list=expression_list,  # 新增：GIF 表情列表
                 device_id=device_id,
                 client_ip=client_ip,
                 dynamic_context=self.context_data,

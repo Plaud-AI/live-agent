@@ -3,6 +3,7 @@ from aiohttp import web
 from config.logger import setup_logging
 from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
+from core.api.warmup_handler import WarmupHandler
 
 TAG = __name__
 
@@ -13,6 +14,7 @@ class SimpleHttpServer:
         self.logger = setup_logging()
         self.ota_handler = OTAHandler(config)
         self.vision_handler = VisionHandler(config)
+        self.warmup_handler = WarmupHandler(config)
 
     def _get_websocket_url(self, local_ip: str, port: int) -> str:
         """获取websocket地址
@@ -71,6 +73,19 @@ class SimpleHttpServer:
                         ),
                         web.options(
                             "/mcp/vision/explain", self.vision_handler.handle_options
+                        ),
+                        # 缓存预热接口
+                        web.post(
+                            "/internal/warmup/agent", self.warmup_handler.warmup_agent
+                        ),
+                        web.post(
+                            "/internal/warmup/user", self.warmup_handler.warmup_user_agents
+                        ),
+                        web.options(
+                            "/internal/warmup/agent", self.warmup_handler.handle_options
+                        ),
+                        web.options(
+                            "/internal/warmup/user", self.warmup_handler.handle_options
                         ),
                     ]
                 )

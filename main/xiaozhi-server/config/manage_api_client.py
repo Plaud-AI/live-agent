@@ -184,6 +184,128 @@ async def generate_and_save_chat_summary(session_id: str) -> Optional[Dict]:
         return None
 
 
+async def get_agent_config_by_id(agent_id: str, use_cache: bool = True) -> Optional[Dict]:
+    """
+    根据智能体ID获取完整配置（带缓存）
+    
+    用于移动端连接时，根据 agent_id 从 manager-api 获取 LLM、TTS 等完整配置
+    
+    Args:
+        agent_id: 智能体ID
+        use_cache: 是否使用缓存，默认 True
+    
+    Returns:
+        包含 selected_module、LLM、TTS、ASR 等所有模块配置的字典
+    """
+    from core.utils.cache.manager import cache_manager
+    from core.utils.cache.config import CacheType
+    
+    if not ManageApiClient._instance:
+        return None
+    
+    cache_key = f"agent:{agent_id}"
+    
+    # 尝试从缓存获取
+    if use_cache:
+        cached = cache_manager.get(CacheType.AGENT_CONFIG, cache_key)
+        if cached is not None:
+            print(f"[缓存命中] agent_id={agent_id}")
+            return cached
+    
+    # 缓存未命中，从 API 获取
+    try:
+        config = await ManageApiClient._instance._execute_async_request(
+            "GET",
+            f"/config/internal/agent/{agent_id}/config",
+        )
+        
+        # 存入缓存
+        if config:
+            cache_manager.set(CacheType.AGENT_CONFIG, cache_key, config)
+            print(f"[缓存写入] agent_id={agent_id}")
+        
+        return config
+    except Exception as e:
+        print(f"获取智能体配置失败: {e}")
+        return None
+
+
+async def warmup_agent_config(agent_id: str) -> bool:
+    """
+    预热单个 agent 配置缓存
+    
+    在用户登录后或设备绑定后调用，提前加载配置到缓存
+    
+    Args:
+        agent_id: 智能体ID
+    
+    Returns:
+        预热是否成功
+    """
+    config = await get_agent_config_by_id(agent_id, use_cache=False)
+    return config is not None
+
+
+async def warmup_user_agents(user_id: int) -> int:
+    """
+    批量预热用户所有 agent 配置（需要 manager-api 支持批量接口）
+    
+    Args:
+        user_id: 用户ID
+    
+    Returns:
+        成功预热的 agent 数量
+    """
+    if not ManageApiClient._instance:
+        return 0
+    
+    try:
+        # 获取用户所有 agent 配置
+        result = await ManageApiClient._instance._execute_async_request(
+            "GET",
+            f"/config/internal/user/{user_id}/agents",
+        )
+        
+        if not result or not isinstance(result, list):
+            return 0
+        
+        from core.utils.cache.manager import cache_manager
+        from core.utils.cache.config import CacheType
+        
+        count = 0
+        for agent_config in result:
+            agent_id = agent_config.get("agent_id")
+            if agent_id:
+                cache_key = f"agent:{agent_id}"
+                cache_manager.set(CacheType.AGENT_CONFIG, cache_key, agent_config)
+                count += 1
+        
+        print(f"[批量预热] user_id={user_id}, 预热 {count} 个 agent 配置")
+        return count
+    except Exception as e:
+        print(f"批量预热用户 agent 配置失败: {e}")
+        return 0
+
+
+def invalidate_agent_config_cache(agent_id: str) -> bool:
+    """
+    使指定 agent 的缓存失效
+    
+    当 agent 配置被修改时调用
+    
+    Args:
+        agent_id: 智能体ID
+    
+    Returns:
+        是否成功删除缓存
+    """
+    from core.utils.cache.manager import cache_manager
+    from core.utils.cache.config import CacheType
+    
+    cache_key = f"agent:{agent_id}"
+    return cache_manager.delete(CacheType.AGENT_CONFIG, cache_key)
+
+
 async def report(
     mac_address: str, session_id: str, chat_type: int, content: str, audio, report_time
 ) -> Optional[Dict]:

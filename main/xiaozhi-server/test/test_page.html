@@ -93,7 +93,8 @@
         <div class="section">
             <div class="tabs">
                 <button class="tab active" data-tab="text">文本消息</button>
-                <button class="tab" data-tab="voice">语音消息</button>
+                <button class="tab" data-tab="voice">语音(手动)</button>
+                <button class="tab" data-tab="voiceAuto">语音(自动)</button>
             </div>
 
             <div class="tab-content active" id="textTab">
@@ -107,7 +108,20 @@
                 <div class="audio-controls">
                     <button id="recordButton" class="record-button" disabled>开始录音</button>
                 </div>
+                <div class="mode-hint">手动模式：点击按钮开始/结束录音</div>
                 <canvas id="audioVisualizer" class="audio-visualizer"></canvas>
+            </div>
+
+            <div class="tab-content" id="voiceAutoTab">
+                <div class="audio-controls">
+                    <button id="recordButtonAuto" class="record-button record-button-auto" disabled>开始对话</button>
+                </div>
+                <div class="mode-hint">自动模式：说完话后服务端 VAD 自动检测结束，持续对话</div>
+                <div class="latency-display" id="latencyDisplay">
+                    <span class="latency-label">端到端延迟：</span>
+                    <span class="latency-value" id="latencyValue">--</span>
+                </div>
+                <canvas id="audioVisualizerAuto" class="audio-visualizer"></canvas>
             </div>
 
             <div style="margin: -10px 0px 10px 0px;">

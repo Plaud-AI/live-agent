@@ -40,3 +40,5 @@ psutil==7.1.3
 portalocker==3.2.0
 Jinja2==3.1.6
 vosk==0.3.45
+# Fish Audio TTS 流式支持
+fish-audio-sdk>=0.1.0

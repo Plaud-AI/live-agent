@@ -1,6 +1,7 @@
 import time
 import json
 import asyncio
+import threading
 from core.utils.util import audio_to_data
 from core.handle.abortHandle import handleAbortMessage
 from core.handle.intentHandler import handle_user_intent
@@ -87,7 +88,31 @@ async def startToChat(conn, text):
 
     # 意图未被处理，继续常规聊天流程，使用实际文本内容
     await send_stt_message(conn, actual_text)
-    conn.executor.submit(conn.chat, actual_text)
+    
+    # 取消旧的 chat() 任务，避免多个任务并行运行导致状态混乱
+    with conn.chat_lock:
+        old_cancel_event = None
+        if conn.chat_future is not None and not conn.chat_future.done():
+            conn.logger.bind(tag=TAG).info("取消旧的 chat() 任务")
+            # 保存旧的取消事件引用
+            old_cancel_event = conn.llm_cancel_event
+            # 设置取消标志，让旧任务优雅退出
+            conn.client_abort = True
+            if old_cancel_event:
+                old_cancel_event.set()
+            # 等待旧任务退出（最多 500ms）
+            try:
+                conn.chat_future.result(timeout=0.5)
+            except Exception:
+                pass  # 超时或异常都继续
+        
+        # 重置取消状态，为新任务准备
+        conn.client_abort = False
+        # 创建新的取消事件（新任务会使用这个新事件）
+        conn.llm_cancel_event = threading.Event()
+        
+        # 提交新的 chat() 任务
+        conn.chat_future = conn.executor.submit(conn.chat, actual_text)
 
 
 async def no_voice_close_connect(conn, have_voice):
