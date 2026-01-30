@@ -24,10 +24,17 @@
             <if test="modelName != null">and model_name = #{modelName}</if>
     </select>
 
-    <!-- 获取符合条件的TTS平台列表 -->
-    <select id="getTtsPlatformList" resultType="map">
-        select id, model_name as modelName from ai_model_config
-        where model_type = 'TTS'
-        and JSON_EXTRACT(config_json, '$.type') = 'huoshan_double_stream'
+    <!-- 获取符合条件的TTS平台列表 - MySQL -->
+    <select id="getTtsPlatformList" resultType="map" databaseId="mysql">
+        SELECT id, model_name AS modelName FROM ai_model_config
+        WHERE model_type = 'TTS'
+        AND JSON_EXTRACT(config_json, '$.type') = 'huoshan_double_stream'
+    </select>
+
+    <!-- 获取符合条件的TTS平台列表 - PostgreSQL -->
+    <select id="getTtsPlatformList" resultType="map" databaseId="postgresql">
+        SELECT id, model_name AS modelName FROM ai_model_config
+        WHERE model_type = 'TTS'
+        AND config_json->>'type' = 'huoshan_double_stream'
     </select>
 </mapper>

@@ -1,0 +1,62 @@
+# PostgreSQL 配置（数据库迁移用）
+# 使用方式：--spring.profiles.active=pg
+# 注意：需要先完成 Mapper XML 的兼容改造才能使用此配置
+
+knife4j:
+  production: false
+  enable: true
+  basic:
+    enable: false
+    username: renren
+    password: 2ZABCDEUgF
+  setting:
+    enableFooter: false
+
+spring:
+  datasource:
+    druid:
+      # PostgreSQL
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://live-agent-postgres:5432/live_agent
+      username: postgres
+      password: LiveAgent2025
+      initial-size: 10
+      max-active: 100
+      min-idle: 10
+      max-wait: 6000
+      pool-prepared-statements: true
+      max-pool-prepared-statement-per-connection-size: 20
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      # PostgreSQL 验证查询
+      validation-query: SELECT 1
+      stat-view-servlet:
+        enabled: false
+      filter:
+        stat:
+          log-slow-sql: true
+          slow-sql-millis: 1000
+          merge-sql: false
+        wall:
+          config:
+            multi-statement-allow: true
+  data:
+    redis:
+      host: xiaozhi-esp32-server-redis
+      port: 6379
+      password:
+      database: 0
+      timeout: 10000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+        shutdown-timeout: 100ms
+
+# Liquibase 禁用（PostgreSQL 使用独立的 schema 脚本）
+spring.liquibase:
+  enabled: false

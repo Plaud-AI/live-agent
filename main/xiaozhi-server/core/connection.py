@@ -692,6 +692,23 @@ class ConnectionHandler:
                     # 解析环境变量（配置可能包含 ${env:VAR_NAME} 语法）
                     private_config = resolve_env_vars(private_config)
                     private_config["delete_audio"] = bool(self.config.get("delete_audio", True))
+                    
+                    # 应用 api_defaults 配置（如果存在）
+                    # 用于设置 API 角色的 LLM、ASR、VAD、Memory、Intent 等默认模块
+                    api_defaults = self.config.get("api_defaults")
+                    if api_defaults:
+                        # 合并 selected_module（api_defaults 优先级高于全局默认）
+                        if "selected_module" in api_defaults:
+                            if "selected_module" not in private_config:
+                                private_config["selected_module"] = {}
+                            for key, value in api_defaults["selected_module"].items():
+                                # 只设置 private_config 中未指定的模块
+                                if key not in private_config["selected_module"]:
+                                    private_config["selected_module"][key] = value
+                        self.logger.bind(tag=TAG).info(
+                            f"API角色应用本地 api_defaults 配置: {api_defaults.get('selected_module', {})}"
+                        )
+                    
                     self.logger.bind(tag=TAG).info(
                         f"{time.time() - begin_time:.2f} 秒，根据 agent_id={self.agent_id} 获取配置成功: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}"
                     )

@@ -688,6 +688,29 @@ LLM:
     # Xinference服务地址和模型名称
     model_name: qwen2.5:3b-AWQ  # 使用的小模型名称，用于意图识别
     base_url: http://localhost:9997  # Xinference服务地址
+  OpenRouterLLM:
+    # OpenRouter - 统一访问多种LLM模型（GPT-4、Claude、Gemini等）
+    # API兼容OpenAI格式，支持provider routing和fallback
+    # 申请地址：https://openrouter.ai/keys
+    # 模型列表：https://openrouter.ai/models
+    type: openrouter
+    # OpenRouter API Key，支持环境变量：${env:OPENROUTER_API_KEY}
+    api_key: ${env:OPENROUTER_API_KEY}
+    # 模型名称，格式为 provider/model，例如：
+    # - google/gemini-2.5-flash（推荐，速度快价格低）
+    # - anthropic/claude-3.5-sonnet
+    # - openai/gpt-4o
+    # - deepseek/deepseek-chat
+    model_name: google/gemini-2.5-flash
+    # 可选配置
+    temperature: 0.7
+    max_tokens: 2048
+    top_p: 1.0
+    # OpenRouter特有配置（可选）
+    # site_url: "https://your-site.com"  # 用于在OpenRouter仪表板中标识请求来源
+    # site_name: "xiaozhi-server"  # 应用名称
+    # provider_order: ["google", "anthropic"]  # 优先使用的供应商顺序
+    # allow_fallback: true  # 是否允许fallback到其他供应商
 # VLLM配置（视觉语言大模型）
 VLLM:
   ChatGLMVLLM:
@@ -915,7 +938,7 @@ TTS:
     output_dir: tmp/
     # Minimax平台配置
     # 支持环境变量：${env:MINIMAX_TTS_API_KEY}
-    key: ""
+    key: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJIYXJvbGQgR3VvIGZyb20gUGxhdWQiLCJVc2VyTmFtZSI6Ikhhcm9sZCBHdW8gZnJvbSBQbGF1ZCIsIkFjY291bnQiOiIiLCJTdWJqZWN0SUQiOiIxOTg2Njg5MDU1NTEyODYyNzQ0IiwiUGhvbmUiOiIiLCJHcm91cElEIjoiMTk4NjY4OTA1NTUwODY2NDM0NCIsIlBhZ2VOYW1lIjoiIiwiTWFpbCI6Imhhcm9sZC5ndW9AcGxhdWQuYWkiLCJDcmVhdGVUaW1lIjoiMjAyNS0xMS0wNyAxNTowMjowNSIsIlRva2VuVHlwZSI6MSwiaXNzIjoibWluaW1heCJ9.tuMZQpOTI6zeveza_-eX-HvsyO1fjxKTGl4Q8rqyX7x4hv-M1KRlh_8lupHGEizCXJyZJRS-kH0Vm-fF-11zWe7GrXcOBUNvY60F7Z7svuMCoS5y8rPt0IERId538WPBLU-52KU71PDemZmH48dhi2tBT5GCDUW1pAGS6y4APcfcykvYfBouX0e8B4luLBi1zaYr6nmYnwG1mNrwpVYEqN8fIFYmoEZc_e-etAov9A0dElzXAElxg5VoNmRY4pRJCwFGyFs0nN6l0lsw4YgKfnmjJNlU1HdDf3QqHzU6ZQGE24VK4QzhHeegor1zJ2q8d_wYOvG8_d1ZQDzNpEQ8rg"
     # 支持环境变量：${env:MINIMAX_TTS_GROUP_ID}
     group_id: "1986689055508664344"
     # WebSocket地址
@@ -1160,3 +1183,20 @@ TTS:
     # volume: 50  # 音量：0-100
     # speed: 50  # 语速：0-100
     # pitch: 50  # 语调：0-100
+
+# #####################################################################################
+# #############################API角色默认配置##########################################
+# 用于移动端/硬件设备通过 live-agent-api 创建的角色
+# 这些角色只从 live-agent-api 获取 voice 和 instruction 配置
+# LLM、ASR、VAD、Memory、Intent 等配置使用此处的 api_defaults
+# 好处：不需要查询数据库，启动更快，延迟更低
+#
+# 启用方式：在 data/.config.yaml 中取消注释 api_defaults 配置
+# api_defaults:
+#   selected_module:
+#     VAD: SileroVAD
+#     ASR: DeepgramASR
+#     LLM: OpenRouterLLM
+#     TTS: MinimaxTTSWebSocket
+#     Memory: nomem
+#     Intent: function_call

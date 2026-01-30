@@ -685,9 +685,7 @@ class TTSProvider(TTSProviderBase):
                     self.before_stop_play_files.clear()
                     self.transcription_results.clear()
                     self.pcm_buffer.clear()
-
-                    # 通知开始
-                    self.tts_audio_queue.put((SentenceType.FIRST, [], None))
+                    # 注意：不在这里发送 FIRST 到 tts_audio_queue，而是等到有实际文本时再发送
                     logger.bind(tag=TAG).info("MiniMax TTS Provider: FIRST 消息处理完成")
 
                 elif ContentType.TEXT == message.content_type:
@@ -704,6 +702,8 @@ class TTSProvider(TTSProviderBase):
                                 if hasattr(self.conn, 'latency_metrics') and self.conn.latency_metrics:
                                     self.conn.latency_metrics.mark_tts_request(segment_text)
                             text = MarkdownCleaner.clean_markdown(segment_text)
+                            # 发送 FIRST 消息到 tts_audio_queue，包含文本（用于 WebSocket sentence_start 消息）
+                            self.tts_audio_queue.put((SentenceType.FIRST, [], text))
                             asyncio.run_coroutine_threadsafe(
                                 self.ws_client.get(text, is_end=False), self.conn.loop
                             )

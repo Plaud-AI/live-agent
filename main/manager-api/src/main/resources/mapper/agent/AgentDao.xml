@@ -34,7 +34,8 @@
         <result column="updatedAt" property="updatedAt"/>
     </resultMap>
 
-    <select id="selectAgentInfoById" resultMap="AgentInfoMap">
+    <!-- MySQL 版本 -->
+    <select id="selectAgentInfoById" resultMap="AgentInfoMap" databaseId="mysql">
         SELECT a.id,
                a.user_id           AS userId,
                a.agent_code        AS agentCode,
@@ -59,6 +60,47 @@
                         FROM ai_agent_plugin_mapping m
                         WHERE m.agent_id = a.id),
                        JSON_ARRAY()
+               )                   AS functions,
+               a.chat_history_conf AS chatHistoryConf,
+               a.system_prompt     AS systemPrompt,
+               a.summary_memory    AS summaryMemory,
+               a.lang_code         AS langCode,
+               a.language          AS language,
+               a.sort,
+               a.creator,
+               a.created_at        AS createdAt,
+               a.updater,
+               a.updated_at        AS updatedAt
+        FROM ai_agent a
+        WHERE a.id = #{agentId}
+    </select>
+
+    <!-- PostgreSQL 版本 -->
+    <select id="selectAgentInfoById" resultMap="AgentInfoMap" databaseId="postgresql">
+        SELECT a.id,
+               a.user_id           AS userId,
+               a.agent_code        AS agentCode,
+               a.agent_name        AS agentName,
+               a.asr_model_id      AS asrModelId,
+               a.vad_model_id      AS vadModelId,
+               a.llm_model_id      AS llmModelId,
+               a.vllm_model_id     AS vllmModelId,
+               a.tts_model_id      AS ttsModelId,
+               a.tts_voice_id      AS ttsVoiceId,
+               a.mem_model_id      AS memModelId,
+               a.intent_model_id   AS intentModelId,
+               COALESCE(
+                       (SELECT jsonb_agg(
+                                       jsonb_build_object(
+                                               'id', m.id,
+                                               'agentId', m.agent_id,
+                                               'pluginId', m.plugin_id,
+                                               'paramInfo', m.param_info
+                                       )
+                               )
+                        FROM ai_agent_plugin_mapping m
+                        WHERE m.agent_id = a.id),
+                       '[]'::jsonb
                )                   AS functions,
                a.chat_history_conf AS chatHistoryConf,
                a.system_prompt     AS systemPrompt,

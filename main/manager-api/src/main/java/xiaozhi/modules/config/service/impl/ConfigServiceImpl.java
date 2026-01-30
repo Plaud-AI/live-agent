@@ -79,7 +79,7 @@ public class ConfigServiceImpl implements ConfigService {
             throw new RenException(ErrorCode.AGENT_TEMPLATE_NOT_FOUND);
         }
 
-        // 构建模块配置
+        // 构建模块配置（从默认模板获取所有模型配置，供 API 角色使用）
         buildModuleConfig(
                 null,
                 null,
@@ -89,11 +89,11 @@ public class ConfigServiceImpl implements ConfigService {
                 null,
                 agent.getVadModelId(),
                 agent.getAsrModelId(),
-                null,
-                null,
-                null,
-                null,
-                null,
+                agent.getLlmModelId(),      // 添加 LLM 配置
+                agent.getVllmModelId(),     // 添加 VLLM 配置
+                agent.getTtsModelId(),      // 添加 TTS 配置
+                agent.getMemModelId(),      // 添加 Memory 配置
+                agent.getIntentModelId(),   // 添加 Intent 配置
                 null,
                 result,
                 isCache);
