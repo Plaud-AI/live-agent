@@ -27,6 +27,7 @@ class UserModel(Base):
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    introduction: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 用户简介
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -185,7 +186,8 @@ class User:
         db: AsyncSession,
         user_id: str,
         display_name: Optional[str] = None,
-        avatar_url: Optional[str] = None
+        avatar_url: Optional[str] = None,
+        introduction: Optional[str] = None
     ) -> Optional[UserModel]:
         """Update user profile"""
         user = await User.get_by_user_id(db, user_id)
@@ -195,6 +197,8 @@ class User:
             user.display_name = display_name
         if avatar_url is not None:
             user.avatar_url = avatar_url
+        if introduction is not None:
+            user.introduction = introduction
         await db.commit()
         await db.refresh(user)
         return user

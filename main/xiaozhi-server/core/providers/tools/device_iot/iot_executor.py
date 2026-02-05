@@ -127,7 +127,8 @@ class DeviceIoTExecutor(ToolExecutor):
                         send_message = json.dumps(
                             {"type": "iot", "commands": [command]}
                         )
-                        await self.conn.websocket.send(send_message)
+                        # 发送IoT命令
+                        await self.conn.channel.send_text(send_message)
                         return
 
         raise Exception(f"未找到设备{device_name}的方法{method_name}")

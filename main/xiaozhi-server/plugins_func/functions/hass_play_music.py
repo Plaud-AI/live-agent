@@ -2,7 +2,7 @@ from plugins_func.register import register_function, ToolType, ActionResponse, A
 from plugins_func.functions.hass_init import initialize_hass_handler
 from config.logger import setup_logging
 import asyncio
-import requests
+import httpx
 
 TAG = __name__
 logger = setup_logging()
@@ -39,12 +39,21 @@ def hass_play_music(conn, entity_id="", media_content_id="random"):
         future = asyncio.run_coroutine_threadsafe(
             handle_hass_play_music(conn, entity_id, media_content_id), conn.loop
         )
-        ha_response = future.result()
+        # 添加 30 秒超时保护，避免永久阻塞
+        ha_response = future.result(timeout=30.0)
         return ActionResponse(
             action=Action.RESPONSE, result="退出意图已处理", response=ha_response
         )
+    except TimeoutError:
+        logger.bind(tag=TAG).error("处理音乐意图超时(30s)")
+        return ActionResponse(
+            action=Action.ERROR, result="超时", response="播放音乐请求超时，请稍后重试"
+        )
     except Exception as e:
         logger.bind(tag=TAG).error(f"处理音乐意图错误: {e}")
+        return ActionResponse(
+            action=Action.ERROR, result=str(e), response=f"播放音乐失败: {e}"
+        )
 
 
 async def handle_hass_play_music(conn, entity_id, media_content_id):
@@ -54,7 +63,9 @@ async def handle_hass_play_music(conn, entity_id, media_content_id):
     url = f"{base_url}/api/services/music_assistant/play_media"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     data = {"entity_id": entity_id, "media_id": media_content_id}
-    response = requests.post(url, headers=headers, json=data)
+    # 使用 httpx 异步客户端，避免阻塞事件循环
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers, json=data, timeout=10)
     if response.status_code == 200:
         return f"正在播放{media_content_id}的音乐"
     else:

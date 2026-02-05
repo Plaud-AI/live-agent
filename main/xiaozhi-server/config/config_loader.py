@@ -45,7 +45,12 @@ def read_config(config_path):
 
 
 def load_config():
-    """加载配置文件"""
+    """
+    加载配置文件
+    
+    重要：此函数在服务器启动时会从 API 加载配置并缓存。
+    在事件循环中调用时，如果缓存未命中，将使用本地配置以避免死锁。
+    """
     from core.utils.cache.manager import cache_manager, CacheType
 
     # 检查缓存
@@ -64,10 +69,13 @@ def load_config():
         import asyncio
         try:
             loop = asyncio.get_running_loop()
-            # 如果已经在事件循环中，使用异步版本
-            config = asyncio.run_coroutine_threadsafe(
-                get_config_from_api_async(custom_config), loop
-            ).result()
+            # 已经在事件循环中 - 不能使用 .result() 阻塞，否则会死锁
+            # 此时使用本地配置，因为主配置应该已在启动时加载并缓存
+            import logging
+            logging.getLogger(__name__).warning(
+                "load_config() 在事件循环中被调用且缓存未命中，使用本地配置以避免死锁"
+            )
+            config = merge_configs(default_config, custom_config)
         except RuntimeError:
             # 如果不在事件循环中（启动时），创建新的事件循环
             config = asyncio.run(get_config_from_api_async(custom_config))

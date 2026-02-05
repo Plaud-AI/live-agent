@@ -139,12 +139,18 @@ async def process_intent_result(conn, intent_result, original_text):
 
                 # 使用统一工具处理器处理所有工具调用
                 try:
+                    # 添加 60 秒超时保护，避免函数调用永久阻塞导致事件循环卡住
                     result = asyncio.run_coroutine_threadsafe(
                         conn.func_handler.handle_llm_function_call(
                             conn, function_call_data
                         ),
                         conn.loop,
-                    ).result()
+                    ).result(timeout=60.0)
+                except TimeoutError:
+                    conn.logger.bind(tag=TAG).error(f"工具调用超时(60s): {function_call_data.get('name')}")
+                    result = ActionResponse(
+                        action=Action.ERROR, result="工具调用超时", response="工具调用超时，请稍后重试"
+                    )
                 except Exception as e:
                     conn.logger.bind(tag=TAG).error(f"工具调用失败: {e}")
                     result = ActionResponse(

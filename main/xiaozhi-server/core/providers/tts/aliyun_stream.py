@@ -232,10 +232,14 @@ class TTSProvider(TTSProviderBase):
                             self.start_session(self.task_id),
                             loop=self.conn.loop,
                         )
-                        future.result()
+                        # 添加 30 秒超时保护，避免线程永久阻塞
+                        future.result(timeout=30.0)
                         self.before_stop_play_files.clear()
                         logger.bind(tag=TAG).debug("TTS会话启动成功")
 
+                    except TimeoutError:
+                        logger.bind(tag=TAG).error("启动TTS会话超时(30s)")
+                        continue
                     except Exception as e:
                         logger.bind(tag=TAG).error(f"启动TTS会话失败: {str(e)}")
                         continue
@@ -250,8 +254,12 @@ class TTSProvider(TTSProviderBase):
                                 self.text_to_speak(message.content_detail, None),
                                 loop=self.conn.loop,
                             )
-                            future.result()
+                            # 添加 30 秒超时保护
+                            future.result(timeout=30.0)
                             logger.bind(tag=TAG).debug("TTS文本发送成功")
+                        except TimeoutError:
+                            logger.bind(tag=TAG).error(f"发送TTS文本超时(30s): {message.content_detail[:50]}...")
+                            continue
                         except Exception as e:
                             logger.bind(tag=TAG).error(f"发送TTS文本失败: {str(e)}")
                             continue
@@ -270,7 +278,11 @@ class TTSProvider(TTSProviderBase):
                             self.finish_session(self.task_id),
                             loop=self.conn.loop,
                         )
-                        future.result()
+                        # 添加 30 秒超时保护
+                        future.result(timeout=30.0)
+                    except TimeoutError:
+                        logger.bind(tag=TAG).error("结束TTS会话超时(30s)")
+                        continue
                     except Exception as e:
                         logger.bind(tag=TAG).error(f"结束TTS会话失败: {str(e)}")
                         continue

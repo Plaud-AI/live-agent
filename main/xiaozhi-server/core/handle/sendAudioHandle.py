@@ -14,8 +14,27 @@ PRE_BUFFER_COUNT = 5
 
 
 async def sendAudioMessage(conn, sentenceType, audios, text):
+    # 安全地获取音频大小
+    try:
+        if isinstance(audios, bytes):
+            audio_size = len(audios)
+        elif isinstance(audios, list):
+            audio_size = sum(len(a) for a in audios if isinstance(a, bytes))
+        else:
+            audio_size = 'N/A'
+    except Exception:
+        audio_size = 'N/A'
+    
+    # 安全地记录日志
+    if hasattr(conn, 'logger') and conn.logger:
+        conn.logger.bind(tag=TAG).debug(
+            f"sendAudioMessage: 开始处理, sentenceType={sentenceType}, "
+            f"audio_size={audio_size}, text={text[:30] if text else 'None'}..."
+        )
+    
     if conn.tts.tts_audio_first_sentence:
-        conn.logger.bind(tag=TAG).info(f"发送第一段语音: {text}")
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).info(f"发送第一段语音: {text}")
         conn.tts.tts_audio_first_sentence = False
         await send_tts_message(conn, "start", None)
 
@@ -34,10 +53,21 @@ async def sendAudioMessage(conn, sentenceType, audios, text):
             # 新句子或流控器未初始化，立即发送
             await send_tts_message(conn, "sentence_start", text)
 
+    # 发送音频数据
+    audio_count_before = getattr(conn, "_audio_sent_count", 0)
     await sendAudio(conn, audios)
+    audio_count_after = getattr(conn, "_audio_sent_count", 0)
+    
+    if hasattr(conn, 'logger') and conn.logger:
+        conn.logger.bind(tag=TAG).debug(
+            f"sendAudioMessage: 音频发送完成, sentenceType={sentenceType}, "
+            f"sent_packets={audio_count_after - audio_count_before}"
+        )
+    
     # 发送句子开始消息
     if sentenceType is not SentenceType.MIDDLE:
-        conn.logger.bind(tag=TAG).info(f"发送音频消息: {sentenceType}, {text}")
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).info(f"发送音频消息: {sentenceType}, {text}")
 
     # 发送结束消息（如果是最后一个文本）
     if sentenceType == SentenceType.LAST:
@@ -56,10 +86,20 @@ async def _wait_for_audio_completion(conn):
     """
     if hasattr(conn, "audio_rate_controller") and conn.audio_rate_controller:
         rate_controller = conn.audio_rate_controller
-        conn.logger.bind(tag=TAG).debug(
-            f"等待音频发送完成，队列中还有 {len(rate_controller.queue)} 个包"
-        )
-        await rate_controller.queue_empty_event.wait()
+        queue_size = len(rate_controller.queue) if rate_controller.queue else 0
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).debug(
+                f"等待音频发送完成，队列中还有 {queue_size} 个包"
+            )
+        
+        # 添加超时保护，避免永远等待导致 tts.state:stop 不发送
+        try:
+            await asyncio.wait_for(rate_controller.queue_empty_event.wait(), timeout=10.0)
+        except asyncio.TimeoutError:
+            if hasattr(conn, 'logger') and conn.logger:
+                conn.logger.bind(tag=TAG).warning(
+                    f"等待音频队列清空超时（10s），强制继续，队列剩余: {len(rate_controller.queue) if rate_controller.queue else 0}"
+                )
 
         # 等待预缓冲包播放完成
         # 前N个包直接发送，增加2个网络抖动包，需要额外等待它们在客户端播放完成
@@ -67,29 +107,8 @@ async def _wait_for_audio_completion(conn):
         pre_buffer_playback_time = (PRE_BUFFER_COUNT + 2) * frame_duration_ms / 1000.0
         await asyncio.sleep(pre_buffer_playback_time)
 
-        conn.logger.bind(tag=TAG).debug("音频发送完成")
-
-
-async def _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence):
-    """
-    发送带16字节头部的opus数据包给mqtt_gateway
-    Args:
-        conn: 连接对象
-        opus_packet: opus数据包
-        timestamp: 时间戳
-        sequence: 序列号
-    """
-    # 为opus数据包添加16字节头部
-    header = bytearray(16)
-    header[0] = 1  # type
-    header[2:4] = len(opus_packet).to_bytes(2, "big")  # payload length
-    header[4:8] = sequence.to_bytes(4, "big")  # sequence
-    header[8:12] = timestamp.to_bytes(4, "big")  # 时间戳
-    header[12:16] = len(opus_packet).to_bytes(4, "big")  # opus长度
-
-    # 发送包含头部的完整数据包
-    complete_packet = bytes(header) + opus_packet
-    await conn.websocket.send(complete_packet)
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).debug("音频发送完成")
 
 
 async def sendAudio(conn, audios, frame_duration=AUDIO_FRAME_DURATION):
@@ -101,11 +120,45 @@ async def sendAudio(conn, audios, frame_duration=AUDIO_FRAME_DURATION):
         audios: 单个opus包(bytes) 或 opus包列表
         frame_duration: 帧时长（毫秒），默认使用全局常量AUDIO_FRAME_DURATION
     """
-    if audios is None or len(audios) == 0:
+    # 安全地检查音频数据
+    if audios is None:
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).debug("sendAudio: 音频数据为 None，跳过发送")
         return
+    
+    try:
+        if isinstance(audios, bytes):
+            if len(audios) == 0:
+                if hasattr(conn, 'logger') and conn.logger:
+                    conn.logger.bind(tag=TAG).debug("sendAudio: 音频数据为空 bytes，跳过发送")
+                return
+            is_single_packet = True
+            audio_size = len(audios)
+            audio_count = 1
+        elif isinstance(audios, list):
+            if len(audios) == 0:
+                if hasattr(conn, 'logger') and conn.logger:
+                    conn.logger.bind(tag=TAG).debug("sendAudio: 音频数据为空列表，跳过发送")
+                return
+            is_single_packet = False
+            audio_size = sum(len(a) for a in audios if isinstance(a, bytes))
+            audio_count = len(audios)
+        else:
+            if hasattr(conn, 'logger') and conn.logger:
+                conn.logger.bind(tag=TAG).warning(f"sendAudio: 音频数据类型不支持: {type(audios)}")
+            return
+    except Exception as e:
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).error(f"sendAudio: 检查音频数据时出错: {e}")
+        return
+    
+    if hasattr(conn, 'logger') and conn.logger:
+        conn.logger.bind(tag=TAG).debug(
+            f"sendAudio: 开始发送音频, is_single_packet={is_single_packet}, "
+            f"audio_count={audio_count}, total_size={audio_size} bytes"
+        )
 
     send_delay = conn.config.get("tts_audio_send_delay", -1) / 1000.0
-    is_single_packet = isinstance(audios, bytes)
 
     # 初始化或获取 RateController
     rate_controller, flow_control = _get_or_create_rate_controller(
@@ -119,6 +172,17 @@ async def sendAudio(conn, audios, frame_duration=AUDIO_FRAME_DURATION):
     await _send_audio_with_rate_control(
         conn, audio_list, rate_controller, flow_control, send_delay
     )
+    
+    # 更新发送计数
+    if not hasattr(conn, "_audio_sent_count"):
+        conn._audio_sent_count = 0
+    conn._audio_sent_count += audio_count
+    
+    if hasattr(conn, 'logger') and conn.logger:
+        conn.logger.bind(tag=TAG).debug(
+            f"sendAudio: 音频发送完成, sent_count={audio_count}, "
+            f"total_sent={conn._audio_sent_count}"
+        )
 
 
 def _get_or_create_rate_controller(conn, frame_duration, is_single_packet):
@@ -221,6 +285,10 @@ async def _send_audio_with_rate_control(
 async def _do_send_audio(conn, opus_packet, flow_control):
     """
     执行实际的音频发送
+    
+    通过通道抽象层发送，自动适配不同通道类型：
+    - WebSocket 直连：纯 Opus 数据
+    - MQTT 网关：16 字节头部 + Opus 数据
     """
     packet_index = flow_control.get("packet_count", 0)
     sequence = flow_control.get("sequence", 0)
@@ -229,19 +297,47 @@ async def _do_send_audio(conn, opus_packet, flow_control):
     if packet_index == 0:
         if hasattr(conn, 'latency_metrics') and conn.latency_metrics:
             conn.latency_metrics.mark_first_audio_play()
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).info(
+                f"_do_send_audio: 发送首个音频包, size={len(opus_packet)} bytes, "
+                f"sequence={sequence}"
+            )
 
-    if conn.conn_from_mqtt_gateway:
-        # 计算时间戳（基于播放位置）
-        start_time = time.time()
-        timestamp = int(start_time * 1000) % (2**32)
-        await _send_to_mqtt_gateway(conn, opus_packet, timestamp, sequence)
-    else:
-        # 直接发送opus数据包（纯Opus，无头部）
-        first_bytes = opus_packet[:8].hex() if len(opus_packet) >= 8 else opus_packet.hex()
-        # 每10个包记录一次日志，避免日志过多
-        if packet_index % 10 == 0:
-            conn.logger.bind(tag=TAG).info(f"WebSocket发送Opus包 #{packet_index}: {len(opus_packet)} bytes")
-        await conn.websocket.send(opus_packet)
+    try:
+        send_start = time.time()
+        timestamp = int(send_start * 1000) % (2**32)
+        
+        # 使用通道抽象层发送（自动适配协议差异）
+        from core.channels import AudioPacket
+        packet = AudioPacket(data=opus_packet, timestamp=timestamp, sequence=sequence)
+        await conn.channel.send_audio(packet)
+        
+        if hasattr(conn, 'logger') and conn.logger:
+            if packet_index % 10 == 0:
+                conn.logger.bind(tag=TAG).info(
+                    f"通道发送音频包 #{packet_index}: {len(opus_packet)} bytes, "
+                    f"channel_type={conn.channel.channel_type}"
+                )
+            else:
+                conn.logger.bind(tag=TAG).debug(
+                    f"_do_send_audio: 通道发送 #{packet_index}, size={len(opus_packet)} bytes"
+                )
+        
+        # 记录发送耗时，超过100ms时警告
+        send_duration = (time.time() - send_start) * 1000
+        if send_duration > 100:
+            if hasattr(conn, 'logger') and conn.logger:
+                conn.logger.bind(tag=TAG).warning(
+                    f"_do_send_audio: 发送耗时过长 {send_duration:.1f}ms, "
+                    f"packet_index={packet_index}"
+                )
+    except Exception as e:
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).error(
+                f"_do_send_audio: 发送音频包失败, packet_index={packet_index}, "
+                f"size={len(opus_packet)} bytes, error={e}"
+            )
+        raise
 
     # 更新流控状态
     flow_control["packet_count"] = packet_index + 1
@@ -254,6 +350,7 @@ async def send_tts_message(conn, state, text=None):
     注意：sentence_start 消息的 text 可以为空（流式 TTS 时 FIRST 消息还不知道具体文本）
     客户端应该能处理没有 text 的 sentence_start 消息
     """
+    start_time = time.time()
     message = {"type": "tts", "state": state, "session_id": conn.session_id}
     if text is not None:
         message["text"] = textUtils.check_emoji(text)
@@ -274,8 +371,19 @@ async def send_tts_message(conn, state, text=None):
         conn.clearSpeakStatus()
 
     # 发送消息到客户端
-    conn.logger.bind(tag=TAG).info(f"WebSocket发送TTS消息: state={state}, text={text[:30] if text else 'None'}...")
-    await conn.websocket.send(json.dumps(message))
+    msg_json = json.dumps(message)
+    send_start = time.time()
+    await conn.channel.send_text(msg_json)
+    send_end = time.time()
+    
+    # 记录详细的延迟信息
+    if hasattr(conn, 'logger') and conn.logger:
+        total_ms = (send_end - start_time) * 1000
+        send_ms = (send_end - send_start) * 1000
+        conn.logger.bind(tag=TAG).info(
+            f"发送TTS消息: state={state}, total={total_ms:.1f}ms, send={send_ms:.1f}ms, "
+            f"text={text[:30] if text else 'None'}..."
+        )
 
 
 async def send_stt_message(conn, text):
@@ -283,6 +391,9 @@ async def send_stt_message(conn, text):
     end_prompt_str = conn.config.get("end_prompt", {}).get("prompt")
     if end_prompt_str and end_prompt_str == text:
         await send_tts_message(conn, "start")
+        # 标记已发送 start，避免 sendAudioMessage 中重复发送
+        if hasattr(conn, 'tts') and conn.tts:
+            conn.tts.tts_audio_first_sentence = False
         return
 
     # 解析JSON格式，提取实际的用户说话内容
@@ -301,7 +412,11 @@ async def send_stt_message(conn, text):
         # 如果不是JSON格式，直接使用原始文本
         display_text = text
     stt_text = textUtils.get_string_no_punctuation_or_emoji(display_text)
-    await conn.websocket.send(
-        json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
-    )
+    stt_message = json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
+    
+    # 发送 STT 消息
+    await conn.channel.send_text(stt_message)
     await send_tts_message(conn, "start")
+    # 标记已发送 start，避免 sendAudioMessage 中重复发送
+    if hasattr(conn, 'tts') and conn.tts:
+        conn.tts.tts_audio_first_sentence = False

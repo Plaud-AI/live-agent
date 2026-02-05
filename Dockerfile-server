@@ -7,8 +7,8 @@ COPY .cache-version /tmp/.cache-version
 
 COPY main/xiaozhi-server .
 
-# 安装额外依赖（fish-audio-sdk 用于 FishSpeech TTS）
-RUN pip install --no-cache-dir fish-audio-sdk
+# 安装额外依赖
+RUN pip install --no-cache-dir fish-audio-sdk redis agora-python-server-sdk agora-token-builder
 
 # 启动应用
 CMD ["python", "app.py"] 

@@ -43,13 +43,25 @@ class VADProvider(VADProviderBase):
             except Exception:
                 pass
 
-    def is_vad(self, conn, opus_packet):
+    def is_vad(self, conn, audio_data):
         # 手动模式：直接返回True，不进行实时VAD检测，所有音频都缓存
         if conn.client_listen_mode == "manual":
             return True
             
         try:
-            pcm_frame = self.decoder.decode(opus_packet, 960)
+            # 判断输入数据类型：
+            # - Opus 数据：通常较小（< 200 字节），需要解码
+            # - PCM 数据：通常是 320 字节（10ms @ 16kHz, 单声道, 16bit）或其倍数
+            # 使用通道类型来判断
+            channel_type = getattr(conn.channel, 'channel_type', 'websocket') if hasattr(conn, 'channel') else 'websocket'
+            
+            if channel_type == 'agora':
+                # Agora 通道：音频数据已经是 PCM 格式，直接使用
+                pcm_frame = audio_data
+            else:
+                # WebSocket 通道：音频数据是 Opus 编码，需要解码
+                pcm_frame = self.decoder.decode(audio_data, 960)
+            
             conn.client_audio_buffer.extend(pcm_frame)  # 将新数据加入缓冲区
 
             # 处理缓冲区中的完整帧（每次处理512采样点）

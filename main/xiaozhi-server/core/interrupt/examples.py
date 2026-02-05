@@ -193,14 +193,14 @@ async def handleAbortMessage_v2(conn):
         if hasattr(conn, 'clear_queues'):
             conn.clear_queues()
         
-        # 通知客户端
+        # 通知客户端（优先使用通道）
         import json
-        if hasattr(conn, 'websocket') and conn.websocket:
-            await conn.websocket.send(json.dumps({
-                "type": "tts",
-                "state": "stop",
-                "session_id": getattr(conn, 'session_id', ''),
-            }))
+        stop_msg = json.dumps({
+            "type": "tts",
+            "state": "stop",
+            "session_id": getattr(conn, 'session_id', ''),
+        })
+        await conn.channel.send_text(stop_msg)
         
         if hasattr(conn, 'clearSpeakStatus'):
             conn.clearSpeakStatus()

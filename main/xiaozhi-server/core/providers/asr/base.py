@@ -41,8 +41,14 @@ class ASRProviderBase(ABC):
                     handleAudioMessage(conn, message),
                     conn.loop,
                 )
-                future.result()
+                # 添加 30 秒超时保护，避免永久阻塞导致事件循环卡住
+                future.result(timeout=30.0)
             except queue.Empty:
+                continue
+            except TimeoutError:
+                logger.bind(tag=TAG).error(
+                    f"处理ASR音频消息超时(30s)，可能事件循环阻塞，跳过当前消息"
+                )
                 continue
             except Exception as e:
                 logger.bind(tag=TAG).error(

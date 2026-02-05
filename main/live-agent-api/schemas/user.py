@@ -23,6 +23,12 @@ class PasswordUpdateRequest(BaseModel):
     new_password: str = Field(..., min_length=6, max_length=128)
 
 
+class UserProfileUpdateRequest(BaseModel):
+    """User profile update request"""
+    display_name: Optional[str] = Field(None, max_length=100, description="显示名称")
+    introduction: Optional[str] = Field(None, max_length=500, description="用户简介")
+
+
 # ==================== Response Schemas ====================
 
 class UserInfo(BaseModel):
@@ -30,6 +36,20 @@ class UserInfo(BaseModel):
     user_id: str
     username: str
     created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class UserProfileResponse(BaseModel):
+    """User profile response - 完整的用户资料"""
+    user_id: str
+    display_name: Optional[str] = None
+    introduction: Optional[str] = None
+    avatar_url: Optional[str] = None
+    email: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
     
     class Config:
         from_attributes = True

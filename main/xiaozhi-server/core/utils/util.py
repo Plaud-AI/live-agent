@@ -110,12 +110,16 @@ def get_ip_info(ip_addr, logger):
         if is_private_ip(ip_addr):
             ip_addr = ""
         url = f"https://whois.pconline.com.cn/ipJson.jsp?json=true&ip={ip_addr}"
-        resp = requests.get(url).json()
+        # 添加 5 秒超时保护，避免请求永久阻塞
+        resp = requests.get(url, timeout=5).json()
         ip_info = {"city": resp.get("city")}
 
         # 存入缓存
         cache_manager.set(CacheType.IP_INFO, ip_addr, ip_info)
         return ip_info
+    except requests.exceptions.Timeout:
+        logger.bind(tag=TAG).warning(f"获取 IP 信息超时: {ip_addr}")
+        return {}
     except Exception as e:
         logger.bind(tag=TAG).error(f"Error getting client ip info: {e}")
         return {}

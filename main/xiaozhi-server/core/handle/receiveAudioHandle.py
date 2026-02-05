@@ -39,6 +39,10 @@ async def resume_vad_detection(conn):
 
 
 async def startToChat(conn, text):
+    """开始聊天处理"""
+    if hasattr(conn, 'logger') and conn.logger:
+        conn.logger.bind(tag=TAG).info(f"startToChat: 开始处理, text={text[:50] if text else 'None'}...")
+    
     # 检查输入是否是JSON格式（包含说话人信息）
     speaker_name = None
     actual_text = text
@@ -50,7 +54,8 @@ async def startToChat(conn, text):
             if "speaker" in data and "content" in data:
                 speaker_name = data["speaker"]
                 actual_text = data["content"]
-                conn.logger.bind(tag=TAG).info(f"解析到说话人信息: {speaker_name}")
+                if hasattr(conn, 'logger') and conn.logger:
+                    conn.logger.bind(tag=TAG).info(f"解析到说话人信息: {speaker_name}")
 
                 # 直接使用JSON格式的文本，不解析
                 actual_text = text
@@ -65,6 +70,8 @@ async def startToChat(conn, text):
         conn.current_speaker = None
 
     if conn.need_bind:
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).warning("startToChat: 设备需要绑定，终止处理")
         await check_bind_device(conn)
         return
 
@@ -86,33 +93,52 @@ async def startToChat(conn, text):
         # 如果意图已被处理，不再进行聊天
         return
 
-    # 意图未被处理，继续常规聊天流程，使用实际文本内容
-    await send_stt_message(conn, actual_text)
+    # 意图未被处理，继续常规聊天流程
+    # 优化：并行发送状态消息和启动 chat()，减少串行等待
+    # 状态消息（stt + tts start）通常几毫秒入队，而 LLM 首 token 需要 1-3 秒
+    # 所以即使并行，状态消息也会先于 LLM 输出到达客户端
+    
+    # 并行发送状态消息（不等待完成）
+    stt_task = asyncio.create_task(send_stt_message(conn, actual_text))
     
     # 取消旧的 chat() 任务，避免多个任务并行运行导致状态混乱
-    with conn.chat_lock:
-        old_cancel_event = None
-        if conn.chat_future is not None and not conn.chat_future.done():
-            conn.logger.bind(tag=TAG).info("取消旧的 chat() 任务")
-            # 保存旧的取消事件引用
-            old_cancel_event = conn.llm_cancel_event
-            # 设置取消标志，让旧任务优雅退出
-            conn.client_abort = True
-            if old_cancel_event:
-                old_cancel_event.set()
-            # 等待旧任务退出（最多 500ms）
-            try:
-                conn.chat_future.result(timeout=0.5)
-            except Exception:
-                pass  # 超时或异常都继续
-        
-        # 重置取消状态，为新任务准备
-        conn.client_abort = False
-        # 创建新的取消事件（新任务会使用这个新事件）
-        conn.llm_cancel_event = threading.Event()
-        
-        # 提交新的 chat() 任务
-        conn.chat_future = conn.executor.submit(conn.chat, actual_text)
+    # 注意：这里使用 run_in_executor 将同步锁操作和 Future.result() 放到线程池执行
+    # 避免阻塞 asyncio 事件循环，防止多连接时服务卡死
+    def _cancel_old_and_start_new_chat():
+        with conn.chat_lock:
+            if conn.chat_future is not None and not conn.chat_future.done():
+                if hasattr(conn, 'logger') and conn.logger:
+                    conn.logger.bind(tag=TAG).info("取消旧的 chat() 任务")
+                # 保存旧的取消事件引用
+                old_cancel_event = conn.llm_cancel_event
+                # 设置取消标志，让旧任务优雅退出
+                conn.client_abort = True
+                if old_cancel_event:
+                    old_cancel_event.set()
+                # 等待旧任务退出（最多 500ms）
+                try:
+                    conn.chat_future.result(timeout=0.5)
+                except Exception:
+                    pass  # 超时或异常都继续
+            
+            # 重置取消状态，为新任务准备
+            conn.client_abort = False
+            # 创建新的取消事件（新任务会使用这个新事件）
+            conn.llm_cancel_event = threading.Event()
+            
+            # 提交新的 chat() 任务
+            conn.chat_future = conn.executor.submit(conn.chat, actual_text)
+    
+    # 同时启动 chat()（与状态消息并行）
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _cancel_old_and_start_new_chat)
+    
+    # 确保状态消息发送完成（通常此时已完成）
+    try:
+        await stt_task
+    except Exception as e:
+        if hasattr(conn, 'logger') and conn.logger:
+            conn.logger.bind(tag=TAG).warning(f"状态消息发送异常: {e}")
 
 
 async def no_voice_close_connect(conn, have_voice):

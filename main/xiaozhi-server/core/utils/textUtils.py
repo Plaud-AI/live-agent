@@ -87,16 +87,16 @@ async def get_emotion(conn, text):
             emotion = EMOJI_MAP[char]
             break
     try:
-        await conn.websocket.send(
-            json.dumps(
-                {
-                    "type": "llm",
-                    "text": emoji,
-                    "emotion": emotion,
-                    "session_id": conn.session_id,
-                }
-            )
+        emotion_message = json.dumps(
+            {
+                "type": "llm",
+                "text": emoji,
+                "emotion": emotion,
+                "session_id": conn.session_id,
+            }
         )
+        # 发送情绪消息
+        await conn.channel.send_text(emotion_message)
     except Exception as e:
         conn.logger.bind(tag=TAG).warning(f"发送情绪表情失败，错误:{e}")
     return

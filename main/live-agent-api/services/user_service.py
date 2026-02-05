@@ -163,6 +163,38 @@ class UserService:
             raise NotFoundException("User not found")
         return user
 
+    async def update_profile(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        display_name: str = None,
+        introduction: str = None
+    ) -> UserModel:
+        """
+        Update user profile
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            display_name: Display name (optional)
+            introduction: User introduction (optional)
+            
+        Returns:
+            Updated UserModel
+            
+        Raises:
+            NotFoundException: If user not found
+        """
+        user = await User.update_profile(
+            db=db,
+            user_id=user_id,
+            display_name=display_name,
+            introduction=introduction
+        )
+        if not user:
+            raise NotFoundException("User not found")
+        return user
+
 
 # Singleton instance
 user_service = UserService()

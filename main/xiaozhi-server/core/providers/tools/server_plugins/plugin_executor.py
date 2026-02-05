@@ -1,5 +1,7 @@
 """服务端插件工具执行器"""
 
+import asyncio
+import functools
 from typing import Dict, Any
 from ..base import ToolType, ToolDefinition, ToolExecutor
 from plugins_func.register import all_function_registry, Action, ActionResponse
@@ -15,7 +17,12 @@ class ServerPluginExecutor(ToolExecutor):
     async def execute(
         self, conn, tool_name: str, arguments: Dict[str, Any]
     ) -> ActionResponse:
-        """执行服务端插件工具"""
+        """
+        执行服务端插件工具
+        
+        重要：所有同步插件函数都在线程池中执行，避免阻塞事件循环。
+        超时设置为 60 秒，防止插件函数永久阻塞。
+        """
         func_item = all_function_registry.get(tool_name)
         if not func_item:
             return ActionResponse(
@@ -23,23 +30,37 @@ class ServerPluginExecutor(ToolExecutor):
             )
 
         try:
+            # 获取事件循环
+            loop = asyncio.get_running_loop()
+            
             # 根据工具类型决定如何调用
             if hasattr(func_item, "type"):
                 func_type = func_item.type
                 if func_type.code in [4, 5]:  # SYSTEM_CTL, IOT_CTL (需要conn参数)
-                    result = func_item.func(conn, **arguments)
+                    func_call = functools.partial(func_item.func, conn, **arguments)
                 elif func_type.code == 2:  # WAIT
-                    result = func_item.func(**arguments)
+                    func_call = functools.partial(func_item.func, **arguments)
                 elif func_type.code == 3:  # CHANGE_SYS_PROMPT
-                    result = func_item.func(conn, **arguments)
+                    func_call = functools.partial(func_item.func, conn, **arguments)
                 else:
-                    result = func_item.func(**arguments)
+                    func_call = functools.partial(func_item.func, **arguments)
             else:
                 # 默认不传conn参数
-                result = func_item.func(**arguments)
+                func_call = functools.partial(func_item.func, **arguments)
 
+            # 在线程池中执行同步函数，设置 60 秒超时
+            # 这样即使插件函数有阻塞操作（如 requests.get、future.result()），也不会阻塞事件循环
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, func_call),
+                timeout=60.0
+            )
             return result
 
+        except asyncio.TimeoutError:
+            return ActionResponse(
+                action=Action.ERROR,
+                response=f"插件函数 {tool_name} 执行超时(60s)",
+            )
         except Exception as e:
             return ActionResponse(
                 action=Action.ERROR,

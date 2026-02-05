@@ -151,6 +151,9 @@ class MinimaxWebSocketClient:
         # 任务队列
         self.tts_task_queue: asyncio.Queue = asyncio.Queue()
 
+        # WebSocket 主循环任务引用（用于正确取消）
+        self._websocket_task: Optional[asyncio.Task] = None
+
         # 时间戳追踪
         self.current_request_start_ms = 0
         self.estimated_duration_this_request = 0
@@ -167,7 +170,8 @@ class MinimaxWebSocketClient:
         logger.bind(tag=TAG).info(f"MiniMax TTS: 启动 WebSocket 处理器 (wait_ready={wait_ready}, timeout={timeout})")
         self._connection_ready.clear()
         self._connection_error = None
-        asyncio.create_task(self._process_websocket())
+        # 保存任务引用，用于正确取消
+        self._websocket_task = asyncio.create_task(self._process_websocket())
         
         if wait_ready:
             try:
@@ -183,7 +187,26 @@ class MinimaxWebSocketClient:
         """停止并清理"""
         logger.bind(tag=TAG).info(f"MiniMax TTS: stop 开始 (stopping={self.stopping}, discarding={self.discarding})")
         self.stopping = True
+        
+        # 先取消当前操作（关闭 WebSocket 连接等）
         await self.cancel()
+        
+        # 显式取消并等待 WebSocket 主循环任务完成
+        if self._websocket_task and not self._websocket_task.done():
+            logger.bind(tag=TAG).info("MiniMax TTS: 取消 WebSocket 主循环任务")
+            self._websocket_task.cancel()
+            try:
+                # 设置超时，避免无限等待
+                await asyncio.wait_for(self._websocket_task, timeout=3.0)
+            except asyncio.CancelledError:
+                logger.bind(tag=TAG).info("MiniMax TTS: WebSocket 任务已取消")
+            except asyncio.TimeoutError:
+                logger.bind(tag=TAG).warning("MiniMax TTS: 等待 WebSocket 任务超时，强制跳过")
+            except Exception as e:
+                logger.bind(tag=TAG).warning(f"MiniMax TTS: 等待 WebSocket 任务时出错: {e}")
+            finally:
+                self._websocket_task = None
+        
         logger.bind(tag=TAG).info("MiniMax TTS: stop 完成")
 
     async def cancel(self):
@@ -429,11 +452,26 @@ class MinimaxWebSocketClient:
                     if "extra_info" in response:
                         extra_info = response["extra_info"]
                         if "audio_sample_rate" in extra_info:
-                            self.sample_rate = int(extra_info["audio_sample_rate"])
+                            new_sample_rate = int(extra_info["audio_sample_rate"])
+                            if new_sample_rate != self.sample_rate:
+                                logger.bind(tag=TAG).info(
+                                    f"MiniMax TTS: 更新 sample_rate {self.sample_rate} -> {new_sample_rate}"
+                                )
+                                self.sample_rate = new_sample_rate
+                                # 通知 TTSProvider 更新 frame_bytes（通过回调传递）
+                                # 注意：这里我们通过一个特殊的事件来通知，但当前实现中
+                                # TTSProvider 的 frame_bytes 在初始化时已计算，运行时不会更新
+                                # 如果 sample_rate 变化，可能会导致编码问题
 
-                    # 发送句子结束事件
-                    if is_end and self.on_audio_data and self.callbacks_enabled:
-                        self.on_audio_data(b"", EVENT_TTS_SENTENCE_END)
+                    # 发送事件处理剩余的 PCM 数据
+                    # 无论 is_end 是否为 True，都需要 flush 剩余的 PCM 数据
+                    if self.on_audio_data and self.callbacks_enabled:
+                        if is_end:
+                            # 最后一个任务，发送 SENTENCE_END 事件
+                            self.on_audio_data(b"", EVENT_TTS_SENTENCE_END)
+                        else:
+                            # 中间任务，发送 FLUSH 事件处理剩余数据
+                            self.on_audio_data(b"", EVENT_TTS_FLUSH)
                     break
 
                 # 处理音频数据
@@ -609,13 +647,35 @@ class TTSProvider(TTSProviderBase):
 
             # 编码并发送
             frames_encoded = 0
+            pcm_size_before = len(self.pcm_buffer)
             while len(self.pcm_buffer) >= self.frame_bytes:
                 frame = bytes(self.pcm_buffer[: self.frame_bytes])
                 del self.pcm_buffer[: self.frame_bytes]
                 frames_encoded += 1
 
+                logger.bind(tag=TAG).debug(
+                    f"MiniMax TTS Provider: 编码 PCM 帧, frame_size={len(frame)} bytes, "
+                    f"frames_encoded={frames_encoded}, pcm_buffer_remaining={len(self.pcm_buffer)}"
+                )
+                
                 self.opus_encoder.encode_pcm_to_opus_stream(
                     frame, end_of_stream=False, callback=self.handle_opus
+                )
+            
+            # 记录调试信息
+            if frames_encoded > 0:
+                logger.bind(tag=TAG).info(
+                    f"MiniMax TTS Provider: 编码完成, 收到={len(audio_bytes)} bytes, "
+                    f"编码帧数={frames_encoded}, pcm_buffer_before={pcm_size_before}, "
+                    f"pcm_buffer_after={len(self.pcm_buffer)}"
+                )
+            elif len(self.pcm_buffer) > 0:
+                # 有数据但不足一帧，记录日志以便调试
+                logger.bind(tag=TAG).debug(
+                    f"MiniMax TTS Provider: PCM缓冲区累积中, 收到={len(audio_bytes)} bytes, "
+                    f"buffer_size={len(self.pcm_buffer)}, frame_bytes={self.frame_bytes}, "
+                    f"sample_rate={self.sample_rate}, channels={self.channels}, "
+                    f"需要={self.frame_bytes - len(self.pcm_buffer)} bytes 才能编码一帧"
                 )
 
         elif event_type == EVENT_TTS_SENTENCE_END:
@@ -632,6 +692,18 @@ class TTSProvider(TTSProviderBase):
             # 处理待播放文件
             self._process_before_stop_play_files()
             logger.bind(tag=TAG).info("MiniMax TTS Provider: SENTENCE_END 处理完成")
+
+        elif event_type == EVENT_TTS_FLUSH:
+            logger.bind(tag=TAG).info(f"MiniMax TTS Provider: 收到 FLUSH, pcm_buffer_size={len(self.pcm_buffer)}")
+            # 处理剩余数据（中间任务完成时 flush 剩余 PCM 数据）
+            if self.pcm_buffer:
+                self.opus_encoder.encode_pcm_to_opus_stream(
+                    bytes(self.pcm_buffer),
+                    end_of_stream=False,  # 中间任务，不是流结束
+                    callback=self.handle_opus,
+                )
+                self.pcm_buffer.clear()
+            logger.bind(tag=TAG).info("MiniMax TTS Provider: FLUSH 处理完成")
 
         elif event_type == EVENT_TTS_TASK_FAILED:
             logger.bind(tag=TAG).error("MiniMax TTS Provider: 任务失败")
@@ -666,6 +738,11 @@ class TTSProvider(TTSProviderBase):
                 if message.sentence_type == SentenceType.FIRST:
                     logger.bind(tag=TAG).info(f"MiniMax TTS Provider: FIRST 消息，重置 client_abort (原值={self.conn.client_abort})")
                     self.conn.client_abort = False
+                    # 重要：重置 callbacks_enabled，确保打断后新的 TTS 任务能正常触发回调
+                    if self.ws_client:
+                        self.ws_client.callbacks_enabled = True
+                        self.ws_client.discarding = False
+                        logger.bind(tag=TAG).info("MiniMax TTS Provider: FIRST 消息，重置 ws_client.callbacks_enabled=True")
 
                 if self.conn.client_abort:
                     logger.bind(tag=TAG).info("MiniMax TTS Provider: 收到打断信息，取消 TTS")

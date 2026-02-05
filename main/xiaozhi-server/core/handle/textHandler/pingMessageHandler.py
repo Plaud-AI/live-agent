@@ -39,7 +39,7 @@ class PingMessageHandler(TextMessageHandler):
             }
 
             # 发送PONG响应
-            await conn.websocket.send(json.dumps(pong_message))
+            await conn.channel.send_text(json.dumps(pong_message))
 
         except Exception as e:
             conn.logger.error(f"处理PING消息时发生错误: {e}")

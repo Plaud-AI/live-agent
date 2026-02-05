@@ -139,10 +139,19 @@ class AudioRateController:
         """
 
         async def _send_loop():
+            loop_count = 0
             try:
                 while True:
                     # 等待队列数据事件，不轮询等待占用CPU
                     await self.queue_has_data_event.wait()
+                    
+                    loop_count += 1
+                    # 每100次循环记录一次状态，便于诊断
+                    if loop_count % 100 == 0:
+                        self.logger.bind(tag=TAG).debug(
+                            f"音频发送循环健康检查: loop_count={loop_count}, "
+                            f"queue_size={len(self.queue)}, play_position={self.play_position}ms"
+                        )
 
                     await self.check_queue(send_audio_callback)
             except asyncio.CancelledError:

@@ -44,6 +44,7 @@ from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils import textUtils
 from core.utils import expressionUtils
 from core.utils.latency_metrics import LatencyMetrics, remove_metrics
+from core.channels import ChannelFactory, BaseChannel, AudioPacket
 
 TAG = __name__
 
@@ -65,9 +66,16 @@ class ConnectionHandler:
         _intent,
         server=None,
     ):
+        # 使用临时 logger 记录构造函数进度
+        import logging
+        _init_logger = logging.getLogger(__name__)
+        _init_logger.info("ConnectionHandler.__init__: 开始")
+        
         self.common_config = config
         self.config = copy.deepcopy(config)
         self.session_id = str(uuid.uuid4())
+        _init_logger.info(f"ConnectionHandler.__init__: session_id={self.session_id[:8]}")
+        
         self.logger = setup_logging()
         self.server = server  # 保存server实例的引用
 
@@ -80,6 +88,7 @@ class ConnectionHandler:
         self.read_config_from_api = self.config.get("read_config_from_api", False)
 
         self.websocket = None
+        self.channel: BaseChannel = None  # 通道抽象层（新增）
         self.headers = None
         self.query_params = {}  # URL query parameters
         self.device_id = None
@@ -175,7 +184,11 @@ class ConnectionHandler:
         self.conn_from_mqtt_gateway = False
 
         # 初始化提示词管理器
+        import logging
+        _init_logger = logging.getLogger(__name__)
+        _init_logger.info("ConnectionHandler.__init__: 准备初始化 PromptManager")
         self.prompt_manager = PromptManager(self.config, self.logger)
+        _init_logger.info("ConnectionHandler.__init__: 构造函数完成")
 
     def _parse_query_params(self, path: str):
         """解析 URL query parameters"""
@@ -194,37 +207,28 @@ class ConnectionHandler:
             # 获取运行中的事件循环（必须在异步上下文中）
             self.loop = asyncio.get_running_loop()
 
-            # 获取并验证headers
-            self.headers = dict(ws.request.headers)
-            real_ip = self.headers.get("x-real-ip") or self.headers.get(
-                "x-forwarded-for"
-            )
-            if real_ip:
-                self.client_ip = real_ip.split(",")[0].strip()
-            else:
-                self.client_ip = ws.remote_address[0]
-            self.logger.bind(tag=TAG).info(
-                f"{self.client_ip} conn - Headers: {self.headers}"
-            )
+            # ========== 创建通道抽象层（新增） ==========
+            self.channel = ChannelFactory.create_from_websocket(ws)
+            self.logger.bind(tag=TAG).info(f"通道创建成功: {self.channel}")
 
-            # 解析 URL query parameters
-            self._parse_query_params(ws.request.path)
+            # ========== 从通道同步信息 ==========
+            # 保留旧属性以兼容现有代码
+            self.websocket = ws  # 兼容旧代码
+            self.headers = self.channel.info.headers
+            self.query_params = self.channel.info.query_params
+            self.device_id = self.channel.info.device_id
+            self.client_id = self.channel.info.client_id or self.device_id
+            self.client_ip = self.channel.info.client_ip
+            self.agent_id = self.channel.info.get_extra("agent_id")
             
-            # 优先从 query params 获取，其次从 headers 获取
-            self.device_id = self.query_params.get("device-id") or self.headers.get("device-id")
-            self.client_id = self.query_params.get("client-id") or self.headers.get("client-id") or self.device_id
-            self.agent_id = self.query_params.get("agent-id") or self.headers.get("agent-id")
+            # 通道类型判断（替代旧的标志位判断）
+            self.conn_from_mqtt_gateway = (self.channel.channel_type == "mqtt_gateway")
             
             self.logger.bind(tag=TAG).info(
-                f"Client params - device_id: {self.device_id}, client_id: {self.client_id}, agent_id: {self.agent_id}"
+                f"{self.client_ip} conn - channel_type: {self.channel.channel_type}, "
+                f"device_id: {self.device_id}, client_id: {self.client_id}, agent_id: {self.agent_id}"
             )
-
-            # 认证通过,继续处理
-            self.websocket = ws
-
-            # 检查是否来自MQTT连接
-            request_path = ws.request.path
-            self.conn_from_mqtt_gateway = request_path.endswith("?from=mqtt_gateway")
+            
             if self.conn_from_mqtt_gateway:
                 self.logger.bind(tag=TAG).info("连接来自:MQTT网关")
 
@@ -245,8 +249,14 @@ class ConnectionHandler:
             asyncio.create_task(self._background_initialize())
 
             try:
-                async for message in self.websocket:
-                    await self._route_message(message)
+                # 使用通道接收消息（通道已处理好协议差异和乱序）
+                from core.channels import MessageType
+                async for msg in self.channel.receive_messages():
+                    if msg.type == MessageType.TEXT:
+                        await self._route_message(msg.data)
+                    elif msg.type == MessageType.AUDIO:
+                        # 音频消息：通道已处理头部解析和乱序，直接放入 ASR 队列
+                        await self._handle_audio_from_channel(msg.data)
             except websockets.exceptions.ConnectionClosed:
                 self.logger.bind(tag=TAG).info("客户端断开连接")
 
@@ -308,113 +318,100 @@ class ConnectionHandler:
 
     async def _discard_message_with_bind_prompt(self):
         """丢弃消息并检查是否需要播放绑定提示"""
-        current_time = time.time()
-        # 检查是否需要播放绑定提示
-        if current_time - self.last_bind_prompt_time >= self.bind_prompt_interval:
-            self.last_bind_prompt_time = current_time
-            # 复用现有的绑定提示逻辑
-            from core.handle.receiveAudioHandle import check_bind_device
+        try:
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.bind(tag=TAG).debug(
+                    f"_discard_message_with_bind_prompt: 丢弃消息, "
+                    f"need_bind={self.need_bind}, bind_completed={self.bind_completed_event.is_set()}"
+                )
+            current_time = time.time()
+            # 检查是否需要播放绑定提示
+            if current_time - self.last_bind_prompt_time >= self.bind_prompt_interval:
+                self.last_bind_prompt_time = current_time
+                # 复用现有的绑定提示逻辑
+                from core.handle.receiveAudioHandle import check_bind_device
 
-            asyncio.create_task(check_bind_device(self))
+                if hasattr(self, 'logger') and self.logger:
+                    self.logger.bind(tag=TAG).info("_discard_message_with_bind_prompt: 触发绑定提示检查")
+                asyncio.create_task(check_bind_device(self))
+        except Exception as e:
+            # 捕获异常，避免影响消息路由
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.bind(tag=TAG).error(f"_discard_message_with_bind_prompt: 发生异常: {e}")
 
-    async def _route_message(self, message):
-        """消息路由"""
-        # 检查是否已经获取到真实的绑定状态
+    async def _handle_audio_from_channel(self, packet):
+        """
+        处理从通道接收的音频包
+        
+        通道已经处理好：
+        - MQTT 网关的 16 字节头部解析
+        - 乱序包的重排序
+        
+        Args:
+            packet: AudioPacket 对象
+        """
+        if self.vad is None or self.asr is None:
+            return
+        
+        # 检查绑定状态
         if not self.bind_completed_event.is_set():
-            # 还没有获取到真实状态，等待直到获取到真实状态或超时
             try:
                 await asyncio.wait_for(self.bind_completed_event.wait(), timeout=1)
             except asyncio.TimeoutError:
-                # 超时仍未获取到真实状态，丢弃消息
+                await self._discard_message_with_bind_prompt()
+                return
+        
+        if self.need_bind:
+            await self._discard_message_with_bind_prompt()
+            return
+        
+        # 直接放入 ASR 队列（通道已处理好乱序）
+        self.asr_audio_queue.put(packet.data)
+
+    async def _route_message(self, message):
+        """
+        消息路由（仅处理文本消息）
+        
+        音频消息由 _handle_audio_from_channel 处理
+        """
+        try:
+            # 记录收到的消息（用于调试）
+            message_preview = str(message)[:100]
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.bind(tag=TAG).debug(f"_route_message: 收到文本消息, preview={message_preview}")
+            
+            # 检查是否已经获取到真实的绑定状态
+            if not self.bind_completed_event.is_set():
+                if hasattr(self, 'logger') and self.logger:
+                    self.logger.bind(tag=TAG).debug(f"_route_message: 等待绑定状态确认, need_bind={self.need_bind}")
+                try:
+                    await asyncio.wait_for(self.bind_completed_event.wait(), timeout=1)
+                    if hasattr(self, 'logger') and self.logger:
+                        self.logger.bind(tag=TAG).debug(f"_route_message: 绑定状态确认完成, need_bind={self.need_bind}")
+                except asyncio.TimeoutError:
+                    if hasattr(self, 'logger') and self.logger:
+                        self.logger.bind(tag=TAG).warning(f"_route_message: 绑定状态确认超时，丢弃消息: {message_preview}")
+                    await self._discard_message_with_bind_prompt()
+                    return
+
+            # 已经获取到真实状态，检查是否需要绑定
+            if self.need_bind:
+                if hasattr(self, 'logger') and self.logger:
+                    self.logger.bind(tag=TAG).info(f"_route_message: 设备需要绑定，丢弃消息: {message_preview}")
                 await self._discard_message_with_bind_prompt()
                 return
 
-        # 已经获取到真实状态，检查是否需要绑定
-        if self.need_bind:
-            # 需要绑定，丢弃消息
-            await self._discard_message_with_bind_prompt()
-            return
-
-        # 不需要绑定，继续处理消息
-
-        if isinstance(message, str):
+            # 处理文本消息
             await handleTextMessage(self, message)
-        elif isinstance(message, bytes):
-            if self.vad is None or self.asr is None:
-                return
-
-            # 处理来自MQTT网关的音频包
-            if self.conn_from_mqtt_gateway and len(message) >= 16:
-                handled = await self._process_mqtt_audio_message(message)
-                if handled:
-                    return
-
-            # 不需要头部处理或没有头部时，直接处理原始消息
-            self.asr_audio_queue.put(message)
-
-    async def _process_mqtt_audio_message(self, message):
-        """
-        处理来自MQTT网关的音频消息，解析16字节头部并提取音频数据
-
-        Args:
-            message: 包含头部的音频消息
-
-        Returns:
-            bool: 是否成功处理了消息
-        """
-        try:
-            # 提取头部信息
-            timestamp = int.from_bytes(message[8:12], "big")
-            audio_length = int.from_bytes(message[12:16], "big")
-
-            # 提取音频数据
-            if audio_length > 0 and len(message) >= 16 + audio_length:
-                # 有指定长度，提取精确的音频数据
-                audio_data = message[16 : 16 + audio_length]
-                # 基于时间戳进行排序处理
-                self._process_websocket_audio(audio_data, timestamp)
-                return True
-            elif len(message) > 16:
-                # 没有指定长度或长度无效，去掉头部后处理剩余数据
-                audio_data = message[16:]
-                self.asr_audio_queue.put(audio_data)
-                return True
+            
         except Exception as e:
-            self.logger.bind(tag=TAG).error(f"解析WebSocket音频包失败: {e}")
-
-        # 处理失败，返回False表示需要继续处理
-        return False
-
-    def _process_websocket_audio(self, audio_data, timestamp):
-        """处理WebSocket格式的音频包"""
-        # 初始化时间戳序列管理
-        if not hasattr(self, "audio_timestamp_buffer"):
-            self.audio_timestamp_buffer = {}
-            self.last_processed_timestamp = 0
-            self.max_timestamp_buffer_size = 20
-
-        # 如果时间戳是递增的，直接处理
-        if timestamp >= self.last_processed_timestamp:
-            self.asr_audio_queue.put(audio_data)
-            self.last_processed_timestamp = timestamp
-
-            # 处理缓冲区中的后续包
-            processed_any = True
-            while processed_any:
-                processed_any = False
-                for ts in sorted(self.audio_timestamp_buffer.keys()):
-                    if ts > self.last_processed_timestamp:
-                        buffered_audio = self.audio_timestamp_buffer.pop(ts)
-                        self.asr_audio_queue.put(buffered_audio)
-                        self.last_processed_timestamp = ts
-                        processed_any = True
-                        break
-        else:
-            # 乱序包，暂存
-            if len(self.audio_timestamp_buffer) < self.max_timestamp_buffer_size:
-                self.audio_timestamp_buffer[timestamp] = audio_data
+            if hasattr(self, 'logger') and self.logger:
+                import traceback
+                self.logger.bind(tag=TAG).error(f"_route_message: 处理消息时发生异常: {e}, traceback: {traceback.format_exc()}")
             else:
-                self.asr_audio_queue.put(audio_data)
+                import logging
+                import traceback
+                logging.error(f"[{TAG}] _route_message: 处理消息时发生异常: {e}, traceback: {traceback.format_exc()}")
 
     async def handle_restart(self, message):
         """处理服务器重启请求"""
@@ -1014,7 +1011,17 @@ class ConnectionHandler:
                 future = asyncio.run_coroutine_threadsafe(
                     self.memory.query_memory(query), self.loop
                 )
-                memory_str = future.result()
+                try:
+                    # 添加10秒超时保护，避免 memory 查询无限等待
+                    memory_str = future.result(timeout=10.0)
+                except TimeoutError:
+                    self.logger.bind(tag=TAG).warning(
+                        f"memory.query_memory 超时(10s), 继续使用空记忆"
+                    )
+                    memory_str = None
+                except Exception as e:
+                    self.logger.bind(tag=TAG).error(f"memory.query_memory 异常: {e}")
+                    memory_str = None
 
             # 记录 LLM 请求时间
             if self.latency_metrics and depth == 0:
@@ -1387,6 +1394,52 @@ class ConnectionHandler:
         self.client_is_speaking = False
         self.logger.bind(tag=TAG).debug(f"清除服务端讲话状态")
 
+    # ==================== 通道发送方法（新增） ====================
+
+    async def send_audio_via_channel(self, audio_data: bytes, timestamp: int = 0, sequence: int = 0) -> None:
+        """
+        通过通道发送音频包
+        
+        自动适配不同通道类型的发送格式：
+        - WebSocket 直连：纯 Opus 数据
+        - MQTT 网关：16 字节头部 + Opus 数据
+        
+        Args:
+            audio_data: Opus 编码的音频数据
+            timestamp: 时间戳（毫秒）
+            sequence: 序列号
+        """
+        if self.channel and not self.channel.is_closed:
+            packet = AudioPacket(data=audio_data, timestamp=timestamp, sequence=sequence)
+            await self.channel.send_audio(packet)
+        elif self.websocket:
+            # 降级：使用旧方式（兼容）
+            await self.websocket.send(audio_data)
+
+    async def send_text_via_channel(self, message: str) -> None:
+        """
+        通过通道发送文本消息
+        
+        Args:
+            message: 文本消息（通常是 JSON 字符串）
+        """
+        if self.channel and not self.channel.is_closed:
+            await self.channel.send_text(message)
+        elif self.websocket:
+            # 降级：使用旧方式（兼容）
+            await self.websocket.send(message)
+
+    async def send_json_via_channel(self, data: dict) -> None:
+        """
+        通过通道发送 JSON 消息
+        
+        Args:
+            data: 字典对象
+        """
+        await self.send_text_via_channel(json.dumps(data, ensure_ascii=False))
+
+    # ==================== 通道发送方法结束 ====================
+
     async def close(self, ws=None):
         """资源清理方法"""
         try:
@@ -1463,8 +1516,24 @@ class ConnectionHandler:
             except Exception as ws_error:
                 self.logger.bind(tag=TAG).error(f"关闭WebSocket连接时出错: {ws_error}")
 
+            # 关闭通道（新增）
+            if self.channel and not self.channel.is_closed:
+                try:
+                    await self.channel.close()
+                    self.logger.bind(tag=TAG).debug("通道已关闭")
+                except Exception as channel_error:
+                    self.logger.bind(tag=TAG).error(f"关闭通道时出错: {channel_error}")
+
+            # 关闭 TTS 资源（带超时保护，防止阻塞事件循环）
             if self.tts:
-                await self.tts.close()
+                try:
+                    self.logger.bind(tag=TAG).debug("开始关闭 TTS 资源...")
+                    await asyncio.wait_for(self.tts.close(), timeout=5.0)
+                    self.logger.bind(tag=TAG).debug("TTS 资源关闭完成")
+                except asyncio.TimeoutError:
+                    self.logger.bind(tag=TAG).warning("TTS 资源关闭超时（5s），强制跳过")
+                except Exception as tts_error:
+                    self.logger.bind(tag=TAG).error(f"关闭 TTS 资源时出错: {tts_error}")
 
             # 最后关闭线程池（避免阻塞）
             if self.executor:
@@ -1532,8 +1601,10 @@ class ConnectionHandler:
 
     async def _check_timeout(self):
         """检查连接超时"""
+        check_count = 0
         try:
             while not self.stop_event.is_set():
+                check_count += 1
                 last_activity_time = self.last_activity_time
                 if self.need_bind:
                     last_activity_time = self.first_activity_time
@@ -1541,9 +1612,22 @@ class ConnectionHandler:
                 # 检查是否超时（只有在时间戳已初始化的情况下）
                 if last_activity_time > 0.0:
                     current_time = time.time() * 1000
-                    if current_time - last_activity_time > self.timeout_seconds * 1000:
+                    idle_seconds = (current_time - last_activity_time) / 1000
+                    
+                    # 每30秒(3次检查)记录一次连接状态，便于诊断
+                    if check_count % 3 == 0:
+                        self.logger.bind(tag=TAG).debug(
+                            f"连接状态: idle={idle_seconds:.1f}s, "
+                            f"timeout={self.timeout_seconds}s, "
+                            f"client_speaking={self.client_is_speaking}, "
+                            f"need_bind={self.need_bind}"
+                        )
+                    
+                    if idle_seconds > self.timeout_seconds:
                         if not self.stop_event.is_set():
-                            self.logger.bind(tag=TAG).info("连接超时，准备关闭")
+                            self.logger.bind(tag=TAG).info(
+                                f"连接超时，准备关闭 (idle={idle_seconds:.1f}s)"
+                            )
                             # 设置停止事件，防止重复处理
                             self.stop_event.set()
                             # 使用 try-except 包装关闭操作，确保不会因为异常而阻塞
@@ -1559,7 +1643,7 @@ class ConnectionHandler:
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"超时检查任务出错: {e}")
         finally:
-            self.logger.bind(tag=TAG).info("超时检查任务已退出")
+            self.logger.bind(tag=TAG).info(f"超时检查任务已退出 (总检查次数={check_count})")
 
     def _merge_tool_calls(self, tool_calls_list, tools_call):
         """合并工具调用列表

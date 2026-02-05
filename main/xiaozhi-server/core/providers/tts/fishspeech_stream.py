@@ -1015,14 +1015,17 @@ class TTSProvider(TTSProviderBase):
                 except Exception as e:
                     logger.bind(tag=TAG).warning(f"TTS close: 发送 STOP 信号失败: {e}")
 
-            # 取消任务
+            # 取消任务（带超时保护）
             logger.bind(tag=TAG).info("TTS close: 取消 worker 任务")
             self._tts_worker_task.cancel()
             try:
-                await self._tts_worker_task
+                await asyncio.wait_for(self._tts_worker_task, timeout=3.0)
             except asyncio.CancelledError:
                 pass
-            self._tts_worker_task = None
+            except asyncio.TimeoutError:
+                logger.bind(tag=TAG).warning("TTS close: 等待 worker 任务超时（3s），强制跳过")
+            finally:
+                self._tts_worker_task = None
             logger.bind(tag=TAG).info("TTS 工作协程已停止")
         else:
             logger.bind(tag=TAG).info(f"TTS close: worker 任务已完成或为 None")

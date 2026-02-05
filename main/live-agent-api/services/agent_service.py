@@ -13,6 +13,7 @@ from schemas.agent import (
     AgentWithLatestMessage
 )
 from utils.ulid import generate_template_id
+from infra.redis import invalidate_agent_cache
 
 
 class AgentService:
@@ -284,6 +285,9 @@ class AgentService:
         if not updated_agent:
             raise NotFoundException("Agent not found")
         
+        # Invalidate cache after successful update
+        await invalidate_agent_cache(agent_id)
+        
         return AgentResponse.model_validate(updated_agent)
     
     async def delete_agent(
@@ -307,9 +311,11 @@ class AgentService:
         if agent.avatar_url:
             await FileRepository.delete(s3, agent.avatar_url)
         
+        # Invalidate cache before deletion
+        await invalidate_agent_cache(agent_id)
+        
         # Delete agent
         await Agent.delete(db, agent_id)
-        
 
 
 agent_service = AgentService()

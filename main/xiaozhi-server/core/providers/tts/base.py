@@ -82,6 +82,12 @@ class TTSProviderBase(ABC):
         )
 
     def handle_opus(self, opus_data: bytes):
+        """处理编码后的 Opus 音频数据，放入发送队列"""
+        if opus_data and len(opus_data) > 0:
+            logger.bind(tag=TAG).debug(
+                f"handle_opus: 将 Opus 数据放入队列, size={len(opus_data)} bytes, "
+                f"queue_size_before={self.tts_audio_queue.qsize()}"
+            )
         self.tts_audio_queue.put((SentenceType.MIDDLE, opus_data, None))
 
     def handle_audio_file(self, file_audio: bytes, text):
@@ -324,6 +330,7 @@ class TTSProviderBase(ABC):
         # 需要上报的文本和音频列表
         enqueue_text = None
         enqueue_audio = None
+        audio_packet_count = 0
         while not self.conn.stop_event.is_set():
             text = None
             try:
@@ -341,6 +348,15 @@ class TTSProviderBase(ABC):
                     enqueue_text, enqueue_audio = None, []
                     continue
 
+                # 记录从队列取出的音频数据
+                if isinstance(audio_datas, bytes) and len(audio_datas) > 0:
+                    audio_packet_count += 1
+                    logger.bind(tag=TAG).debug(
+                        f"audio_play_priority_thread: 从队列取出音频数据, "
+                        f"sentence_type={sentence_type}, size={len(audio_datas)} bytes, "
+                        f"packet_count={audio_packet_count}, queue_size_after={self.tts_audio_queue.qsize()}"
+                    )
+
                 # 收到下一个文本开始或会话结束时进行上报
                 if sentence_type is not SentenceType.MIDDLE:
                     # 上报TTS数据
@@ -348,17 +364,34 @@ class TTSProviderBase(ABC):
                         enqueue_tts_report(self.conn, enqueue_text, enqueue_audio)
                     enqueue_audio = []
                     enqueue_text = text
+                    audio_packet_count = 0  # 重置计数器
 
                 # 收集上报音频数据
                 if isinstance(audio_datas, bytes) and enqueue_audio is not None:
                     enqueue_audio.append(audio_datas)
 
                 # 发送音频
+                logger.bind(tag=TAG).debug(
+                    f"audio_play_priority_thread: 准备发送音频, "
+                    f"sentence_type={sentence_type}, audio_size={len(audio_datas) if isinstance(audio_datas, bytes) else 'N/A'}"
+                )
                 future = asyncio.run_coroutine_threadsafe(
                     sendAudioMessage(self.conn, sentence_type, audio_datas, text),
                     self.conn.loop,
                 )
-                future.result()
+                try:
+                    # 添加30秒超时保护，避免无限等待导致线程卡死
+                    future.result(timeout=30.0)
+                except TimeoutError:
+                    logger.bind(tag=TAG).error(
+                        f"audio_play_priority_thread: sendAudioMessage 超时(30s), "
+                        f"sentence_type={sentence_type}, text={text[:30] if text else 'None'}..."
+                    )
+                    # 超时后继续处理下一个，避免整个线程卡死
+                    continue
+                logger.bind(tag=TAG).debug(
+                    f"audio_play_priority_thread: 音频发送完成, sentence_type={sentence_type}"
+                )
 
                 # 记录输出和报告
                 if self.conn.max_output_size > 0 and text:

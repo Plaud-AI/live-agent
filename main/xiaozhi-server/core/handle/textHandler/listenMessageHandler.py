@@ -170,10 +170,13 @@ class ListenTextMessageHandler(TextMessageHandler):
 
     async def _handle_normal_text(self, conn, text: str, msg_json: Dict[str, Any]) -> None:
         """处理普通文字消息"""
+        start_time = time.time()
         attachments = msg_json.get("attachments", [])
         
         conn.just_woken_up = True
         enqueue_asr_report(conn, text, [])
+        
+        conn.logger.bind(tag=TAG).info(f"[PERF] 开始处理文字消息: {text[:30]}...")
         
         if attachments:
             # 多模态消息（带图片/文件）
@@ -182,3 +185,6 @@ class ListenTextMessageHandler(TextMessageHandler):
         else:
             # 纯文字消息
             await startToChat(conn, text)
+        
+        elapsed = (time.time() - start_time) * 1000
+        conn.logger.bind(tag=TAG).info(f"[PERF] startToChat 完成: {elapsed:.1f}ms")

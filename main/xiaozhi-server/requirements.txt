@@ -42,3 +42,6 @@ Jinja2==3.1.6
 vosk==0.3.45
 # Fish Audio TTS 流式支持
 fish-audio-sdk>=0.1.0
+# Agora RTC 支持
+agora-python-server-sdk>=2.4.0
+agora-token-builder>=1.0.0

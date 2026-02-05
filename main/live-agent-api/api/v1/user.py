@@ -10,6 +10,8 @@ from schemas.user import (
     UserLoginRequest,
     PasswordUpdateRequest,
     UserInfo,
+    UserProfileResponse,
+    UserProfileUpdateRequest,
 )
 
 router = APIRouter()
@@ -100,6 +102,52 @@ async def logout(
     # For now, this is a no-op since JWTs are stateless
     # In production, you might want to implement token blacklisting
     return success_response(message="Logout successful")
+
+
+@router.get("/profile", summary="Get user profile")
+async def get_user_profile(
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取当前用户的完整 Profile 信息
+    
+    Returns:
+        - user_id: 用户唯一标识
+        - display_name: 显示名称
+        - introduction: 用户简介
+        - avatar_url: 头像 URL
+        - email: 邮箱
+        - created_at: 创建时间
+        - updated_at: 更新时间
+    """
+    user = await user_service.get_user_info(db=db, user_id=current_user_id)
+    return success_response(data=UserProfileResponse.model_validate(user).model_dump())
+
+
+@router.put("/profile", summary="Update user profile")
+async def update_user_profile(
+    request: UserProfileUpdateRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新当前用户的 Profile 信息
+    
+    Request Body:
+        - display_name: 显示名称 (可选, 最大100字符)
+        - introduction: 用户简介 (可选, 最大500字符)
+    
+    Returns:
+        更新后的用户 Profile
+    """
+    user = await user_service.update_profile(
+        db=db,
+        user_id=current_user_id,
+        display_name=request.display_name,
+        introduction=request.introduction
+    )
+    return success_response(data=UserProfileResponse.model_validate(user).model_dump())
 
 
 

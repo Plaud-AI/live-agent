@@ -73,13 +73,37 @@ class WebSocketServer:
         host = server_config.get("ip", "0.0.0.0")
         port = int(server_config.get("port", 8000))
 
-        async with websockets.serve(
-            self._handle_connection, host, port, process_request=self._http_response
-        ):
-            await asyncio.Future()
+        self.logger.bind(tag=TAG).info(f"启动 WebSocket 服务器: {host}:{port}")
+        
+        try:
+            async with websockets.serve(
+                self._handle_connection, host, port, process_request=self._http_response
+            ) as server:
+                self.logger.bind(tag=TAG).info(f"WebSocket 服务器已启动，监听 {host}:{port}")
+                check_count = 0
+                # 定期检查服务器状态
+                while True:
+                    await asyncio.sleep(30)  # 每 30 秒检查一次
+                    check_count += 1
+                    is_serving = server.is_serving()
+                    # 获取当前连接数
+                    conn_count = len(server.connections) if hasattr(server, 'connections') else 'unknown'
+                    self.logger.bind(tag=TAG).info(
+                        f"WebSocket 服务器状态 #{check_count}: is_serving={is_serving}, connections={conn_count}"
+                    )
+                    if not is_serving:
+                        self.logger.bind(tag=TAG).error(f"WebSocket 服务器已停止服务！尝试重启...")
+                        break
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"WebSocket 服务器异常: {e}")
+            import traceback
+            self.logger.bind(tag=TAG).error(f"错误堆栈: {traceback.format_exc()}")
 
     async def _handle_connection(self, websocket):
         headers = dict(websocket.request.headers)
+        device_id = headers.get("device-id", "unknown")
+        self.logger.bind(tag=TAG).info(f"_handle_connection: 开始处理新连接, device_id={device_id}")
+        
         if headers.get("device-id", None) is None:
             # 尝试从 URL 的查询参数中获取 device-id
             from urllib.parse import parse_qs, urlparse
@@ -98,6 +122,7 @@ class WebSocketServer:
                 return
             else:
                 websocket.request.headers["device-id"] = query_params["device-id"][0]
+                device_id = query_params["device-id"][0]
             if "client-id" in query_params:
                 websocket.request.headers["client-id"] = query_params["client-id"][0]
             if "authorization" in query_params:
@@ -113,21 +138,48 @@ class WebSocketServer:
             await websocket.send("认证失败")
             await websocket.close()
             return
-        # 创建ConnectionHandler时传入当前server实例
-        handler = ConnectionHandler(
-            self.config,
-            self._vad,
-            self._asr,
-            self._llm,
-            self._memory,
-            self._intent,
-            self,  # 传入server实例
-        )
+        
+        self.logger.bind(tag=TAG).info(f"_handle_connection: 认证通过, device_id={device_id}, 准备创建 handler")
+        
+        # 将 ConnectionHandler 创建放到线程池执行，避免阻塞事件循环
+        # ConnectionHandler 的构造函数涉及 deepcopy、缓存操作等可能阻塞的操作
+        def _create_handler():
+            return ConnectionHandler(
+                self.config,
+                self._vad,
+                self._asr,
+                self._llm,
+                self._memory,
+                self._intent,
+                self,  # 传入server实例
+            )
+        
         try:
-            await handler.handle_connection(websocket)
+            loop = asyncio.get_running_loop()
+            handler = await asyncio.wait_for(
+                loop.run_in_executor(None, _create_handler),
+                timeout=10.0  # 10秒超时
+            )
+            self.logger.bind(tag=TAG).info(f"_handle_connection: handler 创建成功, device_id={device_id}")
+        except asyncio.TimeoutError:
+            self.logger.bind(tag=TAG).error(f"_handle_connection: handler 创建超时(10s), device_id={device_id}")
+            await websocket.close()
+            return
         except Exception as e:
-            self.logger.bind(tag=TAG).error(f"处理连接时出错: {e}")
+            self.logger.bind(tag=TAG).error(f"_handle_connection: handler 创建失败: {e}, device_id={device_id}")
+            import traceback
+            self.logger.bind(tag=TAG).error(f"_handle_connection: 创建 handler 错误堆栈: {traceback.format_exc()}")
+            raise
+        try:
+            self.logger.bind(tag=TAG).info(f"_handle_connection: 开始 handler.handle_connection, device_id={device_id}")
+            await handler.handle_connection(websocket)
+            self.logger.bind(tag=TAG).info(f"_handle_connection: handler.handle_connection 正常退出, device_id={device_id}")
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"_handle_connection: 处理连接时出错: {e}, device_id={device_id}")
+            import traceback
+            self.logger.bind(tag=TAG).error(f"_handle_connection: 错误堆栈: {traceback.format_exc()}")
         finally:
+            self.logger.bind(tag=TAG).info(f"_handle_connection: 进入 finally 块, device_id={device_id}")
             # 强制关闭连接（如果还没有关闭的话）
             try:
                 # 安全地检查WebSocket状态并关闭
@@ -142,14 +194,19 @@ class WebSocketServer:
                 self.logger.bind(tag=TAG).error(
                     f"服务器端强制关闭连接时出错: {close_error}"
                 )
+            self.logger.bind(tag=TAG).info(f"_handle_connection: 连接处理完成, device_id={device_id}")
 
     async def _http_response(self, websocket, request_headers):
         # 检查是否为 WebSocket 升级请求
-        if request_headers.headers.get("connection", "").lower() == "upgrade":
+        connection_header = request_headers.headers.get("connection", "").lower()
+        self.logger.bind(tag=TAG).info(f"process_request: connection={connection_header}")
+        if connection_header == "upgrade":
             # 如果是 WebSocket 请求，返回 None 允许握手继续
+            self.logger.bind(tag=TAG).info(f"process_request: WebSocket 升级请求，放行")
             return None
         else:
             # 如果是普通 HTTP 请求，返回 "server is running"
+            self.logger.bind(tag=TAG).info(f"process_request: HTTP 请求，返回服务状态")
             return websocket.respond(200, "Server is running\n")
 
     async def update_config(self) -> bool:

@@ -2,6 +2,7 @@ import sys
 import uuid
 import signal
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from aioconsole import ainput
 from config.settings import load_config
 from config.logger import setup_logging
@@ -13,6 +14,10 @@ from core.utils.gc_manager import get_gc_manager
 
 TAG = __name__
 logger = setup_logging()
+
+# 增加默认线程池大小，避免线程池耗尽导致事件循环阻塞
+# 默认线程池通常只有 min(32, os.cpu_count() + 4) 个线程，对于高并发场景可能不够
+DEFAULT_EXECUTOR_WORKERS = 64
 
 
 async def wait_for_exit() -> None:
@@ -39,13 +44,47 @@ async def wait_for_exit() -> None:
 
 async def monitor_stdin():
     """监控标准输入，消费回车键"""
+    import sys
+    # 在 Docker 等无 tty 环境中跳过 stdin 监控，避免潜在的阻塞问题
+    if not sys.stdin.isatty():
+        logger.bind(tag=TAG).debug("无 tty 环境，跳过 stdin 监控")
+        # 保持任务存活但不做任何操作
+        while True:
+            await asyncio.sleep(3600)  # 每小时检查一次
+        return
+    
     while True:
-        await ainput()  # 异步等待输入，消费回车
+        try:
+            await ainput()  # 异步等待输入，消费回车
+        except Exception as e:
+            logger.bind(tag=TAG).debug(f"stdin 监控异常: {e}")
+            await asyncio.sleep(1)  # 发生错误时等待后重试
 
 
 async def main():
     check_ffmpeg_installed()
     config = load_config()
+    
+    # 配置更大的默认线程池，避免高并发时线程池耗尽
+    loop = asyncio.get_running_loop()
+    executor = ThreadPoolExecutor(
+        max_workers=DEFAULT_EXECUTOR_WORKERS,
+        thread_name_prefix="asyncio_pool_"
+    )
+    loop.set_default_executor(executor)
+    logger.bind(tag=TAG).info(f"设置默认线程池大小: {DEFAULT_EXECUTOR_WORKERS}")
+
+    # 初始化 Redis 缓存（如果配置了）
+    redis_config = config.get("redis", {})
+    if redis_config.get("enabled", True):
+        from core.utils.cache.manager import cache_manager
+        redis_host = redis_config.get("host", "xiaozhi-esp32-server-redis")
+        redis_port = redis_config.get("port", 6379)
+        redis_password = redis_config.get("password", "")
+        if cache_manager.enable_redis(redis_host, redis_port, redis_password):
+            logger.bind(tag=TAG).info(f"Redis 缓存已启用: {redis_host}:{redis_port}")
+        else:
+            logger.bind(tag=TAG).warning("Redis 连接失败，使用内存缓存")
 
     # auth_key优先级：配置文件server.auth_key > manager-api.secret > 自动生成
     # auth_key用于jwt认证，比如视觉分析接口的jwt认证、ota接口的token生成与websocket认证
@@ -71,8 +110,8 @@ async def main():
     # 启动 WebSocket 服务器
     ws_server = WebSocketServer(config)
     ws_task = asyncio.create_task(ws_server.start())
-    # 启动 Simple http 服务器
-    ota_server = SimpleHttpServer(config)
+    # 启动 Simple http 服务器（共享 WebSocket 服务器的模块）
+    ota_server = SimpleHttpServer(config, ws_server)
     ota_task = asyncio.create_task(ota_server.start())
 
     read_config_from_api = config.get("read_config_from_api", False)

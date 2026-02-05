@@ -132,7 +132,18 @@ class ASRProvider(ASRProviderBase):
         # 发送音频数据
         if self.asr_ws and self.is_processing and self.is_connected:
             try:
-                pcm_frame = self.decoder.decode(audio, 960)
+                # 判断输入数据类型：
+                # - Agora 通道：音频数据已经是 PCM 格式，直接发送
+                # - WebSocket 通道：音频数据是 Opus 编码，需要解码
+                channel_type = getattr(conn.channel, 'channel_type', 'websocket') if hasattr(conn, 'channel') else 'websocket'
+                
+                if channel_type == 'agora':
+                    # Agora 通道：直接使用 PCM 数据
+                    pcm_frame = audio
+                else:
+                    # WebSocket 通道：Opus 解码
+                    pcm_frame = self.decoder.decode(audio, 960)
+                
                 await self.asr_ws.send(pcm_frame)
             except Exception as e:
                 logger.bind(tag=TAG).warning(f"发送音频失败: {str(e)}")
@@ -171,9 +182,17 @@ class ASRProvider(ASRProviderBase):
         
         # 发送缓存的音频数据
         if conn.asr_audio:
+            # 判断通道类型
+            channel_type = getattr(conn.channel, 'channel_type', 'websocket') if hasattr(conn, 'channel') else 'websocket'
+            
             for cached_audio in conn.asr_audio[-10:]:
                 try:
-                    pcm_frame = self.decoder.decode(cached_audio, 960)
+                    if channel_type == 'agora':
+                        # Agora 通道：直接使用 PCM 数据
+                        pcm_frame = cached_audio
+                    else:
+                        # WebSocket 通道：Opus 解码
+                        pcm_frame = self.decoder.decode(cached_audio, 960)
                     await self.asr_ws.send(pcm_frame)
                 except Exception as e:
                     logger.bind(tag=TAG).warning(f"发送缓存音频失败: {e}")
